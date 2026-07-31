@@ -1,63 +1,77 @@
-# Dynolab
+<div align="center">
 
-System diagnostics and tuning for Ubuntu. A single GTK4 application that finds
-what slows a machine down, explains each finding in plain language and offers
-the matching fix.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
+  <img src="docs/banner-light.png" width="410" alt="Dynolab">
+</picture>
 
-![Overview](icons/png/dynolab-512.png)
+**System diagnostics and tuning for Ubuntu**
+
+One GTK4 application that finds what slows a machine down, explains every
+finding in plain language and offers the matching fix.
+Nothing runs without asking first.
+
+</div>
+
+![Overview](docs/overview.png)
 
 ## What it does
 
-**System check.** Scans for outdated graphics drivers, thermal throttling, full
+**System check** scans for outdated graphics drivers, thermal throttling, full
 filesystems, a growing journal, failed units, stale autostart entries and
-pending updates. Every finding comes with the reason and the command that fixes
-it. Nothing runs without asking first.
+pending updates. Every finding says what is wrong, why it matters and what to
+do about it.
 
-**Incidents.** Reads the journal for audio dropouts, GPU driver errors,
-out-of-memory kills and failed systemd units, and records the temperature,
-clock and load at that moment, so a bare error message becomes a connection.
+**Incidents** reads the journal for audio dropouts, GPU driver errors,
+out-of-memory kills and failed systemd units. Each entry records temperature,
+clock and load at that moment, so a bare error message turns into a connection.
 
-**Updates.** apt, Snap, Flatpak and firmware in one place, with download sizes,
-per-source selection, a live log and a Timeshift snapshot beforehand if wanted.
-After the run it verifies which entries actually went through.
+**Updates** brings apt, Snap, Flatpak and firmware together, with download
+sizes, per-entry selection, a live log and an optional Timeshift snapshot
+beforehand. Afterwards it verifies which entries actually went through.
 
-**App check.** Takes an installed application apart: unresolved libraries,
+**App check** takes an installed application apart: unresolved libraries,
 disconnected Snap interfaces, missing Flatpak permissions, kernel-denied
-access, crashes and journal errors. Where a fix exists, there is a button.
+access, crashes, journal errors. Where a fix exists, there is a button.
 
-**Dyno.** Records temperature and clock over minutes under real load and
-answers the question a snapshot cannot: at which point does it start throttling.
+**Dyno** records temperature and clock over minutes under real load and answers
+what a snapshot cannot: at which point does it start throttling.
 
-**Benchmark.** CPU, memory and disk, compared against the median of your own
+**Benchmark** measures CPU, memory and disk against the median of your own
 earlier runs. A number without a baseline says nothing.
 
 Plus a live monitor, storage analysis with cleanup, autostart control including
 slow boot services, and a history of every scan.
 
-## Install
+<p align="center">
+  <img src="docs/updates.png" width="49%" alt="Updates">
+  <img src="docs/welcome.png" width="33%" alt="Welcome">
+</p>
 
-Build the Debian package and install it:
+## Install
 
     ./build-deb.sh
     sudo dpkg -i build/dynolab_0.1_all.deb
 
-Or run it straight from the source tree:
+Or run it from the source tree without installing:
 
     python3 dynolab.py
 
 ## Requirements
 
-python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0. Recommended:
-librsvg2-bin for tray icons, pkexec to apply fixes, fonts-inter for the
-interface font. Ubuntu 24.04 or newer.
+Ubuntu 24.04 or newer with `python3-gi`, `python3-gi-cairo` and
+`gir1.2-gtk-4.0`. Recommended: `librsvg2-bin` for tray icons, `pkexec` to apply
+fixes, `fonts-inter` for the interface font.
 
-## Options
+## Command line
 
-    dynolab                 start the window
-    dynolab --page Updates  start on a specific page
-    dynolab --watch         background service, reports new incidents
-    dynolab --install       place icons and a launcher for the current user
-    dynolab --selftest      run the built-in checks
+| Option | Effect |
+| --- | --- |
+| `dynolab` | open the window |
+| `dynolab --page Updates` | open on a specific page |
+| `dynolab --watch` | background service, reports new incidents |
+| `dynolab --install` | place icons and a launcher for the current user |
+| `dynolab --selftest` | run the built-in checks |
 
 ## Licence
 
