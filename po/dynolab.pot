@@ -1,0 +1,750 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR simonlinuxcraft
+# This file is distributed under the same license as the dynolab package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: dynolab 0.1\n"
+"Report-Msgid-Bugs-To: https://github.com/simonlinuxcraft/dynolab/issues\n"
+"POT-Creation-Date: 2026-07-31 10:50+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: dynolab.py:436
+msgid "('--user',) wenn es eine Nutzer-Unit ist, sonst () für die Systemebene."
+msgstr ""
+
+#: dynolab.py:443
+msgid "Beschreibung und was sonst noch von der Unit abhängt."
+msgstr ""
+
+#: dynolab.py:478
+msgid "Schaltet über eine Nutzer-Kopie, Systemdateien bleiben unangetastet."
+msgstr ""
+
+#: dynolab.py:718
+msgid "fwupdmgr nicht erreichbar"
+msgstr ""
+
+#: dynolab.py:731
+msgid "Paketname aus einer Fortschrittszeile von apt, snap oder flatpak."
+msgstr ""
+
+#: dynolab.py:755
+msgid "Icon-Name oder Pfad für eine Update-Zeile, leer wenn nichts passt."
+msgstr ""
+
+#: dynolab.py:774
+msgid "Kommando, das die gewählten Updates einspielt. Ohne Shell, ohne Helfer."
+msgstr ""
+
+#: dynolab.py:875
+msgid "Bibliotheken, die der Binder nicht auflösen kann."
+msgstr ""
+
+#: dynolab.py:884
+msgid "Interfaces eines Snaps, die auf keinen Slot zeigen."
+msgstr ""
+
+#: dynolab.py:894
+msgid "Die Berechtigungen, deren Fehlen man tatsächlich merkt."
+msgstr ""
+
+#: dynolab.py:918
+msgid "Die App kann nichts aufnehmen. Nötig für Spracheingabe oder Anrufe."
+msgstr ""
+
+#: dynolab.py:921
+msgid "Video und Fotos gehen nicht."
+msgstr ""
+
+#: dynolab.py:922
+msgid "USB-Sticks und externe Laufwerke"
+msgstr ""
+
+#: dynolab.py:922
+msgid "Die App sieht nur dein Home-Verzeichnis, nichts unter /media."
+msgstr ""
+
+#: dynolab.py:924
+msgid "Die App kommt nicht an dein Home-Verzeichnis."
+msgstr ""
+
+#: dynolab.py:925
+msgid "Die App kann nicht ins Netz."
+msgstr ""
+
+#: dynolab.py:926
+msgid "Nur nötig, wenn die App Verbindungen selbst einrichten soll."
+msgstr ""
+
+#: dynolab.py:943
+msgid "CD- und DVD-Laufwerk"
+msgstr ""
+
+#: dynolab.py:943
+msgid "Discs werden nicht gelesen."
+msgstr ""
+
+#: dynolab.py:944
+msgid "Controller werden nicht erkannt."
+msgstr ""
+
+#: dynolab.py:949
+msgid "Signaturkarten werden nicht erkannt."
+msgstr ""
+
+#: dynolab.py:954
+msgid "Zugriff auf einzelne Ordner im Home."
+msgstr ""
+
+#: dynolab.py:956
+msgid "Zugriff auf einzelne Systemordner."
+msgstr ""
+
+#: dynolab.py:957
+msgid "Nötig für manche Fenster- und Videofunktionen."
+msgstr ""
+
+#: dynolab.py:960
+msgid "Fernsehempfang geht nicht."
+msgstr ""
+
+#: dynolab.py:967
+msgid "(Klarname, Erklärung) zu einer Snap-Schnittstelle."
+msgstr ""
+
+#: dynolab.py:972 dynolab.py:5646
+msgid "Was genau dahinter steckt, sagt die Beschreibung des Snaps."
+msgstr ""
+
+#: dynolab.py:976
+msgid "Icon-Angabe einer Startdatei: absoluter Pfad oder Name aus dem Theme."
+msgstr ""
+
+#: dynolab.py:996
+msgid "[(Pfad, Bytes)] der Ordner, die eine Anwendung im Home anlegt."
+msgstr ""
+
+#: dynolab.py:1038
+msgid ""
+"Von Hand installiert, ohne Paketquelle. Updates musst du selbst einspielen."
+msgstr ""
+
+#: dynolab.py:1040
+msgid ""
+"Einzelne Programmdatei, die alles mitbringt. Updates musst du selbst "
+"einspielen."
+msgstr ""
+
+#: dynolab.py:1048
+msgid "AppImage nicht gefunden"
+msgstr ""
+
+#: dynolab.py:1054
+msgid "Der Datei fehlt das Ausführungsrecht, ohne das startet sie nicht."
+msgstr ""
+
+#: dynolab.py:1062
+msgid ""
+"AppImages der ersten Generation brauchen sie zum Entpacken. Ohne sie bricht "
+"der Start mit 'dlopen(): error loading libfuse.so.2' ab."
+msgstr ""
+
+#: dynolab.py:1077
+msgid "Paket nicht sauber installiert"
+msgstr ""
+
+#: dynolab.py:1099
+msgid "Die Systemaktualisierung hat das noch nicht eingespielt."
+msgstr ""
+
+#: dynolab.py:1113
+msgid "Das Programm startet so nicht: "
+msgstr ""
+
+#: dynolab.py:1124
+msgid "Programm nicht gefunden"
+msgstr ""
+
+#: dynolab.py:1149
+msgid "devices=dri fehlt, das Programm rendert in Software und ruckelt."
+msgstr ""
+
+#: dynolab.py:1156
+msgid "Kein Zugriff auf die Anzeige"
+msgstr ""
+
+#: dynolab.py:1157
+msgid "Weder X11 noch Wayland freigegeben, das Fenster kann nicht erscheinen."
+msgstr ""
+
+#: dynolab.py:1171
+msgid "mit einem Systemdienst sprechen"
+msgstr ""
+
+#: dynolab.py:1174
+msgid "ein anderes Programm starten"
+msgstr ""
+
+#: dynolab.py:1175
+msgid "eine Verbindung aufbauen"
+msgstr ""
+
+#: dynolab.py:1176
+msgid "eine Systemberechtigung nutzen"
+msgstr ""
+
+#: dynolab.py:1179
+msgid " und "
+msgstr ""
+
+#: dynolab.py:1233
+msgid "Startet automatisch mit der Anmeldung"
+msgstr ""
+
+#: dynolab.py:1248
+msgid "nicht gefunden"
+msgstr ""
+
+#: dynolab.py:1257
+msgid "Bibliotheken, Rechte und Journal sind sauber."
+msgstr ""
+
+#: dynolab.py:1262
+msgid "Das Ergebnis als kopierbarer Text, etwa für einen Fehlerbericht."
+msgstr ""
+
+#: dynolab.py:1279
+msgid ""
+"apt, Snap, Flatpak und Firmware an einer Stelle, mit Größenangabe und "
+"Protokoll. Auf Wunsch mit Timeshift-Sicherung davor."
+msgstr ""
+
+#: dynolab.py:1281
+msgid ""
+"Nimmt eine installierte Anwendung auseinander: fehlende Bibliotheken, "
+"abgeschnittene Sandbox-Rechte, Abstürze. Wo es eine Lösung gibt, steht ein "
+"Knopf daneben."
+msgstr ""
+
+#: dynolab.py:1291
+msgid "Vorfallserkennung aus dem Journal, auf Wunsch im Hintergrund"
+msgstr ""
+
+#: dynolab.py:1302
+msgid ""
+"Ein Messpunkt. prev_cpu ist der Stand von cpu_times() beim letzten Punkt."
+msgstr ""
+
+#: dynolab.py:1348
+msgid "Die Auswertung als Text, kopierbar für Forum oder Bugreport."
+msgstr ""
+
+#: dynolab.py:1364
+msgid "Das ist der Punkt, an dem die Leistung unter Dauerlast einbricht."
+msgstr ""
+
+#: dynolab.py:1428
+msgid "Bibliotheksversion aus der Mismatch-Meldung von nvidia-smi, sonst leer."
+msgstr ""
+
+#: dynolab.py:1445
+msgid "Grafiktreiber wartet auf einen Neustart"
+msgstr ""
+
+#: dynolab.py:1450
+msgid "Alles speichern, der Rechner startet sofort neu."
+msgstr ""
+
+#: dynolab.py:1497
+msgid ""
+". Hier liegen deine eigenen Daten, aufräumen musst du von Hand. Was am "
+"meisten belegt, steht unter Speicher."
+msgstr ""
+
+#: dynolab.py:1516
+msgid "Version aus der Ausgabe von 'do-release-upgrade -c', sonst leer."
+msgstr ""
+
+#: dynolab.py:1529
+msgid "argv in einem sichtbaren Terminal starten. Leer, wenn keins da ist."
+msgstr ""
+
+#: dynolab.py:1540
+msgid "Ubuntus Releaseliste zu [(Version, Codename, unterstützt)]."
+msgstr ""
+
+#: dynolab.py:1555
+msgid "Höchstes unterstütztes Release oberhalb der laufenden Version."
+msgstr ""
+
+#: dynolab.py:1595
+msgid "Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen."
+msgstr ""
+
+#: dynolab.py:1614
+msgid "Hat die Quelle schon eine Paketliste für das neue Release?"
+msgstr ""
+
+#: dynolab.py:1625
+msgid "Selbst installierte .deb-Pakete ohne Quelle im Archiv."
+msgstr ""
+
+#: dynolab.py:1674
+msgid "  Home-Verzeichnis, Einstellungen und Dokumente"
+msgstr ""
+
+#: dynolab.py:1738
+msgid "das reicht"
+msgstr ""
+
+#: dynolab.py:1741
+msgid "Timeshift ist da"
+msgstr ""
+
+#: dynolab.py:1742
+msgid "Timeshift ist nicht installiert"
+msgstr ""
+
+#: dynolab.py:1743
+msgid ""
+"  Das Upgrade läuft in einem eigenen Terminal und dauert eine halbe bis "
+"anderthalb Stunden."
+msgstr ""
+
+#: dynolab.py:1782
+msgid ""
+"Läuft bewusst in einem eigenen Terminal, nicht in diesem Fenster: das "
+"Upgrade tauscht Python und GTK aus, unter denen Dynolab selbst läuft. Das "
+"Terminalfenster bis zum Ende offen lassen, sonst bricht das Upgrade "
+"mittendrin ab. Vorher einen Timeshift-Snapshot anlegen."
+msgstr ""
+
+#: dynolab.py:1809
+msgid "Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber."
+msgstr ""
+
+#: dynolab.py:1824
+msgid ""
+"Wechselt die Kernel-Serie. Fremde Kernelmodule wie VirtualBox oder NVIDIA "
+"werden neu gebaut."
+msgstr ""
+
+#: dynolab.py:1829
+msgid "Schreibrate der Platte"
+msgstr ""
+
+#: dynolab.py:1863
+msgid "Alte Logs lassen sich gefahrlos auf 500 MB eindampfen."
+msgstr ""
+
+#: dynolab.py:1918
+msgid "Fünf-Minuten-Stichprobe, ein Vollscan des Journals wäre zu teuer."
+msgstr ""
+
+#: dynolab.py:1943
+msgid "Sicherheits- und Treiber-Updates bleiben sonst liegen."
+msgstr ""
+
+#: dynolab.py:2019
+msgid "Zeitstempel, Host und Unit weg, es bleibt die eigentliche Meldung."
+msgstr ""
+
+#: dynolab.py:2132
+msgid "Die Messwerte eines Vorfalls als eine lesbare Zeile."
+msgstr ""
+
+#: dynolab.py:2228
+msgid ""
+"Xid 79: GPU has fallen off the bus. Der PCIe-Bus antwortet nicht mehr, die "
+"GPU ist aus Systemsicht komplett verschwunden."
+msgstr ""
+
+#: dynolab.py:2230
+msgid ""
+"Hardwareproblem auf der PCIe-Verbindung (Sitz der Karte, Stromversorgung)"
+msgstr ""
+
+#: dynolab.py:2232
+msgid "Fehlerhafter oder zu alter Treiber"
+msgstr ""
+
+#: dynolab.py:2233
+msgid ""
+"System komplett neu starten (nicht nur die Anwendung), oft hilft nur ein "
+"Reboot, weil die GPU aus dem PCIe-Bus verschwunden ist"
+msgstr ""
+
+#: dynolab.py:2241
+msgid "Xid 62: interner Mikrocontroller der GPU (PMU) ist stehengeblieben."
+msgstr ""
+
+#: dynolab.py:2244
+msgid ""
+"nvidia-smi --gpu-reset probieren, falls keine Prozesse mehr auf der GPU "
+"laufen, sonst System neu starten"
+msgstr ""
+
+#: dynolab.py:2249
+msgid ""
+"Xid 43: GPU-Kanal wurde zurückgesetzt, die GPU bleibt laut NVIDIA dabei in "
+"einem gesunden Zustand."
+msgstr ""
+
+#: dynolab.py:2251
+msgid "Meist ein Softwarefehler in der Anwendung, die die GPU genutzt hat"
+msgstr ""
+
+#: dynolab.py:2252
+msgid ""
+"Nur relevant, wenn die betroffene Anwendung abgestürzt ist, dann dort nach "
+"einem Update suchen"
+msgstr ""
+
+#: dynolab.py:2256
+msgid "Xid 8: GPU-Kanal ist wegen eines Timeouts gestoppt worden."
+msgstr ""
+
+#: dynolab.py:2259
+msgid ""
+"Tritt es nur bei einer bestimmten Anwendung auf: dort nach einem Update "
+"suchen"
+msgstr ""
+
+#: dynolab.py:2263
+msgid "Bug in der Anwendung oder dem Spiel, das die GPU genutzt hat"
+msgstr ""
+
+#: dynolab.py:2265
+msgid ""
+"Tritt es nur bei einer bestimmten Anwendung auf: das ist der beste Hinweis "
+"auf die Ursache, gegebenenfalls beim Hersteller melden"
+msgstr ""
+
+#: dynolab.py:2268
+msgid ""
+"Xid 31: GPU-Speicher-Seitenfehler (MMU-Fehler), meist ein "
+"Speicherzugriffsfehler in der Anwendung."
+msgstr ""
+
+#: dynolab.py:2272
+msgid ""
+"Kein Hardwaredefekt, laut NVIDIA kein RMA-Grund, wenn es nur bei dieser "
+"einen Anwendung auftritt"
+msgstr ""
+
+#: dynolab.py:2275
+msgid ""
+"Xid 32: beschädigter Command-Buffer, meist ein PCIe-Qualitäts- oder "
+"Treiberproblem, kein direkter Anwendungsfehler."
+msgstr ""
+
+#: dynolab.py:2278
+msgid "Treiber- oder Speicherkorruption auf Host-Seite"
+msgstr ""
+
+#: dynolab.py:2285
+msgid "Titel plus Log-Zeile zu Einordnung, Ursachen und Schritten."
+msgstr ""
+
+#: dynolab.py:2291
+msgid ""
+"CPU-Governor auf powersave, der Prozessor taktet nicht schnell genug hoch"
+msgstr ""
+
+#: dynolab.py:2292
+msgid ""
+"Ein anderer Prozess blockiert kurzzeitig CPU oder I/O, etwa Kompilieren oder "
+"ein Backup"
+msgstr ""
+
+#: dynolab.py:2295
+msgid ""
+"pw-top laufen lassen und beobachten, welcher Client die Xruns verursacht"
+msgstr ""
+
+#: dynolab.py:2296
+msgid ""
+"Quantum probeweise erhöhen: pw-metadata -n settings 0 clock.force-quantum "
+"1024"
+msgstr ""
+
+#: dynolab.py:2304
+msgid ""
+"Der Kernel hat einen Prozess beendet, weil dem System der Arbeitsspeicher "
+"ausgegangen ist."
+msgstr ""
+
+#: dynolab.py:2310
+msgid ""
+"journalctl -k --since \"-1 hour\" | grep -i 'killed process' für Details zum "
+"getroffenen Prozess (Name, PID, RSS)"
+msgstr ""
+
+#: dynolab.py:2313
+msgid ""
+"Falls kein Swap aktiv: zram über systemd-zram-generator oder eine Swapdatei "
+"einrichten"
+msgstr ""
+
+#: dynolab.py:2322
+msgid ""
+"Das VirtualBox-Kernelmodul konnte nicht geladen werden. Sehr häufig durch "
+"Secure Boot verursacht, das unsignierte Kernelmodule blockiert."
+msgstr ""
+
+#: dynolab.py:2324
+msgid ""
+"Secure Boot ist aktiv und das Modul ist nicht signiert oder die Signatur "
+"liegt nicht im MOK"
+msgstr ""
+
+#: dynolab.py:2326
+msgid "DKMS-Modul wurde nach einem Kernel-Update nicht neu gebaut"
+msgstr ""
+
+#: dynolab.py:2328
+msgid "sudo apt install --reinstall virtualbox-dkms baut das Modul neu"
+msgstr ""
+
+#: dynolab.py:2334
+msgid "Fehlkonfiguration der Unit oder der Anwendung selbst"
+msgstr ""
+
+#: dynolab.py:2352
+msgid ""
+"GPU- oder Display-Fehler ohne erkennbaren Xid-Code, etwa ein anderer Treiber "
+"als NVIDIA oder ein Compositor-Neustart."
+msgstr ""
+
+#: dynolab.py:2379
+msgid "Der Wechsel wird jetzt offiziell angeboten."
+msgstr ""
+
+#: dynolab.py:2384
+msgid "Hintergrundmodus: Journal abfragen, neue Vorfälle melden."
+msgstr ""
+
+#: dynolab.py:2449
+msgid ""
+"MiB/s SHA-256. hashlib gibt das GIL frei, darum skaliert das über Threads."
+msgstr ""
+
+#: dynolab.py:2749
+msgid "Während des Scans dreht ein Bogen, statt dass eine tote Zahl steht."
+msgstr ""
+
+#: dynolab.py:2846
+msgid ""
+"Mehrere Reihen über einer festen Fensterbreite, y-Achse optional automatisch."
+msgstr ""
+
+#: dynolab.py:3259
+msgid "Im Tray weiterlaufen, aber nur wenn dort auch wirklich ein Icon hängt."
+msgstr ""
+
+#: dynolab.py:3406
+msgid "Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es losgehen."
+msgstr ""
+
+#: dynolab.py:3515
+msgid "wird ermittelt"
+msgstr ""
+
+#: dynolab.py:3557
+msgid "Was du zuerst angehen solltest"
+msgstr ""
+
+#: dynolab.py:3650
+msgid "Fenster mit einer Einschätzung, die erst beim Öffnen ermittelt wird."
+msgstr ""
+
+#: dynolab.py:3656
+msgid ""
+"Wird für diesen Rechner geprüft …\n"
+"\n"
+"Dabei werden auch die Paketquellen gefragt, ob sie das neue Release schon "
+"kennen. Das dauert einen Moment."
+msgstr ""
+
+#: dynolab.py:3719
+msgid "Nach einem Eingriff stimmen die alten Zahlen nicht mehr."
+msgstr ""
+
+#: dynolab.py:3738
+msgid ""
+"Gelesen wird das Journal der letzten 24 Stunden. Erkannt werden Audio-"
+"Aussetzer, GPU-Treiberfehler, OOM-Killer-Ereignisse und fehlgeschlagene "
+"systemd-Units."
+msgstr ""
+
+#: dynolab.py:3792
+msgid "Zu dem Zeitpunkt: "
+msgstr ""
+
+#: dynolab.py:3810
+msgid "Lohnt sich zu beheben"
+msgstr ""
+
+#: dynolab.py:3819
+msgid "Zustand des Rechners zu diesem Zeitpunkt:"
+msgstr ""
+
+#: dynolab.py:3873
+msgid "Verfügbare Branches: "
+msgstr ""
+
+#: dynolab.py:3888
+msgid ""
+"Der Treiber wird neu gebaut. Bis zum Neustart kann die Grafik unvollständig "
+"sein, deshalb vorher alles sichern."
+msgstr ""
+
+#: dynolab.py:3973
+msgid "Nichts zu tun"
+msgstr ""
+
+#: dynolab.py:3974
+msgid "Alle Quellen sind auf dem aktuellen Stand."
+msgstr ""
+
+#: dynolab.py:4078
+msgid ""
+"Diese Einträge stehen weiterhin an:\n"
+"\n"
+msgstr ""
+
+#: dynolab.py:4173
+msgid ""
+"Der Lauf gehört root und lässt sich von hier nicht stoppen. Im Terminal: "
+"sudo pkill -TERM apt-get"
+msgstr ""
+
+#: dynolab.py:4181
+msgid ""
+"Mitten im Entpacken abzubrechen kann halb installierte Pakete hinterlassen. "
+"Danach hilft nur 'sudo dpkg --configure -a'."
+msgstr ""
+
+#: dynolab.py:4219
+msgid "Fragt erst, was der Dienst überhaupt tut und wer ihn braucht."
+msgstr ""
+
+#: dynolab.py:4231
+msgid "Darauf bauen auf:"
+msgstr ""
+
+#: dynolab.py:4256
+msgid "Seite neu aufbauen, damit die Änderung sichtbar wird."
+msgstr ""
+
+#: dynolab.py:4271
+msgid ""
+"Starte die Aufzeichnung, dann belaste den Rechner wie im Alltag: spielen, "
+"rendern, kompilieren. Danach steht hier, wie heiß es wurde, wie tief der "
+"Takt fiel und ab wann gedrosselt wurde. Einzelne Momentwerte zeigen das "
+"nicht, weil die Drosselung erst nach Minuten einsetzt."
+msgstr ""
+
+#: dynolab.py:4280
+msgid "Temperatur und Takt"
+msgstr ""
+
+#: dynolab.py:4352
+msgid "Läuft. Belaste den Rechner jetzt so, wie du ihn im Alltag belastest."
+msgstr ""
+
+#: dynolab.py:4443
+msgid "Logo und Herkunft der gewählten Anwendung, noch ohne Prüfung."
+msgstr ""
+
+#: dynolab.py:4462
+msgid ""
+"Läuft. Journal und Paketverwaltung werden gefragt, das dauert einen Moment."
+msgstr ""
+
+#: dynolab.py:4744
+msgid "Alte Logzeilen werden verworfen, die letzten 500 MB bleiben."
+msgstr ""
+
+#: dynolab.py:4749
+msgid ""
+"Heruntergeladene Installationsdateien. Werden bei Bedarf erneut geladen."
+msgstr ""
+
+#: dynolab.py:4772
+msgid ""
+"Vorschaubilder des Dateimanagers, werden beim nächsten Öffnen neu erzeugt."
+msgstr ""
+
+#: dynolab.py:4846
+msgid "noch nicht gelaufen"
+msgstr ""
+
+#: dynolab.py:4850
+msgid ""
+"Gemessen wird, was ohne Root messbar ist: SHA-256-Durchsatz ein- und "
+"mehrfädig, Speicherkopie und Schreibrate auf die Home-Partition."
+msgstr ""
+
+#: dynolab.py:4853
+msgid ""
+"Der Lesewert fehlt bewusst, ohne Cache-Drop wäre er gelogen. Die Zahlen "
+"taugen zum Vergleich mit dir selbst, nicht mit fremden Rechnern."
+msgstr ""
+
+#: dynolab.py:4947
+msgid "fertig, Lauf im Verlauf gespeichert"
+msgstr ""
+
+#: dynolab.py:5113
+msgid ""
+"systemd-User-Dienst, prüft alle 30 s auf neue Vorfälle und meldet kritische "
+"per Benachrichtigung"
+msgstr ""
+
+#: dynolab.py:5143
+msgid "fwupdmgr ist nicht installiert"
+msgstr ""
+
+#: dynolab.py:5155
+msgid "Timeshift läuft vor der Installation, bricht sie ab wenn er scheitert"
+msgstr ""
+
+#: dynolab.py:5157
+msgid "timeshift ist nicht installiert"
+msgstr ""
+
+#: dynolab.py:5169
+msgid "Daten und Einstellungen"
+msgstr ""
+
+#: dynolab.py:5220
+msgid "Dienst nicht geschaltet"
+msgstr ""
+
+#: dynolab.py:5597
+msgid "CPU 71 °C · GPU 87 °C bei 1800 MHz, gedrosselt · RAM 64 % · Last 3.8"
+msgstr ""
+
+#: dynolab.py:5701
+msgid ""
+"[Desktop Entry]\n"
+"Name=Test\n"
+"Name[de]=Prüfung\n"
+"Hidden=true\n"
+"[Other]\n"
+"Name=Ignoriert\n"
+msgstr ""
+
+#: dynolab.py:5771
+msgid "Übersicht"
+msgstr ""

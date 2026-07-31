@@ -9,6 +9,7 @@ verändern. Der Lizenztext liegt der Datei als LICENSE bei.
 """
 
 import fcntl
+import gettext
 import glob
 import hashlib
 import json
@@ -34,6 +35,14 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 VERSION = "0.1"
 APP_ID = "de.dynolab.Dynolab"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Die Texte im Quelltext sind deutsch, der Katalog uebersetzt sie bei Bedarf.
+# Ohne passenden Katalog bleibt es beim deutschen Original.
+LOCALE_DIRS = [os.path.join(APP_DIR, "locale"), "/usr/share/locale",
+               os.path.expanduser("~/.local/share/locale")]
+_ = gettext.translation("dynolab", next((d for d in LOCALE_DIRS
+                                         if os.path.isdir(d)), None),
+                        fallback=True).gettext
 CONFIG_DIR = os.path.expanduser("~/.config/dynolab")
 DATA_DIR = os.path.expanduser("~/.local/share/dynolab")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -424,14 +433,14 @@ def parse_blame(text):
 
 
 def unit_scope(unit):
-    """('--user',) wenn es eine Nutzer-Unit ist, sonst () für die Systemebene."""
+    _("""('--user',) wenn es eine Nutzer-Unit ist, sonst () für die Systemebene.""")
     if sh(["systemctl", "--user", "cat", unit], timeout=20).strip():
         return ("--user",)
     return ()
 
 
 def unit_info(unit, scope=()):
-    """Beschreibung und was sonst noch von der Unit abhängt."""
+    _("""Beschreibung und was sonst noch von der Unit abhängt.""")
     args = ["systemctl", *scope]
     desc = sh(args + ["show", "-p", "Description", "--value", unit], timeout=20).strip()
     needed = [line.strip() for line in
@@ -466,7 +475,7 @@ def autostart_entries():
 
 
 def autostart_set(entry, enabled):
-    """Schaltet über eine Nutzer-Kopie, Systemdateien bleiben unangetastet."""
+    _("""Schaltet über eine Nutzer-Kopie, Systemdateien bleiben unangetastet.""")
     os.makedirs(AUTOSTART_DIR, exist_ok=True)
     target = os.path.join(AUTOSTART_DIR, entry["file"])
     text = read(target) if os.path.exists(target) else read(entry["path"])
@@ -706,7 +715,7 @@ def updates_scan(include_firmware=True):
         rc, text = sh_rc(["fwupdmgr", "get-updates", "--json"], timeout=45)
         # 2 heißt "nichts gefunden", das ist kein Fehler
         out["fwupd"] = {"items": parse_fwupd_updates(text) if rc in (0, 2) else [],
-                        "error": None if rc in (0, 2) else "fwupdmgr nicht erreichbar"}
+                        "error": None if rc in (0, 2) else _("fwupdmgr nicht erreichbar")}
     return out
 
 
@@ -719,7 +728,7 @@ PROGRESS_FILE = re.compile(r"^Preparing to unpack .*?/([^/_]+)_")
 
 
 def progress_name(line):
-    """Paketname aus einer Fortschrittszeile von apt, snap oder flatpak."""
+    _("""Paketname aus einer Fortschrittszeile von apt, snap oder flatpak.""")
     line = line.strip()
     for pat in (PROGRESS_LINE, PROGRESS_FILE):
         m = pat.match(line)
@@ -743,7 +752,7 @@ def desktop_icon(text):
 
 
 def update_icon(src, uid, name):
-    """Icon-Name oder Pfad für eine Update-Zeile, leer wenn nichts passt."""
+    _("""Icon-Name oder Pfad für eine Update-Zeile, leer wenn nichts passt.""")
     if src == "snap":
         for p in sorted(glob.glob(f"/snap/{uid}/current/meta/gui/*.png")):
             return p
@@ -762,7 +771,7 @@ def update_icon(src, uid, name):
 
 
 def update_cmd(src, ids):
-    """Kommando, das die gewählten Updates einspielt. Ohne Shell, ohne Helfer."""
+    _("""Kommando, das die gewählten Updates einspielt. Ohne Shell, ohne Helfer.""")
     if src == "apt":
         # pkexec setzt die Umgebung des Kindes auf ein Minimum zurueck, deshalb
         # muss DEBIAN_FRONTEND ueber env gesetzt werden statt ueber Popen(env=).
@@ -863,7 +872,7 @@ def desktop_apps():
 
 
 def missing_libs(binary):
-    """Bibliotheken, die der Binder nicht auflösen kann."""
+    _("""Bibliotheken, die der Binder nicht auflösen kann.""")
     path = shutil.which(binary) or binary
     if not os.path.exists(path):
         return []
@@ -872,7 +881,7 @@ def missing_libs(binary):
 
 
 def parse_snap_connections(text, name):
-    """Interfaces eines Snaps, die auf keinen Slot zeigen."""
+    _("""Interfaces eines Snaps, die auf keinen Slot zeigen.""")
     gaps = []
     for line in text.splitlines()[1:]:
         f = line.split()
@@ -882,7 +891,7 @@ def parse_snap_connections(text, name):
 
 
 def parse_flatpak_perms(text):
-    """Die Berechtigungen, deren Fehlen man tatsächlich merkt."""
+    _("""Die Berechtigungen, deren Fehlen man tatsächlich merkt.""")
     have = {}
     for key, label in (("devices", "Grafikbeschleunigung"), ("sockets", "Anzeige"),
                        ("filesystems", "Dateizugriff"), ("shared", "Netzwerk")):
@@ -906,16 +915,16 @@ APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": "Paket",
 # Snap-Schnittstellen in Alltagssprache. Die Namen sind Fachbegriffe, und ob
 # eine fehlende Freigabe stört, hängt davon ab, was man mit der App macht.
 SNAP_IFACE = {
-    "audio-record": ("Mikrofon", "Die App kann nichts aufnehmen. Nötig für "
-                     "Spracheingabe oder Anrufe."),
+    "audio-record": ("Mikrofon", _("Die App kann nichts aufnehmen. Nötig für "
+                     "Spracheingabe oder Anrufe.")),
     "audio-playback": ("Tonwiedergabe", "Die App bleibt stumm."),
-    "camera": ("Kamera", "Video und Fotos gehen nicht."),
-    "removable-media": ("USB-Sticks und externe Laufwerke", "Die App sieht nur "
-                        "dein Home-Verzeichnis, nichts unter /media."),
-    "home": ("Eigene Dateien", "Die App kommt nicht an dein Home-Verzeichnis."),
-    "network": ("Internet", "Die App kann nicht ins Netz."),
-    "network-manager": ("Netzwerkeinstellungen", "Nur nötig, wenn die App "
-                        "Verbindungen selbst einrichten soll."),
+    "camera": ("Kamera", _("Video und Fotos gehen nicht.")),
+    "removable-media": (_("USB-Sticks und externe Laufwerke"), _("Die App sieht nur "
+                        "dein Home-Verzeichnis, nichts unter /media.")),
+    "home": ("Eigene Dateien", _("Die App kommt nicht an dein Home-Verzeichnis.")),
+    "network": ("Internet", _("Die App kann nicht ins Netz.")),
+    "network-manager": ("Netzwerkeinstellungen", _("Nur nötig, wenn die App "
+                        "Verbindungen selbst einrichten soll.")),
     "cups-control": ("Drucken", "Druckaufträge gehen nicht raus."),
     "bluetooth-control": ("Bluetooth", "Geräte lassen sich nicht koppeln."),
     "bluez": ("Bluetooth", "Geräte lassen sich nicht koppeln."),
@@ -931,40 +940,40 @@ SNAP_IFACE = {
     "mount-observe": ("Laufwerke sehen", "Eingehängte Datenträger bleiben unsichtbar."),
     "raw-usb": ("USB-Geräte direkt", "Nötig für Programmiergeräte, Scanner "
                 "und Ähnliches."),
-    "optical-drive": ("CD- und DVD-Laufwerk", "Discs werden nicht gelesen."),
-    "joystick": ("Gamecontroller", "Controller werden nicht erkannt."),
+    "optical-drive": (_("CD- und DVD-Laufwerk"), _("Discs werden nicht gelesen.")),
+    "joystick": ("Gamecontroller", _("Controller werden nicht erkannt.")),
     "gpg-keys": ("GPG-Schlüssel", "Signieren und Entschlüsseln geht nicht."),
     "kerberos-tickets": ("Firmenanmeldung", "Nur in Firmennetzen mit Kerberos nötig."),
     "avahi-observe": ("Geräte im lokalen Netz finden", "Drucker und Freigaben "
                       "tauchen nicht von selbst auf."),
-    "pcscd": ("Chipkartenleser", "Signaturkarten werden nicht erkannt."),
+    "pcscd": ("Chipkartenleser", _("Signaturkarten werden nicht erkannt.")),
     "u2f-devices": ("Sicherheitsschlüssel", "YubiKey und ähnliche Sticks werden "
                     "nicht erkannt."),
     "desktop-launch": ("Andere Programme starten", "Links öffnen sich "
                        "möglicherweise nicht im Browser."),
-    "personal-files": ("Bestimmte eigene Dateien", "Zugriff auf einzelne Ordner "
-                       "im Home."),
-    "system-files": ("Bestimmte Systemdateien", "Zugriff auf einzelne Systemordner."),
-    "shared-memory": ("Gemeinsamer Speicher", "Nötig für manche Fenster- und "
-                      "Videofunktionen."),
+    "personal-files": ("Bestimmte eigene Dateien", _("Zugriff auf einzelne Ordner "
+                       "im Home.")),
+    "system-files": ("Bestimmte Systemdateien", _("Zugriff auf einzelne Systemordner.")),
+    "shared-memory": ("Gemeinsamer Speicher", _("Nötig für manche Fenster- und "
+                      "Videofunktionen.")),
     "hostname-control": ("Rechnername ändern", "Nur für Systemwerkzeuge nötig."),
-    "dvb": ("TV-Karte", "Fernsehempfang geht nicht."),
+    "dvb": ("TV-Karte", _("Fernsehempfang geht nicht.")),
     "raw-input": ("Eingabegeräte direkt", "Nötig für manche Tastatur- und "
                   "Controllerfunktionen."),
 }
 
 
 def iface_text(name):
-    """(Klarname, Erklärung) zu einer Snap-Schnittstelle."""
+    _("""(Klarname, Erklärung) zu einer Snap-Schnittstelle.""")
     known = SNAP_IFACE.get(name)
     if known:
         return known
     return (name.replace("-", " "),
-            "Was genau dahinter steckt, sagt die Beschreibung des Snaps.")
+            _("Was genau dahinter steckt, sagt die Beschreibung des Snaps."))
 
 
 def entry_icon(entry):
-    """Icon-Angabe einer Startdatei: absoluter Pfad oder Name aus dem Theme."""
+    _("""Icon-Angabe einer Startdatei: absoluter Pfad oder Name aus dem Theme.""")
     icon = entry.get("Icon", "").strip()
     if icon.startswith("/"):
         return icon if os.path.exists(icon) else ""
@@ -984,7 +993,7 @@ def parse_apt_policy(text):
 
 
 def app_dirs(names):
-    """[(Pfad, Bytes)] der Ordner, die eine Anwendung im Home anlegt."""
+    _("""[(Pfad, Bytes)] der Ordner, die eine Anwendung im Home anlegt.""")
     out = []
     for base in (".config", ".local/share", ".cache", ".var/app", "snap"):
         for n in filter(None, dict.fromkeys(names)):
@@ -1026,33 +1035,33 @@ def app_check(entry):
         "flatpak": "Läuft abgeschottet in einer Sandbox mit eigenen Bibliotheken, "
                    "unabhängig vom Rest des Systems.",
         "deb": "Über die Paketverwaltung eingetragen, dpkg kennt es.",
-        "lokal": "Von Hand installiert, ohne Paketquelle. Updates musst du selbst "
-                 "einspielen.",
-        "appimage": "Einzelne Programmdatei, die alles mitbringt. Updates musst "
-                    "du selbst einspielen.",
+        "lokal": _("Von Hand installiert, ohne Paketquelle. Updates musst du selbst "
+                 "einspielen."),
+        "appimage": _("Einzelne Programmdatei, die alles mitbringt. Updates musst "
+                    "du selbst einspielen."),
     }.get(kind, "")
     out = [("ok", APP_KIND_LABEL.get(kind, kind) + (f" · {ident}" if ident else ""),
             origin, None)]
 
     if kind == "appimage":
         if not os.path.exists(binary):
-            out.append(("crit", "AppImage nicht gefunden",
+            out.append(("crit", _("AppImage nicht gefunden"),
                         f"{binary} liegt nicht mehr dort. Der Starter zeigt "
                         "ins Leere und lässt sich löschen.", None))
         else:
             if not os.access(binary, os.X_OK):
                 out.append(("crit", "Nicht ausführbar",
-                            "Der Datei fehlt das Ausführungsrecht, ohne das "
-                            "startet sie nicht.",
+                            _("Der Datei fehlt das Ausführungsrecht, ohne das "
+                            "startet sie nicht."),
                             ("Recht setzen", ["chmod", "+x", binary])))
             else:
                 out.append(("ok", "Datei", f"{fmt_bytes(os.path.getsize(binary))}, "
                             "ausführbar"))
             if fuse2_missing():
                 out.append(("warn", "libfuse2 fehlt",
-                            "AppImages der ersten Generation brauchen sie zum "
+                            _("AppImages der ersten Generation brauchen sie zum "
                             "Entpacken. Ohne sie bricht der Start mit "
-                            "'dlopen(): error loading libfuse.so.2' ab.",
+                            "'dlopen(): error loading libfuse.so.2' ab."),
                             ("libfuse2 installieren",
                              [["pkexec", "apt-get", "update"],
                               ["pkexec", "/usr/bin/env",
@@ -1065,7 +1074,7 @@ def app_check(entry):
             status = sh(["dpkg-query", "-W", "-f=${db:Status-Abbrev}", ident],
                         timeout=20).strip()
             if status and not status.startswith("ii"):
-                out.append(("crit", "Paket nicht sauber installiert",
+                out.append(("crit", _("Paket nicht sauber installiert"),
                             f"dpkg meldet den Status '{status}'. So bleibt ein "
                             "abgebrochener Installationslauf liegen, das Programm "
                             "ist unvollständig.",
@@ -1087,8 +1096,8 @@ def app_check(entry):
                             None))
             elif cand and cand != inst:
                 out.append(("warn", f"Version {inst}, verfügbar wäre {cand}",
-                            "Die Systemaktualisierung hat das noch nicht "
-                            "eingespielt.", ("Jetzt aktualisieren",
+                            _("Die Systemaktualisierung hat das noch nicht "
+                            "eingespielt."), ("Jetzt aktualisieren",
                                              [["pkexec", "apt-get", "update"],
                                               ["pkexec", "/usr/bin/env",
                                                "DEBIAN_FRONTEND=noninteractive",
@@ -1101,7 +1110,7 @@ def app_check(entry):
             missing = missing_libs(binary)
             if missing:
                 out.append(("crit", "Fehlende Bibliotheken",
-                            "Das Programm startet so nicht: " + ", ".join(missing),
+                            _("Das Programm startet so nicht: ") + ", ".join(missing),
                             ("Abhängigkeiten nachziehen", apt_fix)))
             else:
                 out.append(("ok", "Bibliotheken", "alle auflösbar", None))
@@ -1112,7 +1121,7 @@ def app_check(entry):
                        [["pkexec", "apt-get", "update"],
                         ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
                          "apt-get", "install", "--reinstall", "-y", ident]])
-            out.append(("crit", "Programm nicht gefunden",
+            out.append(("crit", _("Programm nicht gefunden"),
                         f"{binary} liegt nicht (mehr) dort.", fix))
 
     if kind == "snap":
@@ -1137,16 +1146,16 @@ def app_check(entry):
                                        timeout=30))
         if not perms.get("Grafikbeschleunigung"):
             out.append(("warn", "Keine Grafikbeschleunigung",
-                        "devices=dri fehlt, das Programm rendert in Software "
-                        "und ruckelt.",
+                        _("devices=dri fehlt, das Programm rendert in Software "
+                        "und ruckelt."),
                         ("Freigeben", ["flatpak", "override", "--user",
                                        "--device=dri", ident])))
         else:
             out.append(("ok", "Grafikbeschleunigung", "vorhanden", None))
         if not perms.get("Anzeige"):
-            out.append(("crit", "Kein Zugriff auf die Anzeige",
-                        "Weder X11 noch Wayland freigegeben, das Fenster kann "
-                        "nicht erscheinen.",
+            out.append(("crit", _("Kein Zugriff auf die Anzeige"),
+                        _("Weder X11 noch Wayland freigegeben, das Fenster kann "
+                        "nicht erscheinen."),
                         ("Freigeben", ["flatpak", "override", "--user",
                                        "--socket=wayland", "--socket=fallback-x11",
                                        ident])))
@@ -1159,15 +1168,15 @@ def app_check(entry):
         count, ops = parse_denials(
             sh(["journalctl", "-k", "--since", "-24h", "--no-pager"], timeout=60), label)
         if count:
-            what = {"dbus_method_call": "mit einem Systemdienst sprechen",
+            what = {"dbus_method_call": _("mit einem Systemdienst sprechen"),
                     "dbus_signal": "auf Systemmeldungen hören",
                     "open": "eine Datei öffnen", "file_inherit": "eine Datei "
-                    "weiterreichen", "exec": "ein anderes Programm starten",
-                    "connect": "eine Verbindung aufbauen",
-                    "capable": "eine Systemberechtigung nutzen"}
+                    "weiterreichen", "exec": _("ein anderes Programm starten"),
+                    "connect": _("eine Verbindung aufbauen"),
+                    "capable": _("eine Systemberechtigung nutzen")}
             tried = [what.get(o, o) for o in ops[:3]]
             out.append(("info", f"{count} mal von der Sandbox gebremst",
-                        "Die App wollte " + " und ".join(tried)
+                        "Die App wollte " + _(" und ").join(tried)
                         + ", durfte aber nicht. Das ist der Normalfall bei Snaps "
                         "und meist harmlos. Nur wenn etwas in der App wirklich "
                         "nicht geht, lohnt ein Blick auf die Freigaben darüber.",
@@ -1221,7 +1230,7 @@ def app_check(entry):
                  if base and base in a.get("exec", "")), None)
     if auto:
         out.append(("ok" if auto["enabled"] else "info",
-                    "Startet automatisch mit der Anmeldung" if auto["enabled"]
+                    _("Startet automatisch mit der Anmeldung") if auto["enabled"]
                     else "Autostart-Eintrag vorhanden, aber abgeschaltet",
                     f"Eintrag {auto['file']}. Ändern lässt sich das unter Autostart.",
                     None))
@@ -1236,7 +1245,7 @@ def app_check(entry):
     # Gilt für jede Art: zeigt der Starter ins Leere und liegt er im eigenen
     # Home, lässt er sich gefahrlos entfernen. Systemweite gehören einem Paket.
     path = entry.get("Path", "")
-    dead = any(sev == "crit" and "nicht gefunden" in title for sev, title, _, _ in out)
+    dead = any(sev == "crit" and _("nicht gefunden") in title for sev, title, _, _ in out)
     if dead and path.startswith(os.path.expanduser("~")):
         out.append(("warn", "Verwaister Starter",
                     f"{path} zeigt auf ein Programm, das es nicht mehr gibt. "
@@ -1245,12 +1254,12 @@ def app_check(entry):
 
     if not any(sev != "ok" for sev, _, _, _ in out):
         out.append(("ok", "Keine Auffälligkeiten",
-                    "Bibliotheken, Rechte und Journal sind sauber.", None))
+                    _("Bibliotheken, Rechte und Journal sind sauber."), None))
     return out
 
 
 def app_check_text(name, results):
-    """Das Ergebnis als kopierbarer Text, etwa für einen Fehlerbericht."""
+    _("""Das Ergebnis als kopierbarer Text, etwa für einen Fehlerbericht.""")
     lines = [f"App-Check: {name}", ""]
     for sev, title, detail, _fix in results:
         mark = {"ok": "  ", "info": "· ", "warn": "! ", "crit": "!!"}[sev]
@@ -1267,11 +1276,11 @@ INTRO = [
      "erklärt sich und bringt den passenden Befehl mit."),
     ("Vorfälle", "Liest das Journal nach Audio-Aussetzern, GPU-Treiberfehlern und "
      "abgeschossenen Prozessen und schreibt dazu, wie warm es zu dem Zeitpunkt war."),
-    ("Updates", "apt, Snap, Flatpak und Firmware an einer Stelle, mit Größenangabe "
-     "und Protokoll. Auf Wunsch mit Timeshift-Sicherung davor."),
-    ("App-Check", "Nimmt eine installierte Anwendung auseinander: fehlende "
+    ("Updates", _("apt, Snap, Flatpak und Firmware an einer Stelle, mit Größenangabe "
+     "und Protokoll. Auf Wunsch mit Timeshift-Sicherung davor.")),
+    ("App-Check", _("Nimmt eine installierte Anwendung auseinander: fehlende "
      "Bibliotheken, abgeschnittene Sandbox-Rechte, Abstürze. Wo es eine Lösung "
-     "gibt, steht ein Knopf daneben."),
+     "gibt, steht ein Knopf daneben.")),
     ("Prüfstand", "Zeichnet Temperatur und Takt über Minuten auf und sagt dir, "
      "ab wann unter Dauerlast gedrosselt wird."),
 ]
@@ -1279,7 +1288,7 @@ INTRO = [
 RELEASE_NOTES = {
     "0.1": ("Erste Ausgabe", [
         "Systemcheck mit Punktzahl und erklärten Befunden",
-        "Vorfallserkennung aus dem Journal, auf Wunsch im Hintergrund",
+        _("Vorfallserkennung aus dem Journal, auf Wunsch im Hintergrund"),
         "Updates für apt, Snap, Flatpak und Firmware",
         "App-Check, Prüfstand, Benchmark mit eigener Basislinie",
     ]),
@@ -1290,7 +1299,7 @@ RELEASE_NOTES = {
 # Momentwert sagt nichts darüber, was nach zehn Minuten Last passiert.
 
 def record_sample(prev_cpu):
-    """Ein Messpunkt. prev_cpu ist der Stand von cpu_times() beim letzten Punkt."""
+    _("""Ein Messpunkt. prev_cpu ist der Stand von cpu_times() beim letzten Punkt.""")
     cur = cpu_times()
     total, avail = meminfo()
     g = gpu()
@@ -1336,7 +1345,7 @@ RECORD_LABEL = {"cpu": ("CPU-Last", "%"), "ram": ("Speicher", "%"),
 
 
 def format_summary(summary):
-    """Die Auswertung als Text, kopierbar für Forum oder Bugreport."""
+    _("""Die Auswertung als Text, kopierbar für Forum oder Bugreport.""")
     if not summary:
         return "Keine Messpunkte aufgezeichnet."
     secs = summary["secs"]
@@ -1352,7 +1361,7 @@ def format_summary(summary):
         t = summary["throttle_from"]
         lines += ["", f"Die Grafikkarte drosselte in {summary['throttle_share']} % "
                   f"der Messpunkte, erstmals nach {t // 60}:{t % 60:02d} min.",
-                  "Das ist der Punkt, an dem die Leistung unter Dauerlast einbricht."]
+                  _("Das ist der Punkt, an dem die Leistung unter Dauerlast einbricht.")]
     elif summary.get("gpu_temp"):
         lines += ["", "Keine Drosselung aufgezeichnet."]
     return "\n".join(lines)
@@ -1416,7 +1425,7 @@ def nvidia_loaded_version(text=None):
 
 
 def parse_nvml_mismatch(text):
-    """Bibliotheksversion aus der Mismatch-Meldung von nvidia-smi, sonst leer."""
+    _("""Bibliotheksversion aus der Mismatch-Meldung von nvidia-smi, sonst leer.""")
     if "version mismatch" not in text.lower():
         return ""
     m = re.search(r"NVML library version:\s*([\d.]+)", text)
@@ -1433,12 +1442,12 @@ def check_driver_mismatch(ctx):
     if not lib:
         return None
     loaded = nvidia_loaded_version()
-    return Finding("crit", "Grafiktreiber wartet auf einen Neustart",
+    return Finding("crit", _("Grafiktreiber wartet auf einen Neustart"),
                    f"Geladen ist noch Modul {loaded or 'unbekannt'}, installiert "
                    f"sind die Bibliotheken {lib}. Solange das so ist, läuft die "
                    "Karte ohne Beschleunigung und keine GPU-Anzeige stimmt.",
                    "Neustart", False, "sudo reboot",
-                   warn="Alles speichern, der Rechner startet sofort neu.",
+                   warn=_("Alles speichern, der Rechner startet sofort neu."),
                    argv=["pkexec", "systemctl", "reboot"])
 
 
@@ -1485,9 +1494,9 @@ def check_filesystems(ctx):
         # Auf einer Datenpartition liegt kein einziges Paket. Ein apt-Befehl
         # wuerde dort nichts freiraeumen, also nur melden statt etwas anzubieten.
         return Finding(sev, f"{worst['target']} zu {pct:.0f} % voll",
-                       detail + ". Hier liegen deine eigenen Daten, aufräumen "
+                       detail + _(". Hier liegen deine eigenen Daten, aufräumen "
                        "musst du von Hand. Was am meisten belegt, steht unter "
-                       "Speicher.",
+                       "Speicher."),
                        f"{worst['free'] / 2**30:.0f} GB frei", False)
     return Finding(sev, f"{worst['target']} zu {pct:.0f} % voll", detail,
                    f"{worst['free'] / 2**30:.0f} GB frei", False,
@@ -1504,7 +1513,7 @@ def os_release(key):
 
 
 def parse_release_upgrade(text):
-    """Version aus der Ausgabe von 'do-release-upgrade -c', sonst leer."""
+    _("""Version aus der Ausgabe von 'do-release-upgrade -c', sonst leer.""")
     m = re.search(r"New release '([^']+)' available", text)
     return m.group(1) if m else ""
 
@@ -1517,7 +1526,7 @@ TERMINALS = [("kitty", []), ("gnome-terminal", ["--"]), ("konsole", ["-e"]),
 
 
 def terminal_cmd(argv):
-    """argv in einem sichtbaren Terminal starten. Leer, wenn keins da ist."""
+    _("""argv in einem sichtbaren Terminal starten. Leer, wenn keins da ist.""")
     for name, prefix in TERMINALS:
         if shutil.which(name):
             return [name] + prefix + argv
@@ -1528,7 +1537,7 @@ META_RELEASE = "https://changelogs.ubuntu.com/meta-release"
 
 
 def parse_meta_release(text):
-    """Ubuntus Releaseliste zu [(Version, Codename, unterstützt)]."""
+    _("""Ubuntus Releaseliste zu [(Version, Codename, unterstützt)].""")
     out = []
     for block in text.split("\n\n"):
         f = dict(re.findall(r"^([\w-]+): (.+)$", block, re.M))
@@ -1543,7 +1552,7 @@ def version_tuple(v):
 
 
 def newer_release(current, releases):
-    """Höchstes unterstütztes Release oberhalb der laufenden Version."""
+    _("""Höchstes unterstütztes Release oberhalb der laufenden Version.""")
     cur = version_tuple(current)
     newer = [r for r in releases if r[2] and version_tuple(r[0]) > cur]
     return max(newer, key=lambda r: version_tuple(r[0])) if newer else None
@@ -1583,7 +1592,7 @@ def parse_apt_source(text):
 
 
 def third_party_sources():
-    """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen."""
+    _("""Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen.""")
     out = []
     files = (glob.glob("/etc/apt/sources.list.d/*.list")
              + glob.glob("/etc/apt/sources.list.d/*.sources")
@@ -1602,7 +1611,7 @@ def third_party_sources():
 
 
 def source_ready(uri, codename, timeout=8):
-    """Hat die Quelle schon eine Paketliste für das neue Release?"""
+    _("""Hat die Quelle schon eine Paketliste für das neue Release?""")
     url = uri.rstrip("/") + f"/dists/{codename}/Release"
     try:
         req = urllib.request.Request(url, method="HEAD")
@@ -1613,7 +1622,7 @@ def source_ready(uri, codename, timeout=8):
 
 
 def local_packages():
-    """Selbst installierte .deb-Pakete ohne Quelle im Archiv."""
+    _("""Selbst installierte .deb-Pakete ohne Quelle im Archiv.""")
     out = []
     for line in sh(["apt", "list", "--installed"], timeout=60).splitlines():
         if ",local]" in line or "[installed,local]" in line:
@@ -1662,7 +1671,7 @@ def upgrade_report(codename="", version=""):
     dkms = dkms_modules()
 
     lines.append("BLEIBT ERHALTEN")
-    lines.append("  Home-Verzeichnis, Einstellungen und Dokumente")
+    lines.append(_("  Home-Verzeichnis, Einstellungen und Dokumente"))
     if snaps or flat:
         lines.append(f"  {snaps} Snaps und {flat} Flatpaks, sie bringen ihre "
                      "Bibliotheken selbst mit")
@@ -1726,13 +1735,13 @@ def upgrade_report(codename="", version=""):
         s = os.statvfs("/")
         free = s.f_bavail * s.f_frsize / 2**30
         lines.append(f"  {free:.0f} GB frei auf /, "
-                     + ("das reicht" if free >= 10 else "mindestens 10 GB wären nötig"))
+                     + (_("das reicht") if free >= 10 else "mindestens 10 GB wären nötig"))
     except OSError:
         pass
-    lines.append("  Snapshot anlegen: " + ("Timeshift ist da" if shutil.which("timeshift")
-                                           else "Timeshift ist nicht installiert"))
-    lines.append("  Das Upgrade läuft in einem eigenen Terminal und dauert eine halbe "
-                 "bis anderthalb Stunden.")
+    lines.append("  Snapshot anlegen: " + (_("Timeshift ist da") if shutil.which("timeshift")
+                                           else _("Timeshift ist nicht installiert")))
+    lines.append(_("  Das Upgrade läuft in einem eigenen Terminal und dauert eine halbe "
+                 "bis anderthalb Stunden."))
     return "\n".join(lines)
 
 
@@ -1770,12 +1779,12 @@ def check_release_upgrade(ctx):
                        "Anschluss eine halbe bis anderthalb Stunden.",
                        offered, True, "sudo do-release-upgrade",
                        argv=terminal_cmd(["sudo", "do-release-upgrade"]) or None,
-                       warn="Läuft bewusst in einem eigenen Terminal, nicht in "
+                       warn=_("Läuft bewusst in einem eigenen Terminal, nicht in "
                             "diesem Fenster: das Upgrade tauscht Python und GTK "
                             "aus, unter denen Dynolab selbst läuft. Das "
                             "Terminalfenster bis zum Ende offen lassen, sonst "
                             "bricht das Upgrade mittendrin ab. Vorher einen "
-                            "Timeshift-Snapshot anlegen.",
+                            "Timeshift-Snapshot anlegen."),
                        report=report)
     if exists:
         # Bewusst ohne ausführbaren Befehl: das ändert Systemkonfiguration und
@@ -1797,7 +1806,7 @@ def check_release_upgrade(ctx):
 
 
 def check_hwe_kernel(ctx):
-    """Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber."""
+    _("""Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber.""")
     ver = os_release("VERSION_ID")
     if not ver or not shutil.which("apt-cache"):
         return None
@@ -1812,12 +1821,12 @@ def check_hwe_kernel(ctx):
                    argv=[["pkexec", "apt-get", "update"],
                          ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
                           "apt-get", "install", "-y", "--install-recommends", pkg]],
-                   warn="Wechselt die Kernel-Serie. Fremde Kernelmodule wie "
-                        "VirtualBox oder NVIDIA werden neu gebaut.")
+                   warn=_("Wechselt die Kernel-Serie. Fremde Kernelmodule wie "
+                        "VirtualBox oder NVIDIA werden neu gebaut."))
 
 
 BENCH_LABEL = {"cpu1": "Ein CPU-Kern", "cpun": "Alle CPU-Kerne",
-               "ram": "Speicherdurchsatz", "disk": "Schreibrate der Platte"}
+               "ram": "Speicherdurchsatz", "disk": _("Schreibrate der Platte")}
 
 
 def check_bench_drop(ctx):
@@ -1851,7 +1860,7 @@ def check_journal(ctx):
     if gb < 2:
         return None
     return Finding("warn", f"Systemjournal belegt {gb:.1f} GB",
-                   "Alte Logs lassen sich gefahrlos auf 500 MB eindampfen.",
+                   _("Alte Logs lassen sich gefahrlos auf 500 MB eindampfen."),
                    f"{gb - 0.5:.1f} GB frei", True,
                    "sudo journalctl --vacuum-size=500M",
                    argv=["pkexec", "journalctl", "--vacuum-size=500M"])
@@ -1906,7 +1915,7 @@ def check_incidents(ctx):
 
 
 def check_journal_rate(ctx):
-    """Fünf-Minuten-Stichprobe, ein Vollscan des Journals wäre zu teuer."""
+    _("""Fünf-Minuten-Stichprobe, ein Vollscan des Journals wäre zu teuer.""")
     lines = sh(["journalctl", "--user", "--since", "-5min", "--no-pager", "-o", "cat"],
                timeout=30).count("\n")
     rate = lines / 5
@@ -1931,7 +1940,7 @@ def check_updates(ctx):
     if n < 20:
         return None
     return Finding("warn", f"{n} Paket-Updates stehen aus",
-                   "Sicherheits- und Treiber-Updates bleiben sonst liegen.",
+                   _("Sicherheits- und Treiber-Updates bleiben sonst liegen."),
                    f"{n} Pakete", False, "sudo apt update && sudo apt upgrade")
 
 
@@ -2007,7 +2016,7 @@ def journal_time(line):
 
 
 def strip_prefix(line):
-    """Zeitstempel, Host und Unit weg, es bleibt die eigentliche Meldung."""
+    _("""Zeitstempel, Host und Unit weg, es bleibt die eigentliche Meldung.""")
     parts = line.split(": ", 1)
     return parts[1].strip() if len(parts) == 2 else line.strip()
 
@@ -2120,7 +2129,7 @@ def system_snapshot():
 
 
 def format_snapshot(snap):
-    """Die Messwerte eines Vorfalls als eine lesbare Zeile."""
+    _("""Die Messwerte eines Vorfalls als eine lesbare Zeile.""")
     if not snap:
         return ""
     parts = []
@@ -2216,93 +2225,93 @@ XID_RE = re.compile(r"xid\s*(?:\([^)]*\))?\s*:?\s*(\d+)", re.I)
 
 XID_KNOWLEDGE = {
     79: ("crit",
-         "Xid 79: GPU has fallen off the bus. Der PCIe-Bus antwortet nicht mehr, die GPU "
-         "ist aus Systemsicht komplett verschwunden.",
-         ["Hardwareproblem auf der PCIe-Verbindung (Sitz der Karte, Stromversorgung)",
+         _("Xid 79: GPU has fallen off the bus. Der PCIe-Bus antwortet nicht mehr, die GPU "
+         "ist aus Systemsicht komplett verschwunden."),
+         [_("Hardwareproblem auf der PCIe-Verbindung (Sitz der Karte, Stromversorgung)"),
           "Überhitzung oder instabiles Power-Limit/Overclocking",
-          "Fehlerhafter oder zu alter Treiber"],
-         ["System komplett neu starten (nicht nur die Anwendung), oft hilft nur ein Reboot, "
-          "weil die GPU aus dem PCIe-Bus verschwunden ist",
+          _("Fehlerhafter oder zu alter Treiber")],
+         [_("System komplett neu starten (nicht nur die Anwendung), oft hilft nur ein Reboot, "
+          "weil die GPU aus dem PCIe-Bus verschwunden ist"),
           "Kartensitz, PCIe-Stromstecker und Kühlung prüfen",
           "Bei Overclocking: Takt und Spannung auf Standardwerte zurücksetzen",
           "GPU-Treiber aktualisieren (nvidia-smi -q prüfen)",
           "Wiederholt sich das häufig: Temperaturen unter Last beobachten "
           "(nvidia-smi -q -d TEMPERATURE), Netzteil-Kapazität prüfen"]),
     62: ("crit",
-         "Xid 62: interner Mikrocontroller der GPU (PMU) ist stehengeblieben.",
+         _("Xid 62: interner Mikrocontroller der GPU (PMU) ist stehengeblieben."),
          ["Instabiler Treiberzustand nach längerer Laufzeit",
           "Firmware- oder VBIOS-Problem, selten Hardwaredefekt"],
-         ["nvidia-smi --gpu-reset probieren, falls keine Prozesse mehr auf der GPU laufen, "
-          "sonst System neu starten",
+         [_("nvidia-smi --gpu-reset probieren, falls keine Prozesse mehr auf der GPU laufen, "
+          "sonst System neu starten"),
           "GPU-Treiber aktualisieren",
           "Tritt es wiederholt auf: VBIOS-Version prüfen, Hersteller-Support kontaktieren"]),
     43: ("info",
-         "Xid 43: GPU-Kanal wurde zurückgesetzt, die GPU bleibt laut NVIDIA dabei in einem "
-         "gesunden Zustand.",
-         ["Meist ein Softwarefehler in der Anwendung, die die GPU genutzt hat"],
-         ["Nur relevant, wenn die betroffene Anwendung abgestürzt ist, dann dort nach einem "
-          "Update suchen",
+         _("Xid 43: GPU-Kanal wurde zurückgesetzt, die GPU bleibt laut NVIDIA dabei in einem "
+         "gesunden Zustand."),
+         [_("Meist ein Softwarefehler in der Anwendung, die die GPU genutzt hat")],
+         [_("Nur relevant, wenn die betroffene Anwendung abgestürzt ist, dann dort nach einem "
+          "Update suchen"),
           "Tritt es isoliert auf und lief alles weiter: keine Aktion nötig"]),
     8: ("warn",
-        "Xid 8: GPU-Kanal ist wegen eines Timeouts gestoppt worden.",
+        _("Xid 8: GPU-Kanal ist wegen eines Timeouts gestoppt worden."),
         ["Anwendung oder Spiel hat die GPU zu lange blockiert oder ist hängengeblieben"],
         ["Betroffene Anwendung neu starten",
-         "Tritt es nur bei einer bestimmten Anwendung auf: dort nach einem Update suchen"]),
+         _("Tritt es nur bei einer bestimmten Anwendung auf: dort nach einem Update suchen")]),
     13: ("warn",
          "Xid 13: Graphics Engine Exception, typischerweise ein Programmierfehler in der "
          "Anwendung, etwa ein Zugriff außerhalb eines Arrays auf der GPU.",
-         ["Bug in der Anwendung oder dem Spiel, das die GPU genutzt hat"],
+         [_("Bug in der Anwendung oder dem Spiel, das die GPU genutzt hat")],
          ["Betroffene Anwendung aktualisieren",
-          "Tritt es nur bei einer bestimmten Anwendung auf: das ist der beste Hinweis auf "
-          "die Ursache, gegebenenfalls beim Hersteller melden"]),
+          _("Tritt es nur bei einer bestimmten Anwendung auf: das ist der beste Hinweis auf "
+          "die Ursache, gegebenenfalls beim Hersteller melden")]),
     31: ("warn",
-         "Xid 31: GPU-Speicher-Seitenfehler (MMU-Fehler), meist ein Speicherzugriffsfehler "
-         "in der Anwendung.",
+         _("Xid 31: GPU-Speicher-Seitenfehler (MMU-Fehler), meist ein Speicherzugriffsfehler "
+         "in der Anwendung."),
          ["Anwendung greift auf ungültigen GPU-Speicherbereich zu"],
          ["Betroffene Anwendung oder Treiber aktualisieren",
-          "Kein Hardwaredefekt, laut NVIDIA kein RMA-Grund, wenn es nur bei dieser einen "
-          "Anwendung auftritt"]),
+          _("Kein Hardwaredefekt, laut NVIDIA kein RMA-Grund, wenn es nur bei dieser einen "
+          "Anwendung auftritt")]),
     32: ("warn",
-         "Xid 32: beschädigter Command-Buffer, meist ein PCIe-Qualitäts- oder "
-         "Treiberproblem, kein direkter Anwendungsfehler.",
+         _("Xid 32: beschädigter Command-Buffer, meist ein PCIe-Qualitäts- oder "
+         "Treiberproblem, kein direkter Anwendungsfehler."),
          ["PCIe-Signalqualität (Sitz der Karte, Riser-Kabel)",
-          "Treiber- oder Speicherkorruption auf Host-Seite"],
+          _("Treiber- oder Speicherkorruption auf Host-Seite")],
          ["Kartensitz prüfen, bei PCIe-Riser-Kabel einmal ohne testen",
           "GPU-Treiber aktualisieren"]),
 }
 
 
 def classify(title, detail):
-    """Titel plus Log-Zeile zu Einordnung, Ursachen und Schritten."""
+    _("""Titel plus Log-Zeile zu Einordnung, Ursachen und Schritten.""")
     if title == "Audio-Aussetzer erkannt":
         return ("warn",
                 "Audio-Buffer-Underrun (Xrun): PipeWire oder PulseAudio konnte den Puffer "
                 "nicht rechtzeitig füllen, hörbar als kurzes Knacken.",
                 ["Quantum oder Puffergröße zu niedrig für die aktuelle CPU-Last",
-                 "CPU-Governor auf powersave, der Prozessor taktet nicht schnell genug hoch",
-                 "Ein anderer Prozess blockiert kurzzeitig CPU oder I/O, etwa Kompilieren "
-                 "oder ein Backup",
+                 _("CPU-Governor auf powersave, der Prozessor taktet nicht schnell genug hoch"),
+                 _("Ein anderer Prozess blockiert kurzzeitig CPU oder I/O, etwa Kompilieren "
+                 "oder ein Backup"),
                  "USB-Audio-Gerät mit hoher Latenz oder instabilem Port"],
-                ["pw-top laufen lassen und beobachten, welcher Client die Xruns verursacht",
-                 "Quantum probeweise erhöhen: "
-                 "pw-metadata -n settings 0 clock.force-quantum 1024",
+                [_("pw-top laufen lassen und beobachten, welcher Client die Xruns verursacht"),
+                 _("Quantum probeweise erhöhen: "
+                 "pw-metadata -n settings 0 clock.force-quantum 1024"),
                  "Bessert sich das, schrittweise wieder runter (512, 256) bis die Xruns "
                  "zurückkommen, dann eine Stufe höher bleiben",
                  "cpupower frequency-info prüfen, Governor auf performance oder schedutil",
                  "Bei USB-Audio: anderen Port testen, USB-Autosuspend für das Gerät aus"])
     if title == "OOM-Killer aktiv":
         return ("crit",
-                "Der Kernel hat einen Prozess beendet, weil dem System der Arbeitsspeicher "
-                "ausgegangen ist.",
+                _("Der Kernel hat einen Prozess beendet, weil dem System der Arbeitsspeicher "
+                "ausgegangen ist."),
                 ["Ein Prozess hat deutlich mehr Speicher belegt als erwartet, Leck oder "
                  "schlicht zu große Last wie viele Browser-Tabs oder eine RAM-hungrige VM",
                  "Zu wenig oder kein Swap bzw. zram als Puffer für Lastspitzen",
                  "Mehrere speicherhungrige Programme liefen gleichzeitig"],
-                ["journalctl -k --since \"-1 hour\" | grep -i 'killed process' für Details "
-                 "zum getroffenen Prozess (Name, PID, RSS)",
+                [_("journalctl -k --since \"-1 hour\" | grep -i 'killed process' für Details "
+                 "zum getroffenen Prozess (Name, PID, RSS)"),
                  "free -h ausführen, Speicher- und Swap-Stand prüfen",
-                 "Falls kein Swap aktiv: zram über systemd-zram-generator oder eine "
-                 "Swapdatei einrichten",
+                 _("Falls kein Swap aktiv: zram über systemd-zram-generator oder eine "
+                 "Swapdatei einrichten"),
                  "Betroffenes Programm auf ein Speicherleck prüfen, etwa laufend in htop",
                  "Optional systemd-oomd oder earlyoom installieren, damit gezielt statt "
                  "zufällig der unwichtigste Prozess beendet wird"])
@@ -2310,19 +2319,19 @@ def classify(title, detail):
         unit = detail.strip()
         if unit == "vboxdrv.service":
             return ("warn",
-                    "Das VirtualBox-Kernelmodul konnte nicht geladen werden. Sehr häufig "
-                    "durch Secure Boot verursacht, das unsignierte Kernelmodule blockiert.",
-                    ["Secure Boot ist aktiv und das Modul ist nicht signiert oder die "
-                     "Signatur liegt nicht im MOK",
-                     "DKMS-Modul wurde nach einem Kernel-Update nicht neu gebaut"],
+                    _("Das VirtualBox-Kernelmodul konnte nicht geladen werden. Sehr häufig "
+                    "durch Secure Boot verursacht, das unsignierte Kernelmodule blockiert."),
+                    [_("Secure Boot ist aktiv und das Modul ist nicht signiert oder die "
+                     "Signatur liegt nicht im MOK"),
+                     _("DKMS-Modul wurde nach einem Kernel-Update nicht neu gebaut")],
                     ["dmesg | grep -i vbox für die genaue Fehlermeldung",
-                     "sudo apt install --reinstall virtualbox-dkms baut das Modul neu",
+                     _("sudo apt install --reinstall virtualbox-dkms baut das Modul neu"),
                      "sudo modprobe vboxdrv danach erneut versuchen",
                      "Bei Secure Boot den MOK-Schlüssel beim nächsten Neustart im "
                      "MOK-Manager bestätigen, alternativ Secure Boot im UEFI abschalten"])
         return ("warn",
                 f"Der systemd-Dienst {unit} ist in den failed-Zustand gewechselt.",
-                ["Fehlkonfiguration der Unit oder der Anwendung selbst",
+                [_("Fehlkonfiguration der Unit oder der Anwendung selbst"),
                  "Fehlende Abhängigkeit beim Start, etwa Netzwerk oder ein Gerät",
                  "Anwendung ist beim Start abgestürzt oder mit Fehlercode beendet"],
                 [f"systemctl status {unit} für den genauen Fehlerstatus",
@@ -2340,8 +2349,8 @@ def classify(title, detail):
                     ["nvidia-bug-report.sh ausführen, falls der Fehler sich wiederholt",
                      "GPU-Treiber aktualisieren"])
         return ("warn",
-                "GPU- oder Display-Fehler ohne erkennbaren Xid-Code, etwa ein anderer "
-                "Treiber als NVIDIA oder ein Compositor-Neustart.",
+                _("GPU- oder Display-Fehler ohne erkennbaren Xid-Code, etwa ein anderer "
+                "Treiber als NVIDIA oder ein Compositor-Neustart."),
                 ["Compositor ist abgestürzt und neugestartet",
                  "Treiberfehler eines AMD- oder Intel-Treibers"],
                 ["journalctl -k --since \"-1 hour\" auf weitere Details rund um den "
@@ -2367,12 +2376,12 @@ def release_notify():
     if state.get("release_notified") == f.badge:
         return None
     state_write({**state, "release_notified": f.badge})
-    notify(f.title, "Der Wechsel wird jetzt offiziell angeboten.")
+    notify(f.title, _("Der Wechsel wird jetzt offiziell angeboten."))
     return f.badge
 
 
 def watch(interval=30):
-    """Hintergrundmodus: Journal abfragen, neue Vorfälle melden."""
+    _("""Hintergrundmodus: Journal abfragen, neue Vorfälle melden.""")
     print(f"dynolab watch: Intervall {interval} s", flush=True)
     incidents_sync("-1h")
     last_release = 0.0
@@ -2437,7 +2446,7 @@ def watch_set(enabled):
 # Benchmark
 
 def bench_cpu(threads, seconds=2.0):
-    """MiB/s SHA-256. hashlib gibt das GIL frei, darum skaliert das über Threads."""
+    _("""MiB/s SHA-256. hashlib gibt das GIL frei, darum skaliert das über Threads.""")
     data = os.urandom(4 << 20)
     counts = [0] * threads
     stop = time.monotonic() + seconds
@@ -2737,7 +2746,7 @@ class Ring(Gtk.DrawingArea):
         self.queue_draw()
 
     def set_busy(self, busy, steps=0):
-        """Während des Scans dreht ein Bogen, statt dass eine tote Zahl steht."""
+        _("""Während des Scans dreht ein Bogen, statt dass eine tote Zahl steht.""")
         self.busy = busy
         self.step, self.steps = 0, steps
         if busy and not self.timer:
@@ -2834,7 +2843,7 @@ class Spark(Gtk.DrawingArea):
 
 
 class Chart(Gtk.DrawingArea):
-    """Mehrere Reihen über einer festen Fensterbreite, y-Achse optional automatisch."""
+    _("""Mehrere Reihen über einer festen Fensterbreite, y-Achse optional automatisch.""")
 
     def __init__(self, series, points=60, top=100, height=130, unit="%"):
         super().__init__(content_height=height, hexpand=True)
@@ -3233,7 +3242,7 @@ class App(Gtk.Application):
                 path, width * 2, -1, True)
         except GLib.Error:
             return None
-        img = Gtk.Picture.new_for_pixbuf(pix)
+        img = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pix))
         img.set_size_request(width, int(width * pix.get_height() / pix.get_width()))
         img.set_can_shrink(True)
         return img
@@ -3247,7 +3256,7 @@ class App(Gtk.Application):
         return img
 
     def _on_close(self, win):
-        """Im Tray weiterlaufen, aber nur wenn dort auch wirklich ein Icon hängt."""
+        _("""Im Tray weiterlaufen, aber nur wenn dort auch wirklich ein Icon hängt.""")
         if self.cfg["tray"] and getattr(self, "tray", None) and self.tray.ok:
             win.set_visible(False)
             # Ohne das liest die App unsichtbar jede Sekunde weiter alle
@@ -3394,8 +3403,8 @@ class App(Gtk.Application):
         title.set_margin_top(10)
         inner.append(title)
         note = RELEASE_NOTES.get(VERSION, ("", []))
-        sub = lbl("Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es "
-                  "losgehen." if first else note[0], "lede", xalign=0.5, wrap=True,
+        sub = lbl(_("Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es "
+                  "losgehen.") if first else note[0], "lede", xalign=0.5, wrap=True,
                   chars=60)
         sub.set_margin_top(6)
         sub.set_margin_bottom(22)
@@ -3503,7 +3512,7 @@ class App(Gtk.Application):
         self.ring = Ring()
         inner.append(self.ring)
         self.score_title = lbl("Systemzustand", "cardhead", xalign=0.5)
-        self.score_sub = lbl("wird ermittelt", "sub", xalign=0.5)
+        self.score_sub = lbl(_("wird ermittelt"), "sub", xalign=0.5)
         inner.append(self.score_title)
         inner.append(self.score_sub)
         sc = card(inner, 18)
@@ -3545,7 +3554,7 @@ class App(Gtk.Application):
         lc = box()
         lc.add_css_class("card")
         self.list_count = lbl("", "sub", xalign=1.0)
-        lc.append(card_head("Was du zuerst angehen solltest", self.list_count))
+        lc.append(card_head(_("Was du zuerst angehen solltest"), self.list_count))
         self.list_box = box()
         lc.append(self.list_box)
         p.append(lc)
@@ -3638,15 +3647,15 @@ class App(Gtk.Application):
         return wrap
 
     def _show_report(self, _b, f):
-        """Fenster mit einer Einschätzung, die erst beim Öffnen ermittelt wird."""
+        _("""Fenster mit einer Einschätzung, die erst beim Öffnen ermittelt wird.""")
         win = Gtk.Window(title=f.title, transient_for=self.win, modal=True,
                          default_width=680, default_height=520)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
-        buf.set_text("Wird für diesen Rechner geprüft …\n\n"
+        buf.set_text(_("Wird für diesen Rechner geprüft …\n\n"
                      "Dabei werden auch die Paketquellen gefragt, ob sie das neue "
-                     "Release schon kennen. Das dauert einen Moment.")
+                     "Release schon kennen. Das dauert einen Moment."))
         close = Gtk.Button(label="Schließen", halign=Gtk.Align.END, margin_top=10)
         close.connect("clicked", lambda *_: win.close())
         copy = Gtk.Button(label="Text kopieren", halign=Gtk.Align.END, margin_top=10)
@@ -3707,7 +3716,7 @@ class App(Gtk.Application):
             self._run_log(f.title, f.argv, self._after_fix)
 
     def _after_fix(self):
-        """Nach einem Eingriff stimmen die alten Zahlen nicht mehr."""
+        _("""Nach einem Eingriff stimmen die alten Zahlen nicht mehr.""")
         self.rescan()
         for page in ("Speicher", "Autostart"):
             self._build_reload(page)
@@ -3726,9 +3735,9 @@ class App(Gtk.Application):
         head, self.inc_sub = self._head("Vorfälle", "wird gelesen …",
                                         self.inc_filter, reload_btn)
         p.append(head)
-        note = lbl("Gelesen wird das Journal der letzten 24 Stunden. Erkannt werden "
+        note = lbl(_("Gelesen wird das Journal der letzten 24 Stunden. Erkannt werden "
                    "Audio-Aussetzer, GPU-Treiberfehler, OOM-Killer-Ereignisse und "
-                   "fehlgeschlagene systemd-Units.", "lede", wrap=True, chars=95)
+                   "fehlgeschlagene systemd-Units."), "lede", wrap=True, chars=95)
         p.append(card(note))
         self.inc_box = box(spacing=16)
         p.append(self.inc_box)
@@ -3780,7 +3789,7 @@ class App(Gtk.Application):
         t.append(lbl(inc["detail"][:110], "mono-dim"))
         ctx = format_snapshot(inc.get("sys"))
         if ctx:
-            t.append(lbl("Zu dem Zeitpunkt: " + ctx, "mono-dim"))
+            t.append(lbl(_("Zu dem Zeitpunkt: ") + ctx, "mono-dim"))
         r.append(t)
         stamp = lbl(time.strftime("%d.%m. %H:%M", time.localtime(inc["t"])), "mono",
                     xalign=1.0)
@@ -3798,7 +3807,7 @@ class App(Gtk.Application):
 
     def _show_diagnosis(self, _b, inc):
         fix, summary, causes, steps = classify(inc["title"], inc["detail"])
-        rank = {"crit": "Sollte behoben werden", "warn": "Lohnt sich zu beheben",
+        rank = {"crit": "Sollte behoben werden", "warn": _("Lohnt sich zu beheben"),
                 "info": "Nur zur Information"}[fix]
         text = [summary, "", rank]
         if causes:
@@ -3807,7 +3816,7 @@ class App(Gtk.Application):
             text += ["", "Schritte:"] + [f"  {n}. {s}" for n, s in enumerate(steps, 1)]
         ctx = format_snapshot(inc.get("sys"))
         if ctx:
-            text += ["", "Zustand des Rechners zu diesem Zeitpunkt:", "  " + ctx]
+            text += ["", _("Zustand des Rechners zu diesem Zeitpunkt:"), "  " + ctx]
         text += ["", "Journal-Zeile:", inc["detail"]]
         d = Gtk.AlertDialog(modal=True)
         d.set_message(inc["title"])
@@ -3861,7 +3870,7 @@ class App(Gtk.Application):
             row.append(pill)
             info.append(row)
             if branches:
-                info.append(lbl("Verfügbare Branches: "
+                info.append(lbl(_("Verfügbare Branches: ")
                                 + ", ".join(str(b) for b in branches[:6]), "mono"))
                 if branches[0] > cur:
                     b = Gtk.Button(label=f"nvidia-driver-{branches[0]} installieren",
@@ -3876,9 +3885,9 @@ class App(Gtk.Application):
                                        "DEBIAN_FRONTEND=noninteractive", "apt-get",
                                        "install", "-y",
                                        f"nvidia-driver-{branches[0]}"]],
-                                warn="Der Treiber wird neu gebaut. Bis zum Neustart "
+                                warn=_("Der Treiber wird neu gebaut. Bis zum Neustart "
                                      "kann die Grafik unvollständig sein, deshalb "
-                                     "vorher alles sichern.")
+                                     "vorher alles sichern."))
                     b.connect("clicked", self._show_fix, f)
                     info.append(b)
             c = box()
@@ -3961,8 +3970,8 @@ class App(Gtk.Application):
             if not broken:
                 c = box()
                 c.add_css_class("card")
-                c.append(card_head("Nichts zu tun"))
-                body = lbl("Alle Quellen sind auf dem aktuellen Stand.", "lede",
+                c.append(card_head(_("Nichts zu tun")))
+                body = lbl(_("Alle Quellen sind auf dem aktuellen Stand."), "lede",
                            wrap=True, chars=80)
                 body.set_margin_start(18)
                 body.set_margin_end(18)
@@ -4066,7 +4075,7 @@ class App(Gtk.Application):
         GLib.idle_add(self._updates_done, data)
         if left:
             GLib.idle_add(self._alert, f"{len(left)} von {len(ids)} nicht aktualisiert",
-                          "Diese Einträge stehen weiterhin an:\n\n"
+                          _("Diese Einträge stehen weiterhin an:\n\n")
                           + "\n".join(sorted(left)[:15])
                           + ("\n…" if len(left) > 15 else ""))
 
@@ -4161,17 +4170,17 @@ class App(Gtk.Application):
                 stop.set_sensitive(False)
             except PermissionError:
                 # pkexec läuft als root, ein Signal von hier ist nicht erlaubt
-                append("Der Lauf gehört root und lässt sich von hier nicht stoppen. "
-                       "Im Terminal: sudo pkill -TERM apt-get")
+                append(_("Der Lauf gehört root und lässt sich von hier nicht stoppen. "
+                       "Im Terminal: sudo pkill -TERM apt-get"))
             except OSError as e:
                 append(f"Abbruch nicht möglich: {e}")
 
         def cancel(_b):
             d = Gtk.AlertDialog(modal=True)
             d.set_message("Installation abbrechen?")
-            d.set_detail("Mitten im Entpacken abzubrechen kann halb installierte "
+            d.set_detail(_("Mitten im Entpacken abzubrechen kann halb installierte "
                          "Pakete hinterlassen. Danach hilft nur "
-                         "'sudo dpkg --configure -a'.")
+                         "'sudo dpkg --configure -a'."))
             d.set_buttons(["Weiterlaufen lassen", "Abbrechen erzwingen"])
             d.set_default_button(0)
             d.set_cancel_button(0)
@@ -4207,7 +4216,7 @@ class App(Gtk.Application):
         threading.Thread(target=worker, daemon=True).start()
 
     def _unit_disable(self, _b, unit):
-        """Fragt erst, was der Dienst überhaupt tut und wer ihn braucht."""
+        _("""Fragt erst, was der Dienst überhaupt tut und wer ihn braucht.""")
         self.work(self._unit_ask, self.auto_sub, unit)
 
     def _unit_ask(self, unit):
@@ -4219,7 +4228,7 @@ class App(Gtk.Application):
         detail = [desc or "Keine Beschreibung hinterlegt.", ""]
         detail.append("Ebene: " + ("Nutzer-Dienst" if scope else "Systemdienst"))
         if needed:
-            detail += ["", "Darauf bauen auf:"] + [f"  {n}" for n in needed]
+            detail += ["", _("Darauf bauen auf:")] + [f"  {n}" for n in needed]
             detail.append("")
             detail.append("Diese Dienste starten danach möglicherweise nicht mehr.")
         detail.append("")
@@ -4244,7 +4253,7 @@ class App(Gtk.Application):
                       lambda: self._build_reload("Autostart"))
 
     def _build_reload(self, page):
-        """Seite neu aufbauen, damit die Änderung sichtbar wird."""
+        _("""Seite neu aufbauen, damit die Änderung sichtbar wird.""")
         if page in self.built:
             self.built.discard(page)
             clear(self.pages[page])
@@ -4259,16 +4268,16 @@ class App(Gtk.Application):
         self.dyno_btn.connect("clicked", lambda *_: self._dyno_toggle())
         head, self.dyno_sub = self._head("Prüfstand", "bereit", self.dyno_btn)
         p.append(head)
-        p.append(card(lbl("Starte die Aufzeichnung, dann belaste den Rechner wie "
+        p.append(card(lbl(_("Starte die Aufzeichnung, dann belaste den Rechner wie "
                           "im Alltag: spielen, rendern, kompilieren. Danach steht "
                           "hier, wie heiß es wurde, wie tief der Takt fiel und ab "
                           "wann gedrosselt wurde. Einzelne Momentwerte zeigen das "
-                          "nicht, weil die Drosselung erst nach Minuten einsetzt.",
+                          "nicht, weil die Drosselung erst nach Minuten einsetzt."),
                           "lede", wrap=True, chars=95)))
 
         c = box()
         c.add_css_class("card")
-        c.append(card_head("Verlauf", "Temperatur und Takt"))
+        c.append(card_head("Verlauf", _("Temperatur und Takt")))
         self.dyno_chart = Chart([("cpu_temp", "warn"), ("gpu_temp", "crit")],
                                 points=180, top=110, height=150, unit="°C")
         self.dyno_chart.set_margin_start(18)
@@ -4340,8 +4349,8 @@ class App(Gtk.Application):
         self.dyno_chart.data = {k: deque([0.0], maxlen=180)
                                 for k in ("cpu_temp", "gpu_temp")}
         self.dyno_btn.set_label("Aufzeichnung beenden")
-        self.dyno_view.get_buffer().set_text("Läuft. Belaste den Rechner jetzt so, "
-                                             "wie du ihn im Alltag belastest.")
+        self.dyno_view.get_buffer().set_text(_("Läuft. Belaste den Rechner jetzt so, "
+                                             "wie du ihn im Alltag belastest."))
         # Zwei Sekunden reichen: Temperaturen ändern sich langsamer als das.
         self.dyno_id = GLib.timeout_add_seconds(2, self._dyno_tick)
         self._dyno_tick()
@@ -4431,7 +4440,7 @@ class App(Gtk.Application):
         return self.apps.get(item.get_string()) if item else None
 
     def _appcheck_preview(self):
-        """Logo und Herkunft der gewählten Anwendung, noch ohne Prüfung."""
+        _("""Logo und Herkunft der gewählten Anwendung, noch ohne Prüfung.""")
         entry = self._appcheck_entry()
         if not entry:
             return
@@ -4450,8 +4459,8 @@ class App(Gtk.Application):
         if not entry:
             return
         self.app_sub.set_text(f"{entry.get('Name', '')} wird geprüft …")
-        self._appcheck_hint("Läuft. Journal und Paketverwaltung werden gefragt, "
-                            "das dauert einen Moment.")
+        self._appcheck_hint(_("Läuft. Journal und Paketverwaltung werden gefragt, "
+                            "das dauert einen Moment."))
         self.work(self._appcheck_worker, self.app_sub, entry)
 
     def _appcheck_worker(self, entry):
@@ -4732,13 +4741,13 @@ class App(Gtk.Application):
             eaters.append(("Systemjournal", "/var/log/journal", int(size),
                            "sudo journalctl --vacuum-size=500M",
                            ["pkexec", "journalctl", "--vacuum-size=500M"],
-                           "Alte Logzeilen werden verworfen, die letzten 500 MB "
-                           "bleiben."))
+                           _("Alte Logzeilen werden verworfen, die letzten 500 MB "
+                           "bleiben.")))
         eaters.append(("APT-Paketcache", "/var/cache/apt/archives",
                        dir_size("/var/cache/apt/archives"), "sudo apt clean",
                        ["pkexec", "apt-get", "clean"],
-                       "Heruntergeladene Installationsdateien. Werden bei Bedarf "
-                       "erneut geladen."))
+                       _("Heruntergeladene Installationsdateien. Werden bei Bedarf "
+                       "erneut geladen.")))
         old = parse_disabled_snaps(sh(["snap", "list", "--all"]))
         if old:
             eaters.append((f"Alte Snap-Revisionen ({len(old)})", "/var/lib/snapd/snaps",
@@ -4760,8 +4769,8 @@ class App(Gtk.Application):
                  "Deine gelöschten Dateien sind danach endgültig weg."),
                 ("Thumbnails", "~/.cache/thumbnails", "rm -rf ~/.cache/thumbnails/*",
                  ["find", thumbs, "-mindepth", "1", "-delete"],
-                 "Vorschaubilder des Dateimanagers, werden beim nächsten Öffnen "
-                 "neu erzeugt.")):
+                 _("Vorschaubilder des Dateimanagers, werden beim nächsten Öffnen "
+                 "neu erzeugt."))):
             full = os.path.expanduser(path)
             if os.path.isdir(full):
                 eaters.append((title, path, dir_size(full, 30), cmd, argv, warn))
@@ -4834,16 +4843,16 @@ class App(Gtk.Application):
         self.bench_btn = Gtk.Button(label="Benchmark starten")
         self.bench_btn.add_css_class("btn-accent")
         self.bench_btn.connect("clicked", lambda *_: self._bench_start())
-        head, self.bench_sub = self._head("Benchmark", "noch nicht gelaufen", self.bench_btn)
+        head, self.bench_sub = self._head("Benchmark", _("noch nicht gelaufen"), self.bench_btn)
         p.append(head)
 
         note = box(spacing=4)
-        note.append(lbl("Gemessen wird, was ohne Root messbar ist: SHA-256-Durchsatz "
+        note.append(lbl(_("Gemessen wird, was ohne Root messbar ist: SHA-256-Durchsatz "
                         "ein- und mehrfädig, Speicherkopie und Schreibrate auf die "
-                        "Home-Partition.", "lede", wrap=True, chars=90))
-        note.append(lbl("Der Lesewert fehlt bewusst, ohne Cache-Drop wäre er gelogen. "
+                        "Home-Partition."), "lede", wrap=True, chars=90))
+        note.append(lbl(_("Der Lesewert fehlt bewusst, ohne Cache-Drop wäre er gelogen. "
                         "Die Zahlen taugen zum Vergleich mit dir selbst, nicht mit "
-                        "fremden Rechnern.", "row-detail", wrap=True, chars=90))
+                        "fremden Rechnern."), "row-detail", wrap=True, chars=90))
         p.append(card(note))
 
         self.bench_tiles = {}
@@ -4935,7 +4944,7 @@ class App(Gtk.Application):
 
     def _bench_done(self):
         self.bench_btn.set_sensitive(True)
-        self.bench_sub.set_text("fertig, Lauf im Verlauf gespeichert")
+        self.bench_sub.set_text(_("fertig, Lauf im Verlauf gespeichert"))
         self._fill_bench_history()
         if "Verlauf" in self.built:
             self._fill_history()
@@ -5101,8 +5110,8 @@ class App(Gtk.Application):
         row = box(True, 12, margin_start=18, margin_end=18, margin_top=12, margin_bottom=12)
         t = box(spacing=2, hexpand=True)
         t.append(lbl("Hintergrundüberwachung", "row-title"))
-        t.append(lbl("systemd-User-Dienst, prüft alle 30 s auf neue Vorfälle und "
-                     "meldet kritische per Benachrichtigung", "row-detail",
+        t.append(lbl(_("systemd-User-Dienst, prüft alle 30 s auf neue Vorfälle und "
+                     "meldet kritische per Benachrichtigung"), "row-detail",
                      wrap=True, chars=64))
         row.append(t)
         sw = Gtk.Switch(active=watch_enabled(), valign=Gtk.Align.CENTER)
@@ -5131,7 +5140,7 @@ class App(Gtk.Application):
         t = box(spacing=2, hexpand=True)
         t.append(lbl("Firmware-Updates mitprüfen", "row-title"))
         t.append(lbl("fwupd nach Geräte-Updates fragen" if shutil.which("fwupdmgr")
-                     else "fwupdmgr ist nicht installiert", "row-detail"))
+                     else _("fwupdmgr ist nicht installiert"), "row-detail"))
         row.append(t)
         sw = Gtk.Switch(active=self.cfg["firmware"], valign=Gtk.Align.CENTER,
                         sensitive=bool(shutil.which("fwupdmgr")))
@@ -5143,9 +5152,9 @@ class App(Gtk.Application):
         row = box(True, 12, margin_start=18, margin_end=18, margin_top=12, margin_bottom=12)
         t = box(spacing=2, hexpand=True)
         t.append(lbl("Vor Updates einen Snapshot anlegen", "row-title"))
-        t.append(lbl("Timeshift läuft vor der Installation, bricht sie ab wenn er "
-                     "scheitert" if shutil.which("timeshift")
-                     else "timeshift ist nicht installiert", "row-detail",
+        t.append(lbl(_("Timeshift läuft vor der Installation, bricht sie ab wenn er "
+                     "scheitert") if shutil.which("timeshift")
+                     else _("timeshift ist nicht installiert"), "row-detail",
                      wrap=True, chars=64))
         row.append(t)
         sw = Gtk.Switch(active=self.cfg["snapshot"] and bool(shutil.which("timeshift")),
@@ -5157,7 +5166,7 @@ class App(Gtk.Application):
 
         row = box(True, 12, margin_start=18, margin_end=18, margin_top=12, margin_bottom=16)
         t = box(spacing=2, hexpand=True)
-        t.append(lbl("Daten und Einstellungen", "row-title"))
+        t.append(lbl(_("Daten und Einstellungen"), "row-title"))
         t.append(lbl(f"{CONFIG_FILE}\n{HISTORY_FILE}", "mono-dim"))
         row.append(t)
         b = Gtk.Button(label="Ordner öffnen", valign=Gtk.Align.CENTER)
@@ -5208,7 +5217,7 @@ class App(Gtk.Application):
     def _set_watch(self, sw, state):
         if watch_set(state) != state:
             sw.set_active(not state)
-            self._alert("Dienst nicht geschaltet",
+            self._alert(_("Dienst nicht geschaltet"),
                         "systemctl --user hat den Zustand nicht übernommen. "
                         f"Unit liegt unter {WATCH_UNIT}.")
         return False
@@ -5585,7 +5594,7 @@ def selftest():
     assert format_snapshot({}) == ""
     assert format_snapshot({"cpu_temp": 71, "gpu_temp": 87, "gpu_clock": 1800,
                             "gpu_throttled": True, "ram": 64, "load": 3.75}) \
-        == "CPU 71 °C · GPU 87 °C bei 1800 MHz, gedrosselt · RAM 64 % · Last 3.8"
+        == _("CPU 71 °C · GPU 87 °C bei 1800 MHz, gedrosselt · RAM 64 % · Last 3.8")
     snap = system_snapshot()
     assert isinstance(snap, dict) and all(
         k in ("ram", "cpu_temp", "gpu_temp", "gpu_clock", "gpu_throttled", "load")
@@ -5634,7 +5643,7 @@ def selftest():
     assert "externe Laufwerke" in iface_text("removable-media")[0]
     assert iface_text("irgendwas-neues") == (
         "irgendwas neues",
-        "Was genau dahinter steckt, sagt die Beschreibung des Snaps.")
+        _("Was genau dahinter steckt, sagt die Beschreibung des Snaps."))
     # info ist ein Hinweis und darf im Bericht nicht wie ein Fehler aussehen
     assert app_check_text("X", [("info", "A", "B", None)]).endswith("·  A: B")
     assert app_source({"Exec": "/usr/bin/flatpak run --branch=stable "
@@ -5689,8 +5698,8 @@ def selftest():
     assert devs[0]["modules"] == ["nouveau", "nvidia"]
     assert devs[1]["class"] == "SATA controller"
 
-    e = parse_desktop("[Desktop Entry]\nName=Test\nName[de]=Prüfung\n"
-                      "Hidden=true\n[Other]\nName=Ignoriert\n")
+    e = parse_desktop(_("[Desktop Entry]\nName=Test\nName[de]=Prüfung\n"
+                      "Hidden=true\n[Other]\nName=Ignoriert\n"))
     assert e["Name[de]"] == "Prüfung" and e["Hidden"] == "true" and e["Name"] == "Test"
 
     # Fälle aus den Sentinel-Tests, damit die Wissensbasis beim Portieren nicht kippt
@@ -5759,5 +5768,5 @@ if __name__ == "__main__":
         # WM_CLASS kommt vom prgname und muss zum StartupWMClass im Starter passen.
         GLib.set_prgname("dynolab")
         GLib.set_application_name("Dynolab")
-        page = sys.argv[sys.argv.index("--page") + 1] if "--page" in sys.argv else "Übersicht"
+        page = sys.argv[sys.argv.index("--page") + 1] if "--page" in sys.argv else _("Übersicht")
         sys.exit(App(page).run(None))
