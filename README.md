@@ -54,6 +54,13 @@ further distributions is planned.
 
 ## Install
 
+From the PPA, which also keeps it updated through apt:
+
+    sudo add-apt-repository ppa:simonlinuxcraft/dynolab
+    sudo apt install dynolab
+
+Build the package yourself:
+
     ./build-deb.sh
     sudo dpkg -i build/dynolab_0.1_all.deb
 
@@ -61,11 +68,43 @@ Or run it from the source tree without installing:
 
     python3 dynolab.py
 
+## Updates
+
+Dynolab installed from the PPA updates through apt like any other package. The
+system check also reports a new version on its own, with a button that runs the
+apt install after asking for your password. Nothing is downloaded or installed
+without that click.
+
+To publish a new version to the PPA, bump `VERSION` in `dynolab.py` and
+`debian/changelog` to the same number, then:
+
+    ./build-source.sh
+    dput ppa:simonlinuxcraft/dynolab build/ppa/dynolab_0.1~ubuntu24.04.1_source.changes
+
+`build-source.sh` prints the exact upload lines when it finishes. It builds and
+signs one source package per Ubuntu series, it never uploads. It needs
+`devscripts`, `dput`, `debhelper` and `gettext`, plus a GPG key registered on
+Launchpad.
+
+Versions carry the Ubuntu release rather than the series name, so
+`0.1~ubuntu24.04.1` sorts below `0.1~ubuntu26.04.1`. Series names cycle back
+through the alphabet, which would eventually make a newer Ubuntu look older to
+apt.
+
 ## Requirements
 
 `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0`. Recommended:
 `librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-inter` for the
 interface font.
+
+## Languages
+
+German and English. The interface follows your desktop language and falls back
+to German. To force one:
+
+    LANGUAGE=en dynolab
+
+Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 
 ## Command line
 

@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# Kein Build-System, alles passiert beim Installieren. install-tree.sh ist
+# dieselbe Quelle, aus der auch build-deb.sh das lokale Paket baut.
+override_dh_auto_build:
+
+override_dh_auto_install:
+	./install-tree.sh debian/dynolab
+
+override_dh_auto_test:
+	python3 dynolab.py --selftest

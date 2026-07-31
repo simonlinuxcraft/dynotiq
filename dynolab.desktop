@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dynolab
+Comment=Systemdiagnose und Optimierung
+Comment[en]=System diagnostics and tuning
+Exec=dynolab
+Icon=dynolab
+Terminal=false
+Categories=System;Settings;Monitor;
+StartupNotify=true
+StartupWMClass=dynolab
