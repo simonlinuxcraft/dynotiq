@@ -970,6 +970,40 @@ def entry_icon(entry):
     return icon
 
 
+def parse_apt_policy(text):
+    """(installiert, verfügbar, kommt aus einer Paketquelle).
+
+    Steht in der Versionstabelle nur der dpkg-Status, wurde das Paket von Hand
+    installiert. Dann kommt dort nie ein Update an, egal wie alt es ist.
+    """
+    inst = re.search(r"Installed:\s*(\S+)", text)
+    cand = re.search(r"Candidate:\s*(\S+)", text)
+    from_repo = bool(re.search(r"^\s+\d+\s+\S+://", text, re.M))
+    return (inst.group(1) if inst else "", cand.group(1) if cand else "", from_repo)
+
+
+def app_dirs(names):
+    """[(Pfad, Bytes)] der Ordner, die eine Anwendung im Home anlegt."""
+    out = []
+    for base in (".config", ".local/share", ".cache", ".var/app", "snap"):
+        for n in filter(None, dict.fromkeys(names)):
+            p = os.path.expanduser(f"~/{base}/{n}")
+            if os.path.isdir(p):
+                out.append((p, dir_size(p, 25)))
+    return sorted(out, key=lambda x: -x[1])
+
+
+def cache_dirs(path):
+    """Unterordner mit reinem Zwischenspeicher. Die lassen sich gefahrlos
+    leeren, die Anwendung legt sie beim nächsten Start neu an."""
+    seen = {}
+    for pat in ("*Cache*", "*cache*"):
+        for p in glob.glob(os.path.join(path, pat)):
+            if os.path.isdir(p) and p not in seen:
+                seen[p] = dir_size(p, 15)
+    return sorted(seen.items(), key=lambda x: -x[1])
+
+
 def fuse2_missing():
     """AppImages der ersten Generation brauchen libfuse2. Auf Ubuntu 24.04 ist
     die nicht mehr vorinstalliert, das ist der häufigste Startfehler."""
@@ -990,8 +1024,7 @@ def app_check(entry):
                 "Kamera oder externe Laufwerke müssen einzeln freigegeben werden.",
         "flatpak": "Läuft abgeschottet in einer Sandbox mit eigenen Bibliotheken, "
                    "unabhängig vom Rest des Systems.",
-        "deb": "Regulär über die Paketverwaltung installiert, bekommt Updates "
-               "über die Systemaktualisierung.",
+        "deb": "Über die Paketverwaltung eingetragen, dpkg kennt es.",
         "lokal": "Von Hand installiert, ohne Paketquelle. Updates musst du selbst "
                  "einspielen.",
         "appimage": "Einzelne Programmdatei, die alles mitbringt. Updates musst "
@@ -1036,6 +1069,33 @@ def app_check(entry):
                             "abgebrochener Installationslauf liegen, das Programm "
                             "ist unvollständig.",
                             ("Installation reparieren", apt_fix)))
+        if kind == "deb" and ident:
+            inst, cand, from_repo = parse_apt_policy(
+                sh(["apt-cache", "policy", ident], timeout=30))
+            when = ""
+            listing = f"/var/lib/dpkg/info/{ident}.list"
+            if os.path.exists(listing):
+                when = time.strftime("%d.%m.%Y",
+                                     time.localtime(os.path.getmtime(listing)))
+            if not from_repo:
+                out.append(("warn", f"Version {inst} bekommt keine Updates",
+                            (f"Installiert am {when}. " if when else "")
+                            + "Das Paket steht in keiner Paketquelle, es wurde "
+                            "von Hand eingespielt. Die Systemaktualisierung "
+                            "übergeht es, neue Versionen musst du selbst holen.",
+                            None))
+            elif cand and cand != inst:
+                out.append(("warn", f"Version {inst}, verfügbar wäre {cand}",
+                            "Die Systemaktualisierung hat das noch nicht "
+                            "eingespielt.", ("Jetzt aktualisieren",
+                                             [["pkexec", "apt-get", "update"],
+                                              ["pkexec", "/usr/bin/env",
+                                               "DEBIAN_FRONTEND=noninteractive",
+                                               "apt-get", "install", "-y", ident]])))
+            else:
+                out.append(("ok", f"Version {inst}",
+                            (f"Installiert am {when}, " if when else "")
+                            + "aktuell laut Paketquelle.", None))
         if shutil.which(binary) or os.path.exists(binary):
             missing = missing_libs(binary)
             if missing:
@@ -1132,6 +1192,38 @@ def app_check(entry):
                         ("Alle anzeigen",
                          ["journalctl", "--user", "--since", "-24h", "-p", "err",
                           "--no-pager", "-t", os.path.basename(binary)])))
+
+    # Platzbedarf im Home. Bei Electron-Programmen liegen dort schnell
+    # Gigabytes an Zwischenspeicher, ohne dass es jemand merkt.
+    base = os.path.basename(binary).removesuffix(".AppImage") if binary else ""
+    dirs = app_dirs([ident, base, entry.get("Name", "").lower()])
+    if dirs:
+        biggest, size = dirs[0]
+        total = sum(s for _, s in dirs)
+        where = biggest.replace(os.path.expanduser("~"), "~")
+        out.append(("ok", f"Belegt {fmt_bytes(total)} im Home",
+                    f"Größter Posten: {where} mit {fmt_bytes(size)}."
+                    + (f" Dazu {len(dirs) - 1} weitere Ordner."
+                       if len(dirs) > 1 else ""), None))
+        caches = [(p, s) for p, s in cache_dirs(biggest) if s > 50 * 2**20]
+        if caches:
+            csum = sum(s for _, s in caches)
+            names = ", ".join(os.path.basename(p) for p, _ in caches[:3])
+            out.append(("warn", f"{fmt_bytes(csum)} davon nur Zwischenspeicher",
+                        f"In {names}. Die Anwendung legt das beim nächsten Start "
+                        "neu an, deine Anmeldung und Einstellungen bleiben.",
+                        ("Zwischenspeicher leeren",
+                         [["find", p, "-mindepth", "1", "-delete"]
+                          for p, _ in caches])))
+
+    auto = next((a for a in autostart_entries()
+                 if base and base in a.get("exec", "")), None)
+    if auto:
+        out.append(("ok" if auto["enabled"] else "info",
+                    "Startet automatisch mit der Anmeldung" if auto["enabled"]
+                    else "Autostart-Eintrag vorhanden, aber abgeschaltet",
+                    f"Eintrag {auto['file']}. Ändern lässt sich das unter Autostart.",
+                    None))
 
     if binary:
         running = [p for p in processes() if p["name"] == os.path.basename(binary)[:15]]
@@ -5491,6 +5583,16 @@ def selftest():
     assert exec_binary("") == ""
     assert app_source({"Exec": "/home/x/Foo.AppImage"})[0] == "appimage"
     # Fachbegriffe müssen übersetzt werden, sonst hilft der Befund niemandem
+    # Nur der dpkg-Status als Quelle heißt: von Hand installiert, nie Updates
+    assert parse_apt_policy(
+        "discord:\n  Installed: 1.0.139\n  Candidate: 1.0.139\n"
+        "  Version table:\n *** 1.0.139 100\n        100 /var/lib/dpkg/status\n") \
+        == ("1.0.139", "1.0.139", False)
+    assert parse_apt_policy(
+        "code:\n  Installed: 1.130.0\n  Candidate: 1.131.0\n  Version table:\n"
+        "     1.131.0 500\n        500 https://packages.microsoft.com/repos/code "
+        "stable/main amd64 Packages\n") == ("1.130.0", "1.131.0", True)
+    assert parse_apt_policy("N: Unable to locate package foo") == ("", "", False)
     assert iface_text("audio-record")[0] == "Mikrofon"
     assert "externe Laufwerke" in iface_text("removable-media")[0]
     assert iface_text("irgendwas-neues") == (
