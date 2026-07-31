@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
-  <img src="docs/banner-light.png" width="410" alt="Dynolab">
+  <source media="(prefers-color-scheme: dark)" srcset="icons/png/wordmark/wordmark-dark-1200.png">
+  <img src="icons/png/wordmark/wordmark-light-1200.png" width="380" alt="Dynolab">
 </picture>
 
 **System diagnostics and tuning for Ubuntu**
@@ -30,9 +30,13 @@ clock and load at that moment, so a bare error message turns into a connection.
 sizes, per-entry selection, a live log and an optional Timeshift snapshot
 beforehand. Afterwards it verifies which entries actually went through.
 
-**App check** takes an installed application apart: unresolved libraries,
-disconnected Snap interfaces, missing Flatpak permissions, kernel-denied
-access, crashes, journal errors. Where a fix exists, there is a button.
+**App check** takes an installed application apart: where its updates come
+from, how much it occupies in your home directory and how much of that is pure
+cache, unresolved libraries, disconnected Snap interfaces, missing Flatpak
+permissions, crashes, journal errors. Technical terms get translated, so
+`audio-record` reads as microphone. Where a fix exists, there is a button.
+
+![App check](docs/appcheck.png)
 
 **Dyno** records temperature and clock over minutes under real load and answers
 what a snapshot cannot: at which point does it start throttling.
@@ -43,10 +47,12 @@ earlier runs. A number without a baseline says nothing.
 Plus a live monitor, storage analysis with cleanup, autostart control including
 slow boot services, and a history of every scan.
 
-<p align="center">
-  <img src="docs/updates.png" width="49%" alt="Updates">
-  <img src="docs/welcome.png" width="33%" alt="Welcome">
-</p>
+## Ubuntu for now
+
+Dynolab is built and tested on Ubuntu 24.04 and newer. It leans on apt, dpkg,
+snap and Ubuntu specifics such as the HWE kernel stack and `do-release-upgrade`,
+so on other distributions parts of it will report nothing useful. Support for
+further distributions is planned.
 
 ## Install
 
@@ -59,9 +65,9 @@ Or run it from the source tree without installing:
 
 ## Requirements
 
-Ubuntu 24.04 or newer with `python3-gi`, `python3-gi-cairo` and
-`gir1.2-gtk-4.0`. Recommended: `librsvg2-bin` for tray icons, `pkexec` to apply
-fixes, `fonts-inter` for the interface font.
+`python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0`. Recommended:
+`librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-inter` for the
+interface font.
 
 ## Command line
 

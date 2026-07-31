@@ -28,7 +28,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
 VERSION = "0.1"
 APP_ID = "de.dynolab.Dynolab"
@@ -3217,6 +3218,26 @@ class App(Gtk.Application):
                     GLib.idle_add(sub.set_text, f"Fehlgeschlagen: {e}")
         threading.Thread(target=guarded, daemon=True).start()
 
+    def _wordmark(self, width):
+        """Wortmarke in der Fassung für dunkle Flächen, None wenn sie fehlt.
+
+        Die 1200er Vorlage wird herunterskaliert, damit sie auf Bildschirmen
+        mit doppelter Auflösung scharf bleibt.
+        """
+        path = os.path.join(APP_DIR, "icons", "png", "wordmark",
+                            "wordmark-dark-1200.png")
+        if not os.path.exists(path):
+            return None
+        try:
+            pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                path, width * 2, -1, True)
+        except GLib.Error:
+            return None
+        img = Gtk.Picture.new_for_pixbuf(pix)
+        img.set_size_request(width, int(width * pix.get_height() / pix.get_width()))
+        img.set_can_shrink(True)
+        return img
+
     def _logo(self, size):
         path = os.path.join(APP_DIR, "icons", "svg", "dynolab-icon-light.svg")
         img = (Gtk.Image.new_from_file(path) if os.path.exists(path)
@@ -3279,12 +3300,22 @@ class App(Gtk.Application):
     def _sidebar(self):
         s = box(spacing=1)
         s.add_css_class("sidebar")
-        head = box(True, 9, margin_bottom=16, margin_start=8)
-        head.append(self._logo(30))
-        txt = box()
-        txt.append(lbl("dynolab", "brand"))
-        txt.append(lbl(f"SYSTEMDIAGNOSE v{VERSION}", "brandsub"))
-        head.append(txt)
+        head = box(spacing=3, margin_bottom=18, margin_start=8, margin_top=2)
+        mark = self._wordmark(168)
+        if mark:
+            mark.set_halign(Gtk.Align.START)
+            head.append(mark)
+            sub = lbl(f"SYSTEMDIAGNOSE v{VERSION}", "brandsub")
+            sub.set_margin_start(3)
+            head.append(sub)
+        else:                              # ohne Wortmarke der alte Aufbau
+            row = box(True, 9)
+            row.append(self._logo(30))
+            txt = box()
+            txt.append(lbl("dynolab", "brand"))
+            txt.append(lbl(f"SYSTEMDIAGNOSE v{VERSION}", "brandsub"))
+            row.append(txt)
+            head.append(row)
         s.append(head)
         self.nav_buttons = {}
         for group, names in NAV_GROUPS:
@@ -3348,13 +3379,19 @@ class App(Gtk.Application):
         win.add_css_class("page")
         inner = box(spacing=0, margin_top=30, margin_bottom=24,
                     margin_start=32, margin_end=32)
-        logo = self._logo(56)
-        logo.set_halign(Gtk.Align.CENTER)
-        inner.append(logo)
+        mark = self._wordmark(260)
+        if mark:
+            mark.set_halign(Gtk.Align.CENTER)
+            mark.set_margin_bottom(10)
+            inner.append(mark)
+        else:
+            logo = self._logo(56)
+            logo.set_halign(Gtk.Align.CENTER)
+            inner.append(logo)
 
-        title = lbl("Willkommen bei Dynolab" if first
-                    else f"Neu in Version {VERSION}", "h1", xalign=0.5)
-        title.set_margin_top(16)
+        title = lbl("Willkommen" if first else f"Neu in Version {VERSION}",
+                    "h1", xalign=0.5)
+        title.set_margin_top(10)
         inner.append(title)
         note = RELEASE_NOTES.get(VERSION, ("", []))
         sub = lbl("Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es "
