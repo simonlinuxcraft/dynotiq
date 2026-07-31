@@ -11,6 +11,8 @@ One GTK4 application that finds what slows a machine down, explains every
 finding in plain language and offers the matching fix.
 Nothing runs without asking first.
 
+[**Download v0.1 Beta**](https://github.com/simonlinuxcraft/dynolab/releases/tag/v0.1)
+
 </div>
 
 
@@ -54,7 +56,14 @@ further distributions is planned.
 
 ## Install
 
-From the PPA, which also keeps it updated through apt:
+Download `dynolab_0.1_all.deb` from the
+[v0.1 Beta release](https://github.com/simonlinuxcraft/dynolab/releases/tag/v0.1)
+and install it:
+
+    sudo dpkg -i dynolab_0.1_all.deb
+
+From the PPA once a version is published there, which also keeps it updated
+through apt:
 
     sudo add-apt-repository ppa:simonlinuxcraft/dynolab
     sudo apt install dynolab
@@ -70,10 +79,11 @@ Or run it from the source tree without installing:
 
 ## Updates
 
-Dynolab installed from the PPA updates through apt like any other package. The
-system check also reports a new version on its own, with a button that runs the
-apt install after asking for your password. Nothing is downloaded or installed
-without that click.
+Installed from a `.deb` by hand, Dynolab gets no updates and says so in the
+system check. Installed from the PPA, it updates through apt like any other
+package. The system check also reports a new version on its own, with a button
+that runs the apt install after asking for your password. Nothing is downloaded
+or installed without that click.
 
 To publish a new version to the PPA, bump `VERSION` in `dynolab.py` and
 `debian/changelog` to the same number, then:
