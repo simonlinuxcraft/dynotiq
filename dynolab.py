@@ -902,6 +902,65 @@ def parse_denials(text, label):
 APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": "Paket",
                   "lokal": "manuell installiert", "appimage": "AppImage"}
 
+# Snap-Schnittstellen in Alltagssprache. Die Namen sind Fachbegriffe, und ob
+# eine fehlende Freigabe stört, hängt davon ab, was man mit der App macht.
+SNAP_IFACE = {
+    "audio-record": ("Mikrofon", "Die App kann nichts aufnehmen. Nötig für "
+                     "Spracheingabe oder Anrufe."),
+    "audio-playback": ("Tonwiedergabe", "Die App bleibt stumm."),
+    "camera": ("Kamera", "Video und Fotos gehen nicht."),
+    "removable-media": ("USB-Sticks und externe Laufwerke", "Die App sieht nur "
+                        "dein Home-Verzeichnis, nichts unter /media."),
+    "home": ("Eigene Dateien", "Die App kommt nicht an dein Home-Verzeichnis."),
+    "network": ("Internet", "Die App kann nicht ins Netz."),
+    "network-manager": ("Netzwerkeinstellungen", "Nur nötig, wenn die App "
+                        "Verbindungen selbst einrichten soll."),
+    "cups-control": ("Drucken", "Druckaufträge gehen nicht raus."),
+    "bluetooth-control": ("Bluetooth", "Geräte lassen sich nicht koppeln."),
+    "bluez": ("Bluetooth", "Geräte lassen sich nicht koppeln."),
+    "location-observe": ("Standort", "Ortsbezogene Funktionen bleiben leer."),
+    "password-manager-service": ("Schlüsselbund", "Gespeicherte Passwörter sind "
+                                 "nicht erreichbar, Anmeldungen fragen jedes Mal neu."),
+    "screen-inhibit-control": ("Bildschirmschoner unterdrücken", "Der Bildschirm "
+                               "schaltet auch während Wiedergabe oder Präsentation ab."),
+    "system-observe": ("Systemprozesse ansehen", "Nur für Werkzeuge nötig, die "
+                       "andere Programme überwachen."),
+    "process-control": ("Prozesse steuern", "Nur für Systemwerkzeuge nötig."),
+    "hardware-observe": ("Hardware auslesen", "Angaben zu Geräten bleiben leer."),
+    "mount-observe": ("Laufwerke sehen", "Eingehängte Datenträger bleiben unsichtbar."),
+    "raw-usb": ("USB-Geräte direkt", "Nötig für Programmiergeräte, Scanner "
+                "und Ähnliches."),
+    "optical-drive": ("CD- und DVD-Laufwerk", "Discs werden nicht gelesen."),
+    "joystick": ("Gamecontroller", "Controller werden nicht erkannt."),
+    "gpg-keys": ("GPG-Schlüssel", "Signieren und Entschlüsseln geht nicht."),
+    "kerberos-tickets": ("Firmenanmeldung", "Nur in Firmennetzen mit Kerberos nötig."),
+    "avahi-observe": ("Geräte im lokalen Netz finden", "Drucker und Freigaben "
+                      "tauchen nicht von selbst auf."),
+    "pcscd": ("Chipkartenleser", "Signaturkarten werden nicht erkannt."),
+    "u2f-devices": ("Sicherheitsschlüssel", "YubiKey und ähnliche Sticks werden "
+                    "nicht erkannt."),
+    "desktop-launch": ("Andere Programme starten", "Links öffnen sich "
+                       "möglicherweise nicht im Browser."),
+    "personal-files": ("Bestimmte eigene Dateien", "Zugriff auf einzelne Ordner "
+                       "im Home."),
+    "system-files": ("Bestimmte Systemdateien", "Zugriff auf einzelne Systemordner."),
+    "shared-memory": ("Gemeinsamer Speicher", "Nötig für manche Fenster- und "
+                      "Videofunktionen."),
+    "hostname-control": ("Rechnername ändern", "Nur für Systemwerkzeuge nötig."),
+    "dvb": ("TV-Karte", "Fernsehempfang geht nicht."),
+    "raw-input": ("Eingabegeräte direkt", "Nötig für manche Tastatur- und "
+                  "Controllerfunktionen."),
+}
+
+
+def iface_text(name):
+    """(Klarname, Erklärung) zu einer Snap-Schnittstelle."""
+    known = SNAP_IFACE.get(name)
+    if known:
+        return known
+    return (name.replace("-", " "),
+            "Was genau dahinter steckt, sagt die Beschreibung des Snaps.")
+
 
 def entry_icon(entry):
     """Icon-Angabe einer Startdatei: absoluter Pfad oder Name aus dem Theme."""
@@ -926,8 +985,20 @@ def app_check(entry):
     """
     kind, ident = app_source(entry)
     binary = exec_binary(entry.get("Exec", ""))
-    out = [("ok", "Herkunft", APP_KIND_LABEL.get(kind, kind)
-            + (f" · {ident}" if ident else ""), None)]
+    origin = {
+        "snap": "Läuft abgeschottet in einer Sandbox. Zugriffe auf Mikrofon, "
+                "Kamera oder externe Laufwerke müssen einzeln freigegeben werden.",
+        "flatpak": "Läuft abgeschottet in einer Sandbox mit eigenen Bibliotheken, "
+                   "unabhängig vom Rest des Systems.",
+        "deb": "Regulär über die Paketverwaltung installiert, bekommt Updates "
+               "über die Systemaktualisierung.",
+        "lokal": "Von Hand installiert, ohne Paketquelle. Updates musst du selbst "
+                 "einspielen.",
+        "appimage": "Einzelne Programmdatei, die alles mitbringt. Updates musst "
+                    "du selbst einspielen.",
+    }.get(kind, "")
+    out = [("ok", APP_KIND_LABEL.get(kind, kind) + (f" · {ident}" if ident else ""),
+            origin, None)]
 
     if kind == "appimage":
         if not os.path.exists(binary):
@@ -987,12 +1058,18 @@ def app_check(entry):
         gaps = parse_snap_connections(sh(["snap", "connections", ident], timeout=30),
                                       ident)
         for gap in gaps:
-            out.append(("warn", f"Schnittstelle {gap} nicht verbunden",
-                        f"Die zugehörige Funktion fehlt {ident} dadurch.",
-                        ("Verbinden", ["pkexec", "snap", "connect",
+            label, why = iface_text(gap)
+            # Bewusst nur ein Hinweis, kein Mangel: eine nicht freigegebene
+            # Schnittstelle ist erstmal Sicherheit. Handeln muss man nur, wenn
+            # einem die Funktion fehlt.
+            out.append(("info", f"{label} nicht freigegeben",
+                        f"{why} Brauchst du das nicht, kannst du es so lassen. "
+                        f"Fachbegriff: {gap}.",
+                        ("Freigeben", ["pkexec", "snap", "connect",
                                        f"{ident}:{gap}"])))
         if not gaps:
-            out.append(("ok", "Snap-Schnittstellen", "alle verbunden", None))
+            out.append(("ok", "Freigaben", "Die App hat alles, was sie "
+                        "angefordert hat.", None))
 
     if kind == "flatpak":
         perms = parse_flatpak_perms(sh(["flatpak", "info", "--show-permissions", ident],
@@ -1021,9 +1098,19 @@ def app_check(entry):
         count, ops = parse_denials(
             sh(["journalctl", "-k", "--since", "-24h", "--no-pager"], timeout=60), label)
         if count:
-            out.append(("warn", f"{count} blockierte Zugriffe in 24 Stunden",
-                        "Von der Sandbox verweigert, betroffen: "
-                        + ", ".join(ops[:6]), None))
+            what = {"dbus_method_call": "mit einem Systemdienst sprechen",
+                    "dbus_signal": "auf Systemmeldungen hören",
+                    "open": "eine Datei öffnen", "file_inherit": "eine Datei "
+                    "weiterreichen", "exec": "ein anderes Programm starten",
+                    "connect": "eine Verbindung aufbauen",
+                    "capable": "eine Systemberechtigung nutzen"}
+            tried = [what.get(o, o) for o in ops[:3]]
+            out.append(("info", f"{count} mal von der Sandbox gebremst",
+                        "Die App wollte " + " und ".join(tried)
+                        + ", durfte aber nicht. Das ist der Normalfall bei Snaps "
+                        "und meist harmlos. Nur wenn etwas in der App wirklich "
+                        "nicht geht, lohnt ein Blick auf die Freigaben darüber.",
+                        None))
 
     if shutil.which("coredumpctl") and binary:
         base = os.path.basename(binary)
@@ -1073,7 +1160,7 @@ def app_check_text(name, results):
     """Das Ergebnis als kopierbarer Text, etwa für einen Fehlerbericht."""
     lines = [f"App-Check: {name}", ""]
     for sev, title, detail, _fix in results:
-        mark = {"ok": "  ", "warn": "! ", "crit": "!!"}[sev]
+        mark = {"ok": "  ", "info": "· ", "warn": "! ", "crit": "!!"}[sev]
         lines.append(f"{mark} {title}: {detail}")
     return "\n".join(lines)
 
@@ -4244,9 +4331,15 @@ class App(Gtk.Application):
 
     def _appcheck_done(self, name, results):
         clear(self.app_box)
-        bad = [r for r in results if r[0] != "ok"]
-        self.app_sub.set_text(f"{name}: {len(bad)} Auffälligkeiten"
-                              if bad else f"{name}: alles in Ordnung")
+        bad = [r for r in results if r[0] in ("warn", "crit")]
+        hints = [r for r in results if r[0] == "info"]
+        if bad:
+            state = f"{len(bad)} Problem" + ("e" if len(bad) > 1 else "")
+        elif hints:
+            state = f"läuft, {len(hints)} Hinweis" + ("e" if len(hints) > 1 else "")
+        else:
+            state = "alles in Ordnung"
+        self.app_sub.set_text(f"{name}: {state}")
         c = box()
         c.add_css_class("card")
         copy = Gtk.Button(label="Bericht kopieren", valign=Gtk.Align.CENTER)
@@ -4258,8 +4351,8 @@ class App(Gtk.Application):
             r = box(True, 14, margin_top=13, margin_bottom=13,
                     margin_start=18, margin_end=18)
             dot = Gtk.Box(valign=Gtk.Align.CENTER)
-            dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn"}
-                              .get(sev, "bullet-ok"))
+            dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn",
+                               "info": "bullet-info"}.get(sev, "bullet-ok"))
             r.append(dot)
             t = box(spacing=2, hexpand=True)
             t.append(lbl(title, "row-title"))
@@ -5397,6 +5490,14 @@ def selftest():
     assert exec_binary('"/usr/bin/nextcloud" --background') == "/usr/bin/nextcloud"
     assert exec_binary("") == ""
     assert app_source({"Exec": "/home/x/Foo.AppImage"})[0] == "appimage"
+    # Fachbegriffe müssen übersetzt werden, sonst hilft der Befund niemandem
+    assert iface_text("audio-record")[0] == "Mikrofon"
+    assert "externe Laufwerke" in iface_text("removable-media")[0]
+    assert iface_text("irgendwas-neues") == (
+        "irgendwas neues",
+        "Was genau dahinter steckt, sagt die Beschreibung des Snaps.")
+    # info ist ein Hinweis und darf im Bericht nicht wie ein Fehler aussehen
+    assert app_check_text("X", [("info", "A", "B", None)]).endswith("·  A: B")
     assert app_source({"Exec": "/usr/bin/flatpak run --branch=stable "
                                "--command=rustdesk com.rustdesk.RustDesk @@u %u @@"}) \
         == ("flatpak", "com.rustdesk.RustDesk")
