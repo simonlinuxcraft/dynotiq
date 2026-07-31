@@ -7,13 +7,16 @@
 #   GPG-Schluessel anlegen und auf launchpad.net hinterlegen
 #   Ubuntu Code of Conduct signieren, dann das PPA anlegen
 #
-# KEY ueberschreibt den Signierschluessel:
-#   KEY=A1B2C3D4 ./build-source.sh
+# KEY ueberschreibt den Signierschluessel, REV die Paketrevision:
+#   KEY=A1B2C3D4 REV=2 ./build-source.sh
 set -eu
 cd "$(dirname "$0")"
 
 PPA="${PPA:-ppa:simonlinuxcraft/dynolab}"
 SERIES="${SERIES:-noble resolute}"
+# Eine hochgeladene Versionsnummer ist bei Launchpad fuer immer verbraucht, auch
+# nach einem fehlgeschlagenen Bau. Beim naechsten Anlauf REV hochzaehlen.
+REV="${REV:-1}"
 # Fest verdrahtet, weil die UID des Schluessels ("Simon (Dynolab)") nicht zum
 # Namen im changelog passt und debuild ihn sonst nicht findet.
 KEY="${KEY:-9D421A82D67E1656}"
@@ -42,7 +45,7 @@ suffix() {
   local v
   v=$(ubuntu-distro-info --series="$1" -r 2>/dev/null | cut -d' ' -f1)
   [ -n "$v" ] || { echo "Serie $1 unbekannt" >&2; exit 1; }
-  echo "${VER}~ubuntu${v}.1"
+  echo "${VER}~ubuntu${v}.${REV}"
 }
 
 python3 dynolab.py --selftest

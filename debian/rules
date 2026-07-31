@@ -10,5 +10,8 @@ override_dh_auto_build:
 override_dh_auto_install:
 	./install-tree.sh debian/dynolab
 
+# Kein Test beim Paketbau. dynolab.py fordert schon beim Import GTK 4.0 an, das
+# muesste sonst als Build-Depends in die Chroot, nur um einen Test zu wiederholen
+# der ohnehin schon gelaufen ist. build-source.sh fuehrt ihn vor dem Paketieren
+# aus, dort mit echten Systemwerkzeugen, die eine Chroot gar nicht hat.
 override_dh_auto_test:
-	python3 dynolab.py --selftest
