@@ -13,7 +13,6 @@ Nothing runs without asking first.
 
 </div>
 
-![Overview](docs/overview.png)
 
 ## What it does
 
@@ -36,7 +35,6 @@ cache, unresolved libraries, disconnected Snap interfaces, missing Flatpak
 permissions, crashes, journal errors. Technical terms get translated, so
 `audio-record` reads as microphone. Where a fix exists, there is a button.
 
-![App check](docs/appcheck.png)
 
 **Dyno** records temperature and clock over minutes under real load and answers
 what a snapshot cannot: at which point does it start throttling.
