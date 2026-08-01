@@ -8,6 +8,7 @@ der GNU General Public License, Version 3 oder später, weitergeben und
 verändern. Der Lizenztext liegt der Datei als LICENSE bei.
 """
 
+import datetime
 import fcntl
 import gettext
 import glob
@@ -15,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import resource
 import shlex
 import shutil
 import subprocess
@@ -22,6 +24,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 from collections import deque
 
@@ -857,8 +860,12 @@ def exec_binary(exec_line):
 
 
 def app_source(entry):
-    """(Art, Kennung) einer Anwendung: snap, flatpak, deb, lokal oder unbekannt."""
+    """(Art, Kennung) einer Anwendung: steam, snap, flatpak, deb, lokal oder
+    unbekannt."""
     ex = entry.get("Exec", "")
+    m = STEAM_APPID.search(ex)
+    if m:
+        return ("steam", m.group(1))
     if "flatpak run" in ex:
         ids = [t for t in ex.split() if t.count(".") >= 2 and not t.startswith("-")]
         return ("flatpak", ids[-1] if ids else "")
@@ -931,7 +938,8 @@ def parse_denials(text, label):
 
 
 APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": _("Paket"),
-                  "lokal": _("manuell installiert"), "appimage": "AppImage"}
+                  "lokal": _("manuell installiert"), "appimage": "AppImage",
+                  "steam": _("Steam-Titel")}
 
 # Snap-Schnittstellen in Alltagssprache. Die Namen sind Fachbegriffe, und ob
 # eine fehlende Freigabe stört, hängt davon ab, was man mit der App macht.
@@ -1044,6 +1052,390 @@ def fuse2_missing():
     return not glob.glob("/usr/lib/*/libfuse.so.2*")
 
 
+# Spiele. Beim ersten Betreten einer Szene übersetzt der Treiber die Shader des
+# Spiels in Maschinencode. Das dauert Millisekunden und ruckelt sichtbar. Ab
+# dem zweiten Mal kommt das Ergebnis aus dem Shader-Cache, es sei denn, der ist
+# abgeschaltet, zu klein oder liegt auf einer vollen Platte. Dann ruckelt
+# dieselbe Stelle bei jedem Spielstart wieder.
+
+CACHE_HOME = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+# NVIDIAs Standardgrenze je Anwendung. Ältere Treiber setzten 128 MB, ab 525
+# ist es 1 GB. Wo die Variable gesetzt ist, gilt der gesetzte Wert.
+GL_CACHE_DEFAULT = 1 << 30
+MESA_CACHE_DEFAULT = 1 << 30
+
+STEAM_DIRS = ("~/.steam/steam", "~/.local/share/Steam", "~/.steam/root",
+              "~/.var/app/com.valvesoftware.Steam/data/Steam")
+# Steam schreibt für jeden Titel einen Starter, der nur die AppID kennt.
+STEAM_APPID = re.compile(r"steam://(?:rungameid|run)/(\d+)")
+
+
+def steam_root():
+    for p in STEAM_DIRS:
+        d = os.path.expanduser(p)
+        if os.path.isdir(os.path.join(d, "steamapps")):
+            return d
+    return ""
+
+
+def steam_libraries():
+    """Alle Steam-Bibliotheken. Spiele und ihr Shader-Cache liegen dort, wo sie
+    installiert sind, und das ist selten die Platte mit der Steam-Installation."""
+    root = steam_root()
+    if not root:
+        return []
+    # ~/.steam/steam zeigt auf ~/.steam/debian-installation. Ohne realpath
+    # zaehlt jeder Ordner darunter doppelt.
+    out = {os.path.realpath(root): True}
+    for p in re.findall(r'"path"\s+"([^"]+)"',
+                        read(os.path.join(root, "steamapps",
+                                          "libraryfolders.vdf")) or ""):
+        p = os.path.realpath(p.replace("\\\\", "/"))
+        if os.path.isdir(os.path.join(p, "steamapps")):
+            out[p] = True
+    return list(out)
+
+
+def steam_apps():
+    """Anzahl installierter Steam-Titel über alle Bibliotheken."""
+    return sum(len(glob.glob(os.path.join(lib, "steamapps", "appmanifest_*.acf")))
+               for lib in steam_libraries())
+
+
+def vdf_value(text, key):
+    """Ein Wert aus Valves Textformat. Kein Parser: die Dateien sind
+    verschachtelt, aber die Schlüssel darin eindeutig genug."""
+    m = re.search(rf'"{key}"\s+"([^"]*)"', text or "")
+    return m.group(1) if m else ""
+
+
+def vdf_block(text, key):
+    """Der Inhalt von "key" { ... } samt Unterblöcken.
+
+    Gezählt statt geraten: eine AppID steht in localconfig.vdf auch als Wert
+    fremder Einträge, und der Block einer App reicht über mehrere Ebenen.
+    """
+    for m in re.finditer(rf'"{re.escape(key)}"\s*\{{', text or ""):
+        depth = 1
+        for br in re.finditer(r"[{}]", text[m.end():]):
+            depth += 1 if br.group() == "{" else -1
+            if not depth:
+                return text[m.end():m.end() + br.start()]
+    return ""
+
+
+def steam_game(appid):
+    """Was Steam über einen installierten Titel weiß, oder None."""
+    for lib in steam_libraries():
+        text = read(os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf"))
+        if not text:
+            continue
+        apps = os.path.join(lib, "steamapps")
+        return {"appid": appid, "lib": lib, "name": vdf_value(text, "name"),
+                "bytes": int(vdf_value(text, "SizeOnDisk") or 0),
+                "played": int(vdf_value(text, "LastPlayed") or 0),
+                "updated": int(vdf_value(text, "LastUpdated") or 0),
+                "path": os.path.join(apps, "common", vdf_value(text, "installdir")),
+                "prefix": os.path.join(apps, "compatdata", appid),
+                "cache": os.path.join(apps, "shadercache", appid)}
+    return None
+
+
+def steam_proton(appid):
+    """Die Proton-Fassung, die für diesen Titel eingestellt ist. Der Schlüssel
+    "0" im selben Block ist die Voreinstellung für alle Titel."""
+    root = steam_root()
+    text = read(os.path.join(root, "config", "config.vdf")) if root else ""
+    block = vdf_block(text, "CompatToolMapping")
+    for key in (appid, "0"):
+        name = vdf_value(vdf_block(block, key), "name")
+        if name:
+            return name
+    return ""
+
+
+def steam_launch_options(appid):
+    """Startoptionen des Titels. Dort steht, ob gamemoderun oder mangohud
+    davorgehängt sind und welche Proton-Schalter gesetzt wurden."""
+    for f in glob.glob(os.path.join(steam_root() or "/nichts", "userdata", "*",
+                                    "config", "localconfig.vdf")):
+        opts = vdf_value(vdf_block(read(f) or "", appid), "LaunchOptions")
+        if opts:
+            return opts
+    return ""
+
+
+def env_size(text):
+    """Größe aus einer Umgebungsvariablen: '10737418240', '10G', '512MB'."""
+    m = re.fullmatch(r"(\d+)\s*([kmgt])?i?b?", (text or "").strip(), re.I)
+    return int(m.group(1)) * 1024 ** " kmgt".index(
+        (m.group(2) or " ").lower()) if m else 0
+
+
+def shader_caches():
+    """Die Shader-Caches dieses Rechners.
+
+    limit ist die Grenze, ab der der Treiber alte Einträge wegwirft, exact
+    sagt, ob sie gesetzt oder nur der Standardwert ist. Bei Steam gibt es
+    keine Grenze, der Cache wächst mit der Spielesammlung."""
+    out = []
+    nv = os.environ.get("__GL_SHADER_DISK_CACHE_PATH") or f"{CACHE_HOME}/nvidia/GLCache"
+    if os.path.isdir(nv):
+        limit = env_size(os.environ.get("__GL_SHADER_DISK_CACHE_SIZE"))
+        out.append({"name": "NVIDIA", "path": nv, "bytes": dir_size(nv, 25),
+                    "limit": limit or GL_CACHE_DEFAULT, "exact": bool(limit)})
+    for mesa in (os.environ.get("MESA_SHADER_CACHE_DIR"),
+                 f"{CACHE_HOME}/mesa_shader_cache", f"{CACHE_HOME}/mesa_shader_cache_db"):
+        if mesa and os.path.isdir(mesa):
+            limit = env_size(os.environ.get("MESA_SHADER_CACHE_MAX_SIZE"))
+            out.append({"name": "Mesa", "path": mesa, "bytes": dir_size(mesa, 25),
+                        "limit": limit or MESA_CACHE_DEFAULT, "exact": bool(limit)})
+    sc = [p for p in (os.path.join(lib, "steamapps", "shadercache")
+                      for lib in steam_libraries()) if os.path.isdir(p)]
+    if sc:
+        out.append({"name": "Steam", "path": sc[0], "limit": 0, "exact": False,
+                    "bytes": sum(dir_size(p, 40) for p in sc), "dirs": len(sc)})
+    return out
+
+
+def free_bytes(path):
+    try:
+        s = os.statvfs(path)
+        return s.f_bavail * s.f_frsize
+    except OSError:
+        return 0
+
+
+def shader_cache_check(steam=True):
+    """Befunde zum Shader-Cache als (sev, Titel, Detail, Fix), wie app_check
+    sie liefert. Fix bleibt None: eine Umgebungsvariable dauerhaft zu setzen
+    heißt, in die Sitzungskonfiguration zu schreiben, das macht die App nicht
+    ungefragt."""
+    out = []
+    caches = [c for c in shader_caches() if steam or c["name"] != "Steam"]
+    if not caches:
+        return out
+    if os.environ.get("__GL_SHADER_DISK_CACHE") == "0":
+        out.append(("crit", _("Shader-Cache ist abgeschaltet"),
+                    _("__GL_SHADER_DISK_CACHE steht auf 0. Damit übersetzt der "
+                      "Treiber bei jedem Spielstart alles neu, und jede Szene "
+                      "ruckelt beim ersten Betreten wieder. Die Variable "
+                      "entfernen oder auf 1 setzen."), None))
+    for c in caches:
+        size = fmt_bytes(c["bytes"])
+        if c["limit"] and c["bytes"] >= c["limit"] * 0.85:
+            out.append(("warn", _("{name}-Shader-Cache ist voll").format(name=c["name"]),
+                        _("{size} von {limit}. Ist die Grenze erreicht, wirft der "
+                          "Treiber alte Einträge weg und übersetzt sie beim "
+                          "nächsten Mal neu. Das sind die Ruckler, die immer an "
+                          "denselben Stellen wiederkommen. Abhilfe: "
+                          "__GL_SHADER_DISK_CACHE_SIZE höher setzen, 10 GB sind "
+                          "für eine große Sammlung realistisch.").format(
+                              size=size, limit=fmt_bytes(c["limit"])), None))
+        elif c["limit"]:
+            out.append(("ok", _("{name}-Shader-Cache").format(name=c["name"]),
+                        _("{size} von {limit}, {kind}.").format(
+                            size=size, limit=fmt_bytes(c["limit"]),
+                            kind=_("selbst gesetzt") if c["exact"]
+                            else _("Standardgrenze")), None))
+        elif c["bytes"] < 50 * 2**20 and steam_apps() >= 3:
+            out.append(("info", _("Steam hat keine Shader vorbereitet"),
+                        _("Der Cache ist mit {size} praktisch leer, obwohl {n} "
+                          "Titel installiert sind. Entweder steht in den "
+                          "Steam-Einstellungen unter Downloads die "
+                          "Shader-Vorabverarbeitung auf aus, oder es lief noch "
+                          "kein Vulkan-Spiel. Eingeschaltet übersetzt Steam die "
+                          "Shader beim Herunterladen statt mitten im Spiel."
+                          ).format(size=size, n=steam_apps()), None))
+        else:
+            out.append(("ok", _("{name}-Shader-Cache").format(name=c["name"]),
+                        _("{size} in {n} Bibliothek(en). Steam legt hier die "
+                          "vorab übersetzten Shader ab, das spart genau die "
+                          "Ruckler beim ersten Spielstart.").format(
+                              size=size, n=c.get("dirs", 1)), None))
+    free = free_bytes(caches[0]["path"])
+    if free and free < 2 * 2**30:
+        out.append(("crit", _("Kein Platz für den Shader-Cache"),
+                    _("Auf der Partition mit dem Cache sind nur noch {free} "
+                      "frei. Was nicht geschrieben werden kann, wird bei jedem "
+                      "Start neu übersetzt.").format(free=fmt_bytes(free)), None))
+    return out
+
+
+def steam_game_check(appid):
+    """Bericht zu einem Steam-Titel.
+
+    Der übliche App-Check würde hier das Paket steam-installer untersuchen und
+    dessen Version, Bibliotheken und Prozesse melden. Über das Spiel sagt das
+    nichts, deshalb geht dieser Weg an der Paketverwaltung vorbei.
+    """
+    g = steam_game(appid)
+    if not g:
+        return [("info", _("Nicht installiert"),
+                 _("Der Starter zeigt auf Steam-Titel {id}, in keiner Bibliothek "
+                   "liegt dazu eine Installation. Der Menüeintrag bleibt auch "
+                   "nach dem Deinstallieren stehen.").format(id=appid), None)]
+    lib = g["lib"].replace(os.path.expanduser("~"), "~")
+    played = (_("zuletzt gespielt am {date}").format(
+        date=time.strftime("%d.%m.%Y", time.localtime(g["played"])))
+        if g["played"] else _("noch nicht gespielt"))
+    out = [("ok", _("Steam-Titel {id}").format(id=appid),
+            _("{size} in {lib}, {played}.").format(
+                size=fmt_bytes(g["bytes"]), lib=lib, played=played), None)]
+
+    proton = steam_proton(appid)
+    if os.path.isdir(g["prefix"]):
+        out.append(("ok", _("Läuft über Proton"),
+                    _("Eingestellt ist {p}. Das Spiel ist für Windows gebaut und "
+                      "wird übersetzt, deshalb hängt die Bildrate auch an der "
+                      "Proton-Fassung.").format(p=proton or _("die Voreinstellung"))
+                    + _(" Der Prefix belegt {size}.").format(
+                        size=fmt_bytes(dir_size(g["prefix"], 25))), None))
+    else:
+        out.append(("ok", _("Nativer Linux-Titel"),
+                    _("Kein Proton-Prefix vorhanden, das Spiel läuft direkt."), None))
+
+    cache = dir_size(g["cache"], 30) if os.path.isdir(g["cache"]) else 0
+    if cache >= 100 * 2**20:
+        out.append(("ok", _("Shader-Cache dieses Spiels"),
+                    _("{size} liegen bereit. Was hier steht, muss der Treiber im "
+                      "Spiel nicht mehr übersetzen, das sind die Ruckler, die du "
+                      "nicht bekommst.").format(size=fmt_bytes(cache)), None))
+    else:
+        out.append(("warn", _("Kaum Shader vorbereitet"),
+                    _("Für dieses Spiel liegen nur {size} im Cache. Beim ersten "
+                      "Betreten jeder Szene übersetzt der Treiber dann neu, und "
+                      "genau das ruckelt. Steam holt die Shader beim Herunterladen, "
+                      "wenn in den Einstellungen unter Downloads die "
+                      "Shader-Vorabverarbeitung an ist.").format(
+                          size=fmt_bytes(cache)), None))
+
+    opts = steam_launch_options(appid)
+    if opts:
+        out.append(("ok", _("Startoptionen gesetzt"),
+                    _("Vor dem Spiel läuft: {opts}").format(opts=opts[:120]), None))
+    if shutil.which("gamemoderun") and "gamemoderun" not in opts:
+        out.append(("info", _("GameMode wird hier nicht genutzt"),
+                    _("GameMode ist installiert, steht aber nicht in den "
+                      "Startoptionen dieses Spiels. Mit 'gamemoderun %command%' "
+                      "hebt es für die Spieldauer den CPU-Takt an und nimmt "
+                      "Hintergrunddienste zurück."), None))
+
+    free = free_bytes(g["lib"])
+    if free and free < 10 * 2**30:
+        out.append(("warn", _("Wenig Platz auf dieser Platte"),
+                    _("Nur noch {free} frei in {lib}. Shader-Cache und "
+                      "Zwischenstände wachsen im Spiel weiter, und ein Update "
+                      "braucht kurzzeitig das Doppelte.").format(
+                          free=fmt_bytes(free), lib=lib), None))
+    return out
+
+
+# Titel aus dem Installationspfad. Bei Proton heißt der Prozess
+# wine64-preloader oder schlicht Xyz.exe, der Pfad dagegen nennt das Spiel.
+GAME_DIR = re.compile(r"/(?:steamapps/common|GOG Games|Heroic|"
+                      r"lutris/[^/\x00]+/games|Games)/([^/\x00]+)")
+GAME_EXEC = ("steam://", "steam ", "lutris", "heroic", "bottles", "gamescope",
+             "minigalaxy", "proton", "wine ", "retroarch")
+GAME_LAUNCHER = ("steam", "lutris", "heroic", "bottles", "minigalaxy",
+                 "playonlinux", "gamehub", "retroarch")
+
+
+def running_game():
+    """Titel des Spiels, das gerade läuft, sonst ""."""
+    for d in glob.glob("/proc/[0-9]*"):
+        m = GAME_DIR.search(read(f"{d}/cmdline") or "")
+        if m:
+            return m.group(1)
+    return ""
+
+
+def game_app(entry):
+    """Ob ein Starter zu einem Spiel gehört. Categories=Game ist der
+    verlässliche Weg, Steam und Lutris schreiben das in jeden Eintrag."""
+    if "Game" in entry.get("Categories", "").split(";"):
+        return True
+    ex = entry.get("Exec", "").lower()
+    return any(t in ex for t in GAME_EXEC)
+
+
+def game_launcher(entry, kind="", ident=""):
+    """Ein Starter für Spiele, aber selbst keins. Für den zeichnet der
+    Prüfstand nichts auf, gemessen wird immer ein einzelnes Spiel."""
+    if STEAM_APPID.search(entry.get("Exec", "")):
+        return False
+    # Bei Sandbox-Apps steht im Exec nur flatpak oder snap, der Name des
+    # Starters steckt in der Kennung.
+    name = (ident.rsplit(".", 1)[-1] if kind in ("flatpak", "snap")
+            else os.path.basename(exec_binary(entry.get("Exec", ""))))
+    return name.lower() in GAME_LAUNCHER
+
+
+def sysctl_int(name):
+    v = read("/proc/sys/" + name.replace(".", "/"))
+    return int(v) if v and v.isdigit() else 0
+
+
+def game_check(steam_total=True):
+    """Die Stellschrauben, die beim Spielen wirklich beißen. steam_total aus,
+    wo schon der Cache des einzelnen Spiels dasteht: die Gesamtgröße über alle
+    Bibliotheken ist dann nur noch eine zweite Zahl zum selben Thema."""
+    out = list(shader_cache_check(steam=steam_total))
+    if not shutil.which("gamemoderun"):
+        out.append(("warn", _("GameMode ist nicht installiert"),
+                    _("GameMode stellt für die Dauer des Spiels den CPU-Governor "
+                      "auf performance und nimmt Hintergrunddienste zurück. "
+                      "Danach setzt es alles selbst wieder um. Im Spiel als "
+                      "Startbefehl 'gamemoderun %command%' eintragen."),
+                    (_("GameMode installieren"),
+                     [["pkexec", "apt-get", "update"],
+                      ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+                       "apt-get", "install", "-y", "gamemode"]])))
+    gov = cpu_governor()
+    if gov and gov != "performance":
+        out.append(("warn", _("CPU-Governor steht auf {gov}").format(gov=gov),
+                    _("Der Takt geht erst hoch, wenn die Last schon da ist. Beim "
+                      "Spielen kostet das genau in den Momenten Bilder, in denen "
+                      "es ruckelt. GameMode stellt das je Spiel um, dauerhaft "
+                      "geht es über den Befehl auf der Problemseite."), None))
+    mm = sysctl_int("vm.max_map_count")
+    if mm and mm < 1048576:
+        out.append(("warn", _("vm.max_map_count ist zu niedrig"),
+                    _("Steht auf {v}. Moderne Titel unter Proton legen mehr "
+                      "Speicherbereiche an und stürzen ab oder starten gar nicht "
+                      "erst. 1048576 ist der Wert, den SteamOS setzt.").format(v=mm),
+                    (_("Dauerhaft setzen"),
+                     ["pkexec", "/usr/bin/env", "SYSTEMD_LOG_LEVEL=warning",
+                      "sysctl", "-w", "vm.max_map_count=1048576"])))
+    nofile = 0
+    try:
+        nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+    except (ValueError, OSError):
+        pass
+    if nofile and nofile < 524288:
+        out.append(("warn", _("Zu wenige Dateizeiger erlaubt"),
+                    _("Die Obergrenze liegt bei {v}. Proton nutzt für Threads "
+                      "eigene Dateizeiger (esync), bei zu wenigen bricht das "
+                      "Spiel mit 'Too many open files' ab.").format(v=nofile), None))
+    if not shutil.which("mangohud"):
+        out.append(("info", _("MangoHud ist nicht installiert"),
+                    _("Blendet Bildrate, Frametimes und Temperaturen ins Spiel "
+                      "ein. Erst damit siehst du, ob eine Änderung wirklich etwas "
+                      "gebracht hat. Startbefehl: 'mangohud %command%'."),
+                    (_("MangoHud installieren"),
+                     [["pkexec", "apt-get", "update"],
+                      ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+                       "apt-get", "install", "-y", "mangohud"]])))
+    return out
+
+
+def game_runs(name):
+    """Prüfstandsläufe, die zu diesem Spiel aufgezeichnet wurden."""
+    key = name.lower()
+    return [r for r in history_read(HISTORY_MAX, kind="run")
+            if (r.get("summary", {}).get("game", "") or "").lower() == key]
+
+
 def app_check(entry):
     """[(sev, Titel, Detail, Fix)] zu einer Anwendung.
 
@@ -1051,6 +1443,32 @@ def app_check(entry):
     also eine Lösung, die die App selbst ausführen kann. Strukturiert statt
     Fließtext, damit die Oberfläche Punkte, Farben und Knöpfe setzen kann.
     """
+    kind, ident = app_source(entry)
+    out = steam_game_check(ident) if kind == "steam" else app_check_program(entry)
+    if game_app(entry):
+        out += game_check(steam_total=kind != "steam")
+        runs = game_runs(entry.get("Name", ""))
+        if runs:
+            _e, headline, lede, sev = record_verdict(runs[-1].get("summary", {}))
+            out.append((sev if sev in ("warn", "crit") else "ok",
+                        _("Prüfstand: {what}").format(what=headline), lede, None))
+        elif not game_launcher(entry, kind, ident):
+            out.append(("info", _("Noch kein Prüfstandslauf mit diesem Spiel"),
+                        _("Der Prüfstand zeichnet während des Spielens Temperatur, "
+                          "Takt und Drosselung auf und erkennt das Spiel selbst. "
+                          "Erst danach steht fest, ob Hitze, Wattbudget oder die "
+                          "CPU die Bildrate begrenzt."), None))
+    if not any(sev != "ok" for sev, _t, _d, _f in out):
+        out.append(("ok", _("Keine Auffälligkeiten"),
+                    _("Bibliotheken, Rechte und Journal sind sauber.")
+                    if kind != "steam" else
+                    _("Installation, Shader und Einstellungen sind in Ordnung."),
+                    None))
+    return out
+
+
+def app_check_program(entry):
+    """Der Bericht für alles, was als Programm auf dem Rechner liegt."""
     kind, ident = app_source(entry)
     binary = exec_binary(entry.get("Exec", ""))
     origin = {
@@ -1262,8 +1680,12 @@ def app_check(entry):
                          [["find", p, "-mindepth", "1", "-delete"]
                           for p, _ in caches])))
 
+    # Bei Snap und Flatpak steht in jedem Autostart-Eintrag 'snap' oder
+    # 'flatpak'. Ohne die Kennung bekäme jede Sandbox-App den Eintrag der
+    # ersten zugeschrieben.
+    key = ident if kind in ("flatpak", "snap") else base
     auto = next((a for a in autostart_entries()
-                 if base and base in a.get("exec", "")), None)
+                 if key and key in a.get("exec", "")), None)
     if auto:
         out.append(("ok" if auto["enabled"] else "info",
                     _("Startet automatisch mit der Anmeldung") if auto["enabled"]
@@ -1280,8 +1702,8 @@ def app_check(entry):
                             n=len(running),
                             size=fmt_bytes(sum(p["rss"] for p in running))), None))
 
-    # Gilt für jede Art: zeigt der Starter ins Leere und liegt er im eigenen
-    # Home, lässt er sich gefahrlos entfernen. Systemweite gehören einem Paket.
+    # Zeigt der Starter ins Leere und liegt er im eigenen Home, lässt er sich
+    # gefahrlos entfernen. Systemweite gehören einem Paket.
     path = entry.get("Path", "")
     gone = {_("AppImage nicht gefunden"), _("Programm nicht gefunden")}
     dead = any(sev == "crit" and title in gone for sev, title, _d, _f in out)
@@ -1291,10 +1713,6 @@ def app_check(entry):
                       "Der Eintrag im Menü bleibt sonst für immer stehen."
                       ).format(path=path),
                     (_("Starter entfernen"), ["rm", "--", path])))
-
-    if not any(sev != "ok" for sev, _t, _d, _f in out):
-        out.append(("ok", _("Keine Auffälligkeiten"),
-                    _("Bibliotheken, Rechte und Journal sind sauber."), None))
     return out
 
 
@@ -1338,75 +1756,311 @@ RELEASE_NOTES = {
 # Prüfstand: Messwerte über einen längeren Zeitraum aufzeichnen. Ein
 # Momentwert sagt nichts darüber, was nach zehn Minuten Last passiert.
 
+def cpu_clock():
+    """Höchster Kerntakt in MHz. Beim Spielen zählt der Kern, der den
+    Hauptthread trägt, nicht der Schnitt über schlafende Kerne."""
+    vals = [int(v) for v in (read(p) for p in glob.glob(
+        "/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq")) if v]
+    if vals:
+        return max(vals) / 1000
+    m = re.findall(r"cpu MHz\s*:\s*([\d.]+)", read("/proc/cpuinfo") or "")
+    return max(float(x) for x in m) if m else 0.0
+
+
+def cpu_governor():
+    govs = {read(p) for p in glob.glob(
+        "/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")}
+    govs.discard(None)
+    return "/".join(sorted(govs))
+
+
 def record_sample(prev_cpu):
-    """Ein Messpunkt. prev_cpu ist der Stand von cpu_times() beim letzten Punkt."""
-    cur = cpu_times()
+    """Ein Messpunkt. prev_cpu ist der Stand von cpu_times(True) beim letzten Punkt."""
+    cur = cpu_times(True)
     total, avail = meminfo()
     g = gpu()
-    s = {"t": time.time(), "cpu": round(busy_percent(prev_cpu, cur), 1),
+    s = {"t": time.time(), "cpu": round(busy_percent(prev_cpu[0], cur[0]), 1),
          "ram": round(100 * (total - avail) / total, 1) if total else 0.0}
+    cores = [busy_percent(p, n) for p, n in zip(prev_cpu[1:], cur[1:])]
+    if cores:
+        s["core"] = round(max(cores), 1)
     t = cpu_temp()
     if t:
         s["cpu_temp"] = round(t, 1)
+    c = cpu_clock()
+    if c:
+        s["cpu_clock"] = round(c)
     if g:
         s["gpu"] = round(g["util"], 1)
         s["gpu_temp"] = round(g["temp"], 1)
         s["gpu_clock"] = round(g["clock"])
         s["throttled"] = bool(g.get("throttled"))
+        if g.get("mem_total"):
+            s["vram"] = round(100 * g["mem_used"] / g["mem_total"], 1)
+        if g.get("power"):
+            s["power"] = round(g["power"], 1)
     n = nvme_temp()
     if n:
         s["nvme_temp"] = round(n, 1)
     return s, cur
 
 
+# Ab hier zählt ein Messpunkt als Last. Die GPU-Schwelle fängt den normalen
+# Spielbetrieb, die Kernschwelle das CPU-limitierte Spiel, das die Grafikkarte
+# gar nicht erst auslastet.
+LOAD_GPU, LOAD_CORE = 50, 70
+
+STAT_KEYS = ("gpu", "gpu_clock", "gpu_temp", "vram", "power",
+             "cpu", "core", "cpu_clock", "cpu_temp", "ram", "nvme_temp")
+
+
+def load_samples(samples):
+    """Nur die Punkte unter echter Last. Über den ganzen Lauf gemittelt sagen
+    Takt und Auslastung nichts: der Leerlauf davor und danach zieht alles nach
+    unten, ein GPU-Takt von 210 MHz ist der Ruhezustand und kein Einbruch."""
+    return [s for s in samples if s.get("gpu", 0) >= LOAD_GPU
+            or s.get("core", 0) >= LOAD_CORE]
+
+
 def record_summary(samples):
     """Aus den Messpunkten das, was man hinterher wissen will: wie heiß wurde
-    es, wie tief fiel der Takt, wie lange wurde gedrosselt."""
+    es, wie tief fiel der Takt, wer limitierte, ab wann gedrosselt wurde."""
     if not samples:
         return {}
-    out = {"n": len(samples),
-           "secs": round(samples[-1]["t"] - samples[0]["t"])}
-    for key in ("cpu", "ram", "cpu_temp", "gpu", "gpu_temp", "gpu_clock", "nvme_temp"):
-        vals = [s[key] for s in samples if key in s]
+    secs = round(samples[-1]["t"] - samples[0]["t"])
+    load = load_samples(samples)
+    base = load or samples
+    out = {"n": len(samples), "secs": secs, "load_n": len(load),
+           "load_secs": round(len(load) * secs / max(len(samples) - 1, 1)),
+           "gov": cpu_governor()}
+    for key in STAT_KEYS:
+        vals = [s[key] for s in base if key in s]
         if vals:
             out[key] = {"min": min(vals), "max": max(vals),
                         "med": round(median(vals), 1)}
-    thr = [s for s in samples if s.get("throttled")]
+    thr = [s for s in base if s.get("throttled")]
     if thr:
-        out["throttle_share"] = round(100 * len(thr) / len(samples))
+        out["throttle_share"] = round(100 * len(thr) / len(base))
         out["throttle_from"] = round(thr[0]["t"] - samples[0]["t"])
+    if load and any("gpu" in s for s in load):
+        n = len(load)
+        # Volle GPU-Auslastung ist beim Spielen der Sollzustand. Ein Kern am
+        # Anschlag bei nicht ausgelasteter Grafikkarte ist das Gegenteil.
+        out["gpu_full"] = round(100 * sum(s.get("gpu", 0) >= 95 for s in load) / n)
+        out["cpu_wall"] = round(100 * sum(s.get("gpu", 0) < 90
+                                          and s.get("core", 0) >= 85 for s in load) / n)
+    # Erstes gegen letztes Drittel der Lastphase: so sieht man, ob der Rechner
+    # den Takt hält oder über die Spielsitzung wegsackt. Unter zwei Minuten
+    # Last ist der Vergleich Rauschen.
+    if len(load) >= 60:
+        k = len(load) // 3
+        for key in ("gpu_clock", "gpu_temp", "cpu_clock", "cpu_temp"):
+            a = [s[key] for s in load[:k] if key in s]
+            b = [s[key] for s in load[-k:] if key in s]
+            if a and b:
+                out[key + "_trend"] = (round(median(a)), round(median(b)))
     return out
 
 
-RECORD_LABEL = {"cpu": (_("CPU-Last"), "%"), "ram": (_("Arbeitsspeicher"), "%"),
-                "cpu_temp": (_("CPU-Temperatur"), "°C"), "gpu": (_("GPU-Last"), "%"),
-                "gpu_temp": (_("GPU-Temperatur"), "°C"),
-                "gpu_clock": (_("GPU-Takt"), "MHz"), "nvme_temp": ("NVMe", "°C")}
+RECORD_LABEL = {"gpu": (_("GPU-Last"), "%"), "gpu_clock": (_("GPU-Takt"), "MHz"),
+                "gpu_temp": (_("GPU-Temperatur"), "°C"), "vram": ("VRAM", "%"),
+                "power": (_("GPU-Leistung"), "W"), "cpu": (_("CPU-Last"), "%"),
+                "core": (_("schnellster Kern"), "%"),
+                "cpu_clock": (_("CPU-Takt"), "MHz"),
+                "cpu_temp": (_("CPU-Temperatur"), "°C"),
+                "ram": (_("Arbeitsspeicher"), "%"), "nvme_temp": ("NVMe", "°C")}
+
+# Achse von, Achse bis, warnt ab, kritisch ab. Wo nichts steht, kommt die
+# Achse aus den Messwerten und es gibt keine Bewertung: bei Takt und
+# Leistungsaufnahme ist mehr nicht schlechter, sondern besser.
+RECORD_SCALE = {"gpu": (0, 100, None, None), "cpu": (0, 100, None, None),
+                "core": (0, 100, 92, 99), "ram": (0, 100, 85, 93),
+                "vram": (0, 100, 88, 96), "cpu_temp": (30, 105, 88, 95),
+                "gpu_temp": (30, 95, 78, 84), "nvme_temp": (25, 90, 65, 75)}
+
+
+def record_state(key, value):
+    """ok, warn oder crit für einen Messwert, oder "" wo es keine Grenze gibt."""
+    scale = RECORD_SCALE.get(key)
+    if not scale or scale[2] is None:
+        return ""
+    return "crit" if value >= scale[3] else "warn" if value >= scale[2] else "ok"
+
+
+def mmss(secs):
+    return f"{secs // 60}:{secs % 60:02d}"
+
+
+def record_verdict(summary):
+    """Der eine Satz, der den Lauf beantwortet: was bremst dieses Spiel.
+    Liefert (Kennzeile, Überschrift, Erklärung, Schwere)."""
+    if not summary:
+        return (_("PRÜFSTAND"), _("Noch kein Lauf"),
+                _("Starte die Aufzeichnung und spiel eine Runde. Danach steht hier, "
+                  "was deine Bildrate begrenzt."), "info")
+    # Läufe aus älteren Versionen kennen keine Lastphase. Die kommen weiter
+    # unten über Drosselung und Takt durch, nur eben ohne Lastbezug.
+    if "load_n" in summary and not summary["load_n"]:
+        return (_("KEINE LAST"), _("Der Rechner hat nur zugeschaut"),
+                _("In keinem Messpunkt lag nennenswerte Last an. Starte das Spiel "
+                  "vor der Aufzeichnung und lass sie durchlaufen, während du "
+                  "spielst."), "warn")
+    thr = summary.get("throttle_share", 0)
+    gtemp = summary.get("gpu_temp", {}).get("max", 0)
+    clock = summary.get("gpu_clock_trend")
+    drop = round(100 * (1 - clock[1] / clock[0])) if clock and clock[0] else 0
+    if thr >= 5 and gtemp >= 78:
+        return (_("HITZE"), _("Die Grafikkarte läuft ins Temperaturlimit"),
+                _("Ab {temp:.0f} °C nimmt die Karte selbst Takt zurück. In {pct} % "
+                  "der Lastmesspunkte tat sie das, erstmals nach {t} min. Genau "
+                  "dann fällt deine Bildrate.").format(
+                      temp=gtemp, pct=thr, t=mmss(summary.get("throttle_from", 0))),
+                "crit")
+    if thr >= 5:
+        return (_("POWERLIMIT"), _("Das Wattbudget bremst, nicht die Hitze"),
+                _("Die Karte drosselte in {pct} % der Lastmesspunkte, blieb dabei "
+                  "aber unter {temp:.0f} °C. Sie stößt ans Leistungslimit, nicht "
+                  "an die Kühlung.").format(pct=thr, temp=max(gtemp, 1)), "warn")
+    if drop >= 8:
+        return (_("TAKTVERLUST"), _("Der Takt sackt über die Spielsitzung ab"),
+                _("Anfangs {a} MHz, am Ende {b} MHz, also {d} % weniger. Ohne "
+                  "Drosselflag heißt das meistens: die Karte wird warm und "
+                  "regelt sich langsam herunter.").format(
+                      a=clock[0], b=clock[1], d=drop), "warn")
+    if summary.get("cpu_wall", 0) >= 25:
+        return (_("CPU-LIMIT"), _("Die CPU hält die Grafikkarte auf"),
+                _("In {pct} % der Lastmesspunkte hing ein Kern am Anschlag, "
+                  "während die Grafikkarte Luft hatte. Mehr Auflösung oder höhere "
+                  "Details kosten dich hier fast nichts.").format(
+                      pct=summary["cpu_wall"]), "warn")
+    if summary.get("gpu_full", 0) >= 70:
+        return (_("GPU-LIMIT"), _("Die Grafikkarte läuft am Anschlag"),
+                _("In {pct} % der Lastmesspunkte war sie voll ausgelastet, ohne "
+                  "zu drosseln. Genau so soll es beim Spielen aussehen.").format(
+                      pct=summary["gpu_full"]), "ok")
+    return (_("SAUBER"), _("Nichts hat gebremst"),
+            _("Über {t} min Last kein Drosseln, kein Takteinbruch. Was die "
+              "Bildrate begrenzt, liegt dann nicht an Hitze oder Kühlung.").format(
+                  t=mmss(summary.get("load_secs", 0))), "ok")
+
+
+def record_advice(summary):
+    """Was sich an diesem Rechner ändern lässt. Liste aus (Schwere, Titel, Text),
+    die wichtigste Maßnahme zuerst."""
+    out = []
+    if not summary or not summary.get("load_n"):
+        return out
+    load_secs = summary.get("load_secs", 0)
+    thr = summary.get("throttle_share", 0)
+    gtemp = summary.get("gpu_temp", {}).get("max", 0)
+    ctemp = summary.get("cpu_temp", {}).get("max", 0)
+    if thr >= 5 and gtemp >= 78:
+        out.append(("crit", _("Kühlung der Grafikkarte angehen"),
+                    _("Kühlkörper und Lüfter entstauben, Lüfterkurve steiler "
+                      "stellen (nvidia-settings oder LACT), Gehäuselüfter "
+                      "nachrüsten. Jedes Grad weniger hält den Takt länger oben.")))
+        out.append(("warn", _("Undervolting prüfen"),
+                    _("Weniger Spannung bei gleichem Takt heißt weniger Abwärme. "
+                      "Bei NVIDIA über die Kurve in nvidia-settings, bei AMD über "
+                      "LACT. Das ist der wirksamste Eingriff ohne neue Hardware.")))
+    elif thr >= 5:
+        out.append(("warn", _("Powerlimit ist der Deckel"),
+                    _("Die Karte hat das Wattbudget ausgeschöpft, ehe es zu warm "
+                      "wurde. Undervolting bringt hier direkt Takt, weil dieselbe "
+                      "Leistung mit weniger Watt auskommt.")))
+    clock = summary.get("gpu_clock_trend")
+    if clock and clock[0] and thr < 5 and round(100 * (1 - clock[1] / clock[0])) >= 8:
+        out.append(("warn", _("Takt hält nicht durch"),
+                    _("Der Takt fiel von {a} auf {b} MHz. Kurze Benchmarks zeigen "
+                      "das nie, im Spiel bricht die Bildrate nach einigen Minuten "
+                      "ein. Gehäusebelüftung und Staub prüfen.").format(
+                          a=clock[0], b=clock[1])))
+    if summary.get("cpu_wall", 0) >= 25:
+        out.append(("warn", _("Ein Kern ist der Flaschenhals"),
+                    _("Beim Spielen hängt fast alles an einem Thread. Hilft: "
+                      "Hintergrundprogramme schließen, CPU-Governor auf "
+                      "performance, im Spiel Sichtweite und Physikdetails senken. "
+                      "Auflösung senken bringt hier nichts.")))
+    vram = summary.get("vram", {}).get("max", 0)
+    if vram >= 88:
+        out.append(("crit" if vram >= 96 else "warn", _("VRAM läuft voll"),
+                    _("Spitze bei {v:.0f} %. Was nicht mehr in den Grafikspeicher "
+                      "passt, wird nachgeladen, und genau das sind die Ruckler "
+                      "beim Umdrehen. Texturqualität eine Stufe zurück.").format(
+                          v=vram)))
+    ram = summary.get("ram", {}).get("max", 0)
+    if ram >= 85:
+        out.append(("warn", _("Arbeitsspeicher wird knapp"),
+                    _("Spitze bei {v:.0f} %. Ab hier fängt der Rechner an "
+                      "auszulagern, was sich als Hänger beim Nachladen zeigt. "
+                      "Browser und Chat vor dem Spielen schließen.").format(v=ram)))
+    if ctemp >= 88:
+        out.append(("crit" if ctemp >= 95 else "warn",
+                    _("CPU wird sehr warm"),
+                    _("Spitze bei {v:.0f} °C. Ryzen darf bis 95 °C boosten, aber "
+                      "der Takt fällt schon vorher. Kühler und Wärmeleitpaste "
+                      "prüfen, Gehäuse-Airflow verbessern.").format(v=ctemp)))
+    nvme = summary.get("nvme_temp", {}).get("max", 0)
+    if nvme >= 65:
+        out.append(("warn", _("SSD wird heiß"),
+                    _("Spitze bei {v:.0f} °C. Ab etwa 75 °C drosselt die NVMe und "
+                      "Ladezeiten steigen. Ein Kühlkörper oder Luftstrom über den "
+                      "M.2-Slot reicht meist.").format(v=nvme)))
+    gov = summary.get("gov", "")
+    if gov and gov != "performance":
+        out.append(("warn", _("CPU-Governor stand auf {gov}").format(gov=gov),
+                    _("Beim Spielen kostet das Takt in genau den Momenten, in "
+                      "denen die Bildrate einbricht. Auf performance stellen, "
+                      "auf der Problemseite steht der Befehl dazu.")))
+    if load_secs < 480:
+        out.append(("info", _("Der Lauf war kurz"),
+                    _("Nur {t} min unter Last. Drosselung setzt oft erst nach zehn "
+                      "Minuten ein, dieser Lauf kann sie also übersehen haben.").format(
+                        t=mmss(load_secs))))
+    if not out:
+        out.append(("ok", _("Nichts zu tun"),
+                    _("Temperaturen, Takt und Speicher blieben über die ganze "
+                      "Lastphase im grünen Bereich. An diesem Rechner ist für "
+                      "Spiele nichts einzustellen.")))
+    # Wer hier landet und trotzdem Ruckler sieht, sucht an der falschen Stelle
+    # weiter. Der Prüfstand misst alle zwei Sekunden, einzelne Aussetzer sieht
+    # er nicht, und die häufigste Ursache dafür steht im App-Check.
+    if all(s in ("ok", "info") for s, _t, _d in out):
+        out.append(("info", _("Trotzdem Ruckler?"),
+                    _("Dann liegt es nicht an Hitze oder Takt. Kurze Aussetzer "
+                      "kommen meist daher, dass der Treiber Shader neu übersetzen "
+                      "muss, weil der Cache voll oder abgeschaltet ist. Der "
+                      "App-Check zeigt zu jedem Spiel, wie es darum steht.")))
+    return out
 
 
 def format_summary(summary):
     """Die Auswertung als Text, kopierbar für Forum oder Bugreport."""
     if not summary:
         return _("Keine Messpunkte aufgezeichnet.")
-    secs = summary["secs"]
-    lines = [_("Aufzeichnung über {mins}:{secs:02d} min ({n} Messpunkte)").format(
-        mins=secs // 60, secs=secs % 60, n=summary["n"]), ""]
+    eyebrow, headline, lede, _sev = record_verdict(summary)
+    lines = [_("Aufzeichnung über {mins} min ({n} Messpunkte, davon {ln} unter "
+               "Last)").format(mins=mmss(summary["secs"]), n=summary["n"],
+                               ln=summary.get("load_n", 0))]
+    if summary.get("game"):
+        lines.append(_("Aufgezeichnet, während {game} lief.").format(
+            game=summary["game"]))
+    lines += ["", f"{eyebrow}: {headline}", lede, "", _("Gemessen unter Last:")]
     # Aus dem f-String gezogen, xgettext findet _() darin nicht.
     lo, mid, hi = _("niedrigster"), _("üblich"), _("höchster")
-    lines.append(f"{'':<18}{lo:>13}{mid:>10}{hi:>11}")
+    lines.append(f"{'':<18}{lo:>14}{mid:>14}{hi:>14}")
     for key, (label, unit) in RECORD_LABEL.items():
         v = summary.get(key)
         if v:
-            lines.append(f"{label:<18}{v['min']:>10.0f} {unit:<2}"
-                         f"{v['med']:>8.0f} {unit:<2}{v['max']:>8.0f} {unit}")
-    if "throttle_share" in summary:
-        t = summary["throttle_from"]
-        lines += ["", _("Die Grafikkarte drosselte in {pct} % der Messpunkte, "
-                        "erstmals nach {mins}:{secs:02d} min.").format(
-                            pct=summary["throttle_share"], mins=t // 60, secs=t % 60),
-                  _("Das ist der Punkt, an dem die Leistung unter Dauerlast einbricht.")]
-    elif summary.get("gpu_temp"):
-        lines += ["", _("Keine Drosselung aufgezeichnet.")]
+            # Zahl und Einheit zusammen ausrichten, sonst verschiebt MHz jede
+            # Spalte gegen die Prozentzeilen darüber.
+            cells = [f"{v[k]:.0f} {unit}" for k in ("min", "med", "max")]
+            lines.append(f"{label:<18}" + "".join(f"{c:>14}" for c in cells))
+    advice = record_advice(summary)
+    if advice:
+        lines += ["", _("Was du ändern kannst:")]
+        for _s, title, detail in advice:
+            lines += [f"- {title}", f"  {detail}"]
     return "\n".join(lines)
 
 
@@ -1414,9 +2068,16 @@ def format_summary(summary):
 
 class Finding:
     def __init__(self, sev, title, detail, badge="", badge_ok=False, cmd=None,
-                 argv=None, warn=None, report=None):
+                 argv=None, warn=None, report=None, key="", lines=None,
+                 actions=None):
         self.sev, self.title, self.detail = sev, title, detail
         self.badge, self.badge_ok, self.cmd = badge, badge_ok, cmd
+        # key benennt den Befund dauerhaft, unabhaengig vom Titel: darunter
+        # merkt sich der Zustand ein Zurueckstellen.
+        self.key = key
+        # lines sind (Icon, Zustand, Text) fuer den aufklappbaren Teil,
+        # actions sind (Beschriftung, Methode der App, Argument).
+        self.lines, self.actions = lines or [], actions or []
         # argv ist die ausführbare Fassung von cmd als Argumentliste. Nur wo sie
         # gesetzt ist, darf die App den Befehl selbst starten, nie durch eine
         # Shell und nie aus einem zusammengesetzten String.
@@ -1546,15 +2207,25 @@ def check_driver_mismatch(ctx):
 
 
 def check_governor(ctx):
-    govs = {read(p) for p in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")}
-    govs.discard(None)
-    if not govs or govs == {"performance"}:
+    govs = cpu_governor()
+    if not govs or govs == "performance":
         return None
-    return Finding("warn", _("CPU-Governor steht auf {gov}").format(
-                       gov="/".join(sorted(govs))),
+    return Finding("warn", _("CPU-Governor steht auf {gov}").format(gov=govs),
                    _("Unter Last kostet das Takt. performance hält die Kerne oben."),
                    _("Takt"), False,
                    "echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
+
+
+def check_shader_cache(ctx):
+    """Nur was den Cache wirklich unbrauchbar macht. Wie voll er ist, gehört
+    zum jeweiligen Spiel und steht im App-Check, nicht als Systemproblem."""
+    if not steam_root():
+        return None
+    bad = [x for x in shader_cache_check() if x[0] == "crit"]
+    if not bad:
+        return None
+    _sev, title, detail, _fix = bad[0]
+    return Finding("warn", title, detail, _("Spiele"), False, key="shader_cache")
 
 
 def check_cpu_temp(ctx):
@@ -1650,6 +2321,22 @@ def version_tuple(v):
     return tuple(int(x) for x in re.findall(r"\d+", v)[:2])
 
 
+def version_parts(v):
+    """Wie version_tuple, aber mit dem Point-Release: 26.04 < 26.04.1."""
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
+def short_version(v):
+    """'26.04 LTS' zu '26.04'. Leer, wenn dort keine Version steht."""
+    m = re.match(r"\s*(\d+\.\d+)", v)
+    return m.group(1) if m else ""
+
+
+def point_version(v):
+    """Die Fassung, mit der Ubuntu den Wechsel freigibt."""
+    return short_version(v) + ".1" if short_version(v) else ""
+
+
 def newer_release(current, releases):
     """Höchstes unterstütztes Release oberhalb der laufenden Version."""
     cur = version_tuple(current)
@@ -1666,8 +2353,54 @@ def fetch_releases(url=META_RELEASE, timeout=20):
         return []
 
 
+# Ubuntu pflegt Codename, Releasedatum und Supportende selbst. Eine eigene
+# Tabelle waere beim naechsten Release falsch, ein fester Monat sowieso.
+DISTRO_INFO = "/usr/share/distro-info/ubuntu.csv"
+# Abstand zur .1-Freigabe. Die letzten vier lagen 100 bis 126 Tage nach dem
+# Hauptrelease, daraus wird der Monat abgeleitet und nicht geschrieben.
+POINT_RELEASE_DAYS = 110
+MONTHS = [N_("Januar"), N_("Februar"), N_("März"), N_("April"), N_("Mai"),
+          N_("Juni"), N_("Juli"), N_("August"), N_("September"), N_("Oktober"),
+          N_("November"), N_("Dezember")]
+
+
+def parse_distro_info(text):
+    """{Version: {series, release, eol}} aus dem CSV von distro-info."""
+    rows, lines = {}, text.splitlines()
+    head = lines[0].split(",") if lines else []
+    for line in lines[1:]:
+        f = dict(zip(head, line.split(",")))
+        ver = short_version(f.get("version", ""))
+        if ver:
+            rows[ver] = {"series": f.get("series", ""),
+                         "release": f.get("release", ""), "eol": f.get("eol", "")}
+    return rows
+
+
+def release_facts(version, path=DISTRO_INFO):
+    """Codename, Releasedatum und Supportende, leer wenn distro-info fehlt."""
+    return parse_distro_info(read(path) or "").get(short_version(version), {})
+
+
+def point_release_month(release_date, days=POINT_RELEASE_DAYS):
+    """Monat, in dem die .1-Freigabe zu erwarten ist. Leer ohne Releasedatum."""
+    try:
+        d = datetime.date.fromisoformat(release_date)
+    except (TypeError, ValueError):
+        return ""
+    return _(MONTHS[(d + datetime.timedelta(days=days)).month - 1])
+
+
 UBUNTU_HOSTS = ("archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
                 "extras.ubuntu.com", "changelogs.ubuntu.com", "esm.ubuntu.com")
+
+
+def ubuntu_source(uri):
+    """Ubuntus eigene Quellen samt Landes-Mirrors wie de.archive.ubuntu.com.
+
+    Die ziehen beim Upgrade automatisch mit, sie interessieren niemanden.
+    """
+    return any(h in uri for h in UBUNTU_HOSTS)
 
 
 def parse_apt_source(text):
@@ -1702,22 +2435,102 @@ def third_party_sources():
             continue
         name = os.path.basename(path).rsplit(".", 1)[0]
         for uri, suite in parse_apt_source(text):
-            if any(h in uri for h in UBUNTU_HOSTS):
+            if ubuntu_source(uri):
                 continue
             if (name, uri, suite) not in out:
                 out.append((name, uri, suite))
     return out
 
 
-def source_ready(uri, codename, timeout=8):
-    """Hat die Quelle schon eine Paketliste für das neue Release?"""
+SOURCE_STATUS = {"ok": N_("unterstützt"), "missing": N_("fehlt"),
+                 "unknown": N_("unbekannt")}
+SOURCES_TIMEOUT = 5
+SOURCES_TOTAL = 20
+SOURCES_CACHE_DAYS = 7
+
+
+def source_status(uri, codename, timeout=SOURCES_TIMEOUT):
+    """Kennt die Quelle das neue Release schon? Nur ein HEAD, nichts wird geschrieben.
+
+    Eine nicht erreichbare Quelle ist 'unknown', nicht 'missing': ein Timeout
+    sagt nichts darueber, ob der Anbieter Pakete gebaut hat.
+    """
     url = uri.rstrip("/") + f"/dists/{codename}/Release"
     try:
         req = urllib.request.Request(url, method="HEAD")
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return 200 <= r.status < 300
-    except Exception:
-        return False
+            return "ok" if 200 <= r.status < 300 else "unknown"
+    except urllib.error.HTTPError as e:
+        return "missing" if e.code == 404 else "unknown"
+    except Exception:                      # DNS weg, Timeout, Proxy
+        return "unknown"
+
+
+def sources_check(codename, sources=None, current=None, timeout=SOURCES_TIMEOUT,
+                  total=SOURCES_TOTAL):
+    """Alle Fremdquellen parallel fragen, [(Name, uri, Status)].
+
+    Parallel, weil eine tote Quelle sonst die ganze Liste aufhaelt. Wer nach
+    total Sekunden nicht geantwortet hat, bleibt 'unknown'. Quellen ohne festen
+    Codenamen ('stable', './') haengen nicht am Release und werden nicht
+    gefragt, sie laufen nach dem Upgrade weiter.
+    """
+    src = third_party_sources() if sources is None else sources
+    cur = os_release("VERSION_CODENAME") if current is None else current
+    rows = [[name, uri, "" if suite in (cur, "") else "ok"]
+            for name, uri, suite in src]
+
+    def probe(row):
+        row[2] = source_status(row[1], codename, timeout)
+
+    threads = [threading.Thread(target=probe, args=(r,), daemon=True)
+               for r in rows if not r[2]]
+    for t in threads:
+        t.start()
+    end = time.monotonic() + total
+    for t in threads:
+        t.join(max(0.0, end - time.monotonic()))
+    return [(n, u, s or "unknown") for n, u, s in rows]
+
+
+def sources_cached(codename):
+    """Letztes Ergebnis, solange es zum Release passt und keine Woche alt ist."""
+    c = state_read().get("sources_check")
+    if not isinstance(c, dict) or c.get("codename") != codename:
+        return None
+    if not isinstance(c.get("rows"), list):
+        return None
+    try:
+        if time.time() - float(c.get("t", 0)) > SOURCES_CACHE_DAYS * 86400:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return [tuple(r) for r in c["rows"] if isinstance(r, list) and len(r) == 3]
+
+
+def sources_cache_write(codename, rows):
+    state_write({**state_read(), "sources_check": {
+        "codename": codename, "t": time.time(), "rows": [list(r) for r in rows]}})
+
+
+def sources_text(rows, codename):
+    """Das Ergebnis als Liste: Quellenname, URL, Status."""
+    if not rows:
+        return _("Keine Fremdquellen eingetragen. Beim Upgrade wird nichts "
+                 "abgeschaltet.")
+    order = {"missing": 0, "unknown": 1, "ok": 2}
+    lines = [_("Kennt die Quelle {codename} schon?").format(codename=codename), ""]
+    for name, uri, status in sorted(rows, key=lambda r: (order.get(r[2], 3), r[0])):
+        lines.append(f"{_(SOURCE_STATUS.get(status, status)):<12}{name}")
+        lines.append(f"{'':<12}{uri}")
+    n = sum(1 for r in rows if r[2] == "missing")
+    unknown = sum(1 for r in rows if r[2] == "unknown")
+    lines += ["", _("{n} von {total} Quellen haben noch keine Pakete für "
+                    "{codename}.").format(n=n, total=len(rows), codename=codename)]
+    if unknown:
+        lines.append(_("{n} Quellen haben nicht geantwortet, über die sagt die "
+                       "Prüfung nichts.").format(n=unknown))
+    return "\n".join(lines)
 
 
 def local_packages():
@@ -1799,16 +2612,10 @@ def upgrade_report(codename="", version=""):
 
     sources = third_party_sources()
     if sources and codename:
-        ready, waiting = [], []
-        for name, uri, suite in sources:
-            # Nur Quellen, die den Codenamen fest eingetragen haben, sind
-            # ueberhaupt betroffen. 'stable' oder './' laufen einfach weiter.
-            if suite not in (os_release("VERSION_CODENAME"), ""):
-                ready.append((name, suite))
-            elif source_ready(uri, codename):
-                ready.append((name, codename))
-            else:
-                waiting.append((name, uri))
+        rows = sources_check(codename, sources)
+        sources_cache_write(codename, rows)
+        waiting = [(n, u) for n, u, s in rows if s == "missing"]
+        ready = [n for n, _u, s in rows if s != "missing"]
         if waiting:
             lines.append("")
             lines.append(_("WIRD ABGESCHALTET, solange es kein {codename} gibt"
@@ -1828,7 +2635,7 @@ def upgrade_report(codename="", version=""):
         if ready:
             lines.append("")
             lines.append(_("LÄUFT WEITER"))
-            lines.append("  " + ", ".join(n for n, _s in ready[:14])
+            lines.append("  " + ", ".join(ready[:14])
                          + (" …" if len(ready) > 14 else ""))
 
     lines.append("")
@@ -1877,6 +2684,8 @@ def check_release_upgrade(ctx):
     def report():
         return upgrade_report(codename, exists or offered)
 
+    if snoozed(SNOOZE_RELEASE, offered or exists):
+        return None
     if offered:
         return Finding("warn", _("Ubuntu {v} steht bereit").format(v=offered),
                        _("Aktuell läuft {v}. Der Wechsel dauert je nach Anschluss "
@@ -1889,25 +2698,75 @@ def check_release_upgrade(ctx):
                             "Terminalfenster bis zum Ende offen lassen, sonst "
                             "bricht das Upgrade mittendrin ab. Vorher einen "
                             "Timeshift-Snapshot anlegen."),
-                       report=report)
+                       report=report, key=SNOOZE_RELEASE)
     if exists:
-        # Bewusst ohne ausführbaren Befehl: das ändert Systemkonfiguration und
-        # nimmt eine Freigabe vorweg, die Ubuntu aus gutem Grund noch nicht gibt.
+        # Bewusst ohne Beheben-Befehl: hier ist nichts kaputt. Was der Nutzer
+        # tun kann, steht als eigene Schaltflaeche daneben.
         return Finding("info", _("Ubuntu {v} ist erschienen").format(v=exists),
-                       _("Angeboten wird der Wechsel von {v} aus erst mit dem "
-                         "ersten Point-Release, meist im August. Bis dahin wird der "
-                         "Upgrade-Weg selbst getestet, und Fremdquellen wie PPAs "
-                         "haben oft noch keine Pakete für das neue Release, das "
-                         "Upgrade schaltet sie dann ab. Sicherheitsupdates gibt es "
-                         "hier noch jahrelang, Warten kostet also nichts. Wer "
-                         "trotzdem früher wechseln will, setzt Prompt=normal und "
-                         "startet selbst.").format(v=current),
-                       exists, True,
-                       "sudo sed -i 's/^Prompt=.*/Prompt=normal/' "
-                       "/etc/update-manager/release-upgrades && "
-                       "sudo do-release-upgrade",
-                       report=report)
+                       release_detail(current, exists), exists, True,
+                       report=report, key=SNOOZE_RELEASE,
+                       lines=release_lines(current, exists, codename),
+                       actions=release_actions(exists, codename))
     return None
+
+
+def release_detail(current, new):
+    """Der Satz in der Befundzeile. Der Monat kommt aus distro-info."""
+    point = point_version(new) or new
+    month = point_release_month(release_facts(new).get("release", ""))
+    if not month:
+        return _("Ubuntu bietet den Wechsel erst mit {point} an. Bis dahin bekommt "
+                 "{cur} weiter Sicherheitsupdates. Warten kostet nichts."
+                 ).format(point=point, cur=current)
+    return _("Ubuntu bietet den Wechsel erst mit {point} an, meist im {month}. "
+             "Bis dahin bekommt {cur} weiter Sicherheitsupdates. Warten kostet "
+             "nichts.").format(point=point, cur=current, month=month)
+
+
+def release_lines(current, new, codename):
+    """Die drei Zeilen im aufklappbaren Teil, jede eine eigene Aussage.
+
+    Die Fremdquellen-Zeile bleibt neutral, solange der Check nicht gelaufen
+    ist. Geraten wird hier nichts.
+    """
+    short = short_version(new) or new
+    lines = []
+    eol = release_facts(current).get("eol", "").split("-")[0]
+    if eol:
+        lines.append(("security-high-symbolic", "ok",
+                      _("{cur} bekommt noch bis {year} Sicherheitsupdates."
+                        ).format(cur=current, year=eol)))
+    rows = sources_cached(codename) if codename else None
+    if rows is None:
+        lines.append(("ac-adapter-symbolic", "warn",
+                      _("Ob deine Fremdquellen schon Pakete für {v} haben, ist "
+                        "noch nicht geprüft. Quellen ohne Pakete würden beim "
+                        "Upgrade abgeschaltet.").format(v=short)))
+    elif rows:
+        lines.append(("ac-adapter-symbolic", "warn",
+                      _("{n} von {total} Fremdquellen haben noch keine Pakete für "
+                        "{v}. Beim Upgrade würden sie abgeschaltet.").format(
+                            n=sum(1 for r in rows if r[2] == "missing"),
+                            total=len(rows), v=short)))
+    else:
+        lines.append(("ac-adapter-symbolic", "warn",
+                      _("Keine Fremdquellen eingetragen, beim Upgrade würde "
+                        "keine abgeschaltet.")))
+    month = point_release_month(release_facts(new).get("release", ""))
+    if month:
+        lines.append(("preferences-system-time-symbolic", "dim",
+                      _("Ubuntu schaltet das Upgrade voraussichtlich im {month} "
+                        "frei.").format(month=month)))
+    return lines
+
+
+def release_actions(new, codename):
+    """Drei Schaltflächen statt eines Beheben-Knopfs, alle im ruhigen Stil."""
+    out = [(_("Später erinnern"), "_snooze_finding", point_version(new) or new)]
+    if codename:
+        out.append((_("Fremdquellen prüfen"), "_check_sources", codename))
+        out.append((_("Trotzdem upgraden"), "_confirm_upgrade", codename))
+    return out
 
 
 def check_hwe_kernel(ctx):
@@ -2106,7 +2965,7 @@ CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_d
           check_filesystems, check_gpu_throttle, check_governor, check_journal,
           check_old_snaps, check_autostart, check_swap, check_updates,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
-          check_bench_drop, check_self_update]
+          check_bench_drop, check_shader_cache, check_self_update]
 
 # info kostet keine Punkte: es ist eine Mitteilung, kein Mangel.
 WEIGHT = {"crit": 12, "warn": 4, "info": 0}
@@ -2256,6 +3115,42 @@ def state_write(state):
         os.replace(tmp, STATE_FILE)
     except OSError as e:
         print(f"Zustand nicht speicherbar: {e}", file=sys.stderr)
+
+
+# Zurueckgestellte Befunde. Der Schluessel steht in der Zustandsdatei und
+# bleibt, auch wenn sich Titel oder Wortlaut aendern.
+SNOOZE_RELEASE = "ubuntu_release_available"
+SNOOZE_LABEL = {SNOOZE_RELEASE: N_("Neues Ubuntu-Release")}
+
+
+def snoozed_all():
+    """{Schlüssel: {until_version, snoozed_at}}, leer bei kaputtem Zustand."""
+    s = state_read().get("snoozed_findings")
+    return s if isinstance(s, dict) else {}
+
+
+def snoozed_until(key):
+    e = snoozed_all().get(key)
+    return e.get("until_version", "") if isinstance(e, dict) else ""
+
+
+def snoozed(key, version):
+    """True, solange die angebotene Version die zurückgestellte nicht erreicht."""
+    until = snoozed_until(key)
+    return bool(until) and version_parts(version) < version_parts(until)
+
+
+def snooze_set(key, until_version):
+    """Befund bis zu dieser Version zurückstellen, leer nimmt es zurück."""
+    s = state_read()
+    findings = dict(snoozed_all())
+    if until_version:
+        findings[key] = {"until_version": until_version,
+                         "snoozed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                     time.gmtime())}
+    else:
+        findings.pop(key, None)
+    state_write({**s, "snoozed_findings": findings})
 
 
 def scan_window(last_check, fallback="-24h", now=None):
@@ -2727,6 +3622,12 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
              border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 9px 14px; }
 .btn-ghost:hover { background-color: rgba(255,255,255,.06); }
 .btn-ghost:disabled { color: #5A6069; }
+/* Fuer den leisesten Weg aus einem Befund heraus: gleiche Groesse wie
+   btn-ghost, aber ohne Rahmen, damit er nicht als Empfehlung gelesen wird. */
+.btn-quiet { font: 500 12px @SANS@; color: #767C85; background-color: transparent;
+             background-image: none; box-shadow: none; min-height: 0;
+             border: none; border-radius: 8px; padding: 9px 14px; }
+.btn-quiet:hover { background-color: rgba(255,255,255,.05); color: #C8CDD3; }
 .btn-accent, .btn-fix { color: @ACCTXT@; background-color: @ACC@; background-image: none;
               border: none; box-shadow: none; min-height: 0; }
 .btn-accent { font: 600 12px @SANS@; border-radius: 8px; padding: 9px 16px; }
@@ -2746,6 +3647,7 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .kpi-val { font: 700 21px @SANS@; color: #EDEEF0; }
 .kpi-unit { font: 12px @SANS@; color: #767C85; }
 .state-ok { color: @OK@; } .state-warn { color: @WARN@; } .state-crit { color: @CRIT@; }
+.state-dim { color: #767C85; }
 
 .cardhead { font: 600 12.5px @SANS@; color: #E6E8EA; }
 .rowsep { background: rgba(255,255,255,.05); min-height: 1px; }
@@ -3050,10 +3952,10 @@ class Spark(Gtk.DrawingArea):
 class Chart(Gtk.DrawingArea):
     """Mehrere Reihen über einer festen Fensterbreite, y-Achse optional automatisch."""
 
-    def __init__(self, series, points=60, top=100, height=130, unit="%"):
+    def __init__(self, series, points=60, top=100, height=130, unit="%", zoom=False):
         super().__init__(content_height=height, hexpand=True)
         self.series = series
-        self.top, self.unit = top, unit
+        self.top, self.unit, self.zoom = top, unit, zoom
         self.data = {k: deque([0.0] * points, maxlen=points) for k, _ in series}
         self.set_draw_func(self._draw)
 
@@ -3063,8 +3965,37 @@ class Chart(Gtk.DrawingArea):
                 self.data[k].append(v)
         self.queue_draw()
 
+    def reset(self):
+        """Leert die Reihen. Vorgefüllte Nullen wären eine Linie am Boden, die
+        wie ein gemessener Wert aussieht."""
+        for k, d in self.data.items():
+            self.data[k] = deque(maxlen=d.maxlen)
+        self.queue_draw()
+
+    def _range(self):
+        """Bei zoom liegt die Achse um die Messwerte statt bei null. Ein Takt
+        zwischen 1900 und 1970 MHz ist auf einer Nullachse eine gerade Linie,
+        obwohl genau diese 70 MHz die Aussage sind."""
+        vals = [v for d in self.data.values() for v in d if v > 0]
+        if not self.zoom:
+            return 0.0, float(self.top or max(1.0, max(vals or [1.0]) * 1.2))
+        if len(vals) < 2:
+            return 0.0, 1.0
+        hi = max(vals)
+        # Der Leerlauf vor dem Spielstart liegt weit unter dem Arbeitsbereich.
+        # Bliebe er in der Skala, wäre der Takt unter Last eine gerade Linie
+        # am oberen Rand, und genau deren Verlauf ist die Frage.
+        busy = [v for v in vals if v > hi / 2] or vals
+        lo = min(busy)
+        pad = max((hi - lo) * .25, hi * .02, 1)
+        return max(lo - pad, 0), hi + pad
+
     def _draw(self, _a, cr, w, h):
-        top = self.top or max(1.0, max(max(d) for d in self.data.values()) * 1.2)
+        lo, top = self._range()
+        span = max(top - lo, 1e-6)
+        # Ohne Messwerte bleibt die Achse unbeschriftet: eine erfundene Skala
+        # neben einem leeren Diagramm liest sich wie ein Messergebnis.
+        scale = any(v > 0 for d in self.data.values() for v in d)
         cr.select_font_face(CAIRO_SANS, 0, 0)
         cr.set_font_size(9)
         for i in range(5):
@@ -3074,17 +4005,26 @@ class Chart(Gtk.DrawingArea):
             cr.move_to(34, y)
             cr.line_to(w, y)
             cr.stroke()
-            cr.set_source_rgb(*rgb("#6F757E"))
-            cr.move_to(2, y + 3)
-            cr.show_text(f"{top * (4 - i) / 4:.0f}")
+            if scale:
+                cr.set_source_rgb(*rgb("#6F757E"))
+                cr.move_to(2, y + 3)
+                cr.show_text(f"{lo + span * (4 - i) / 4:.0f}")
         for key, color_key in self.series:
             vals = self.data[key]
             step = (w - 36) / max(len(vals) - 1, 1)
             cr.set_source_rgb(*rgb(COLORS[color_key]))
             cr.set_line_width(1.8)
+            # Auf einer gezoomten Achse ist eine Null keine gemessene Null,
+            # sondern ein Messpunkt ohne Wert. Als Punkt gezeichnet risse er
+            # die Linie nach unten.
+            pen = False
             for i, v in enumerate(vals):
-                y = 6 + (h - 20) * (1 - min(max(v / top, 0), 1))
-                (cr.line_to if i else cr.move_to)(34 + i * step, y)
+                if self.zoom and v < lo:
+                    pen = False
+                    continue
+                y = 6 + (h - 20) * (1 - min(max((v - lo) / span, 0), 1))
+                (cr.line_to if pen else cr.move_to)(34 + i * step, y)
+                pen = True
             cr.stroke()
 
 
@@ -3110,6 +4050,37 @@ class Bar(Gtk.DrawingArea):
             cr.rectangle(0, h * (1 - f), w, h * f)
         else:
             cr.rectangle(0, 0, w * f, h)
+        cr.fill()
+
+
+class Span(Gtk.DrawingArea):
+    """Der Bereich, in dem ein Messwert lag, mit dem üblichen Wert als Marke.
+
+    Drei Zahlen nebeneinander sagen nicht, ob ein Wert stabil stand oder über
+    die ganze Skala sprang. Der Balken zeigt genau das."""
+
+    def __init__(self, lo, hi, vmin, vmed, vmax, color_key="acc", height=10):
+        super().__init__(content_height=height, hexpand=True)
+        self.lo, self.hi = lo, max(hi, lo + 1e-6)
+        self.vmin, self.vmed, self.vmax = vmin, vmed, vmax
+        self.color_key = color_key
+        self.set_draw_func(self._draw)
+
+    def _x(self, w, v):
+        return w * min(max((v - self.lo) / (self.hi - self.lo), 0), 1)
+
+    def _draw(self, _a, cr, w, h):
+        r = h / 2
+        cr.set_source_rgb(*rgb("#232830"))
+        cr.rectangle(0, r - 1.5, w, 3)
+        cr.fill()
+        col = rgb(COLORS[self.color_key])
+        a, b = self._x(w, self.vmin), self._x(w, self.vmax)
+        cr.set_source_rgba(*col, .45)
+        cr.rectangle(a, r - 1.5, max(b - a, 2), 3)
+        cr.fill()
+        cr.set_source_rgb(*col)
+        cr.arc(self._x(w, self.vmed), r, r - 2, 0, 6.2832)
         cr.fill()
 
 
@@ -3359,6 +4330,8 @@ class App(Gtk.Application):
         self.procs_busy = False
         self.dyno_id = None
         self.dyno_samples = []
+        self.dyno_game = ""
+        self.dyno_result = None
         self.upd_running = False
 
     def do_activate(self):
@@ -3824,8 +4797,7 @@ class App(Gtk.Application):
         info = [f for f in self.findings if f.sev == "info"]
         self.prob_sub.set_text(
             _("{crit} kritisch · {warn} Hinweise").format(
-                crit=len(crit), warn=len(warn))
-            + (_(" · {n} zur Kenntnis").format(n=len(info)) if info else ""))
+                crit=len(crit), warn=len(warn) + len(info)))
         if not self.findings:
             e = box(spacing=6, halign=Gtk.Align.CENTER)
             e.append(lbl(_("Keine Befunde. Das System läuft sauber."), "empty"))
@@ -3846,42 +4818,93 @@ class App(Gtk.Application):
         wrap = box()
         wrap.append(sep())
         r = box(True, 14, margin_top=14, margin_bottom=14, margin_start=18, margin_end=18)
-        dot = Gtk.Box(valign=Gtk.Align.CENTER)
+        # Bei einer Zeile mittig, bei einem aufgeklappten Befund oben: sonst
+        # steht der Punkt neben dem Aufklapper statt neben dem Titel.
+        tall = bool(f.lines or f.actions)
+        top = Gtk.Align.START if tall else Gtk.Align.CENTER
+        dot = Gtk.Box(valign=top)
+        if tall:
+            dot.set_margin_top(7)
         dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn"}
                           .get(f.sev, "bullet-info"))
         r.append(dot)
         txt = box(spacing=2, hexpand=True)
         txt.append(lbl(f.title, "row-title"))
         txt.append(lbl(f.detail, "row-detail", wrap=True, chars=70))
+        if f.lines:
+            txt.append(self._finding_details(f))
+        if f.actions:
+            txt.append(self._finding_actions(f))
         r.append(txt)
         if f.badge:
             pill = lbl(f.badge, "pill")
             if f.badge_ok:
                 pill.add_css_class("ok")
-            pill.set_valign(Gtk.Align.CENTER)
+            pill.set_valign(top)
             r.append(pill)
         if f.report:
-            rb = Gtk.Button(label=_("Was heißt das für mich?"), valign=Gtk.Align.CENTER)
+            rb = Gtk.Button(label=_("Was heißt das für mich?"), valign=top)
             rb.add_css_class("btn-ghost")
             rb.connect("clicked", self._show_report, f)
             r.append(rb)
-        b = Gtk.Button(label=_("Beheben") if f.cmd else _("Details"), valign=Gtk.Align.CENTER)
-        b.add_css_class("btn-fix")
-        b.connect("clicked", self._show_fix, f)
-        r.append(b)
+        # Wo der Befund eigene Schaltflaechen mitbringt, waere ein Beheben-Knopf
+        # daneben eine falsche Aussage: da ist nichts zu beheben.
+        if not f.actions:
+            b = Gtk.Button(label=_("Beheben") if f.cmd else _("Details"),
+                           valign=Gtk.Align.CENTER)
+            b.add_css_class("btn-fix")
+            b.connect("clicked", self._show_fix, f)
+            r.append(b)
         wrap.append(r)
         return wrap
 
+    def _finding_details(self, f):
+        """Aufklappbarer Teil, eine Zeile je Aussage."""
+        exp = Gtk.Expander(margin_top=8)
+        exp.set_label_widget(lbl(_("Was das für diesen Rechner heißt"), "row-detail"))
+        det = box(spacing=7, margin_top=9, margin_start=4, margin_bottom=2)
+        for icon, state, text in f.lines:
+            row = box(True, 9)
+            img = Gtk.Image.new_from_icon_name(icon)
+            img.add_css_class(f"state-{state}")
+            img.set_valign(Gtk.Align.START)
+            row.append(img)
+            row.append(lbl(text, "row-detail", wrap=True, chars=64))
+            det.append(row)
+        exp.set_child(det)
+        return exp
+
+    def _finding_actions(self, f):
+        """Kein Akzentgelb: das bleibt Befunden, bei denen etwas kaputt ist."""
+        bar = box(True, 8, margin_top=12)
+        for i, (label, method, arg) in enumerate(f.actions):
+            b = Gtk.Button(label=label)
+            last = i == len(f.actions) - 1
+            b.add_css_class("btn-quiet" if last else "btn-ghost")
+            if last:
+                b.set_hexpand(True)
+                b.set_halign(Gtk.Align.END)
+            b.connect("clicked", getattr(self, method), f, arg)
+            bar.append(b)
+        return bar
+
     def _show_report(self, _b, f):
         """Fenster mit einer Einschätzung, die erst beim Öffnen ermittelt wird."""
-        win = Gtk.Window(title=f.title, transient_for=self.win, modal=True,
+        self._text_window(f.title,
+                          _("Wird für diesen Rechner geprüft …\n\n"
+                            "Dabei werden auch die Paketquellen gefragt, ob sie das "
+                            "neue Release schon kennen. Das dauert einen Moment."),
+                          f.report)
+
+    def _text_window(self, title, placeholder, loader):
+        """Textfenster, dessen Inhalt in einem Thread entsteht. loader darf ins
+        Netz, die Oberfläche bleibt währenddessen bedienbar."""
+        win = Gtk.Window(title=title, transient_for=self.win, modal=True,
                          default_width=680, default_height=520)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
-        buf.set_text(_("Wird für diesen Rechner geprüft …\n\n"
-                     "Dabei werden auch die Paketquellen gefragt, ob sie das neue "
-                     "Release schon kennen. Das dauert einen Moment."))
+        buf.set_text(placeholder)
         close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END, margin_top=10)
         close.connect("clicked", lambda *_: win.close())
         copy = Gtk.Button(label=_("Text kopieren"), halign=Gtk.Align.END, margin_top=10)
@@ -3903,7 +4926,7 @@ class App(Gtk.Application):
 
         def worker():
             try:
-                GLib.idle_add(fill, f.report())
+                GLib.idle_add(fill, loader())
             except Exception as e:
                 traceback.print_exc()
                 GLib.idle_add(fill, f"Die Prüfung ist fehlgeschlagen: {e}")
@@ -3946,6 +4969,81 @@ class App(Gtk.Application):
         self.rescan()
         for page in ("Speicher", "Autostart"):
             self._build_reload(page)
+
+    # Ubuntu-Release
+
+    def _snooze_finding(self, _b, f, until):
+        """Befund zurückstellen, bis Ubuntu die genannte Fassung anbietet.
+
+        Er verschwindet aus dem Systemcheck, aber nicht aus der App: die
+        Einstellungen zeigen ihn und nehmen das Zurückstellen zurück.
+        """
+        snooze_set(f.key, until)
+        self._build_reload("Einstellungen")
+        self.rescan()
+
+    def _check_sources(self, _b, _f, codename):
+        """Fragt jede Fremdquelle einmal, ob sie das neue Release kennt.
+
+        Nur HEAD-Anfragen, es wird nichts an der Paketverwaltung geändert.
+        """
+        def load():
+            rows = sources_check(codename)
+            sources_cache_write(codename, rows)
+            GLib.idle_add(self.rescan)      # Zahl im Befund nachziehen
+            return sources_text(rows, codename)
+
+        self._text_window(_("Fremdquellen prüfen"),
+                          _("Jede eingetragene Fremdquelle wird einmal gefragt, ob "
+                            "sie {codename} schon kennt. Höchstens {secs} Sekunden."
+                            ).format(codename=codename, secs=SOURCES_TOTAL), load)
+
+    def _confirm_upgrade(self, _b, f, codename):
+        """Startet nichts von sich aus, sondern zeigt erst, was das bedeutet."""
+        rows = sources_cached(codename)
+        parts = []
+        if rows is None:
+            parts.append(_("Die Fremdquellen sind noch nicht geprüft. Ohne die "
+                           "Prüfung ist offen, welche beim Upgrade wegfallen."))
+        elif rows:
+            missing = [r[0] for r in rows if r[2] == "missing"]
+            parts.append(_("{n} von {total} Fremdquellen kennen {codename} noch "
+                           "nicht.").format(n=len(missing), total=len(rows),
+                                            codename=codename)
+                         + (" " + ", ".join(missing[:8]) if missing else ""))
+        parts.append(_("Quellen ohne Pakete für das neue Release werden vom "
+                       "Upgrade abgeschaltet. Die Programme daraus bleiben "
+                       "installiert, bekommen aber keine Updates mehr."))
+        parts.append(_("Das Upgrade läuft in einem eigenen Terminal, dauert je "
+                       "nach Verbindung eine halbe bis anderthalb Stunden und "
+                       "endet mit einem Neustart. Vorher einen Timeshift-Snapshot "
+                       "anlegen."))
+        argv = terminal_cmd(["sudo", "do-release-upgrade", "-d"])
+        if not argv:
+            self._alert(_("Kein Terminal gefunden"),
+                        _("Das Upgrade gehört in ein sichtbares Terminal. Öffne "
+                          "eins und starte dort:") + "\n\nsudo do-release-upgrade -d")
+            return
+        d = Gtk.AlertDialog(modal=True)
+        d.set_message(_("Jetzt auf {v} wechseln?").format(v=f.badge))
+        d.set_detail("\n\n".join(parts) + "\n\n" + " ".join(argv))
+        d.set_buttons([_("Abbrechen"), _("Upgrade starten")])
+        d.set_default_button(0)
+        d.set_cancel_button(0)
+        d.choose(self.win, None, lambda dlg, res: self._upgrade_response(dlg, res, argv))
+
+    def _upgrade_response(self, dlg, res, argv):
+        try:
+            if dlg.choose_finish(res) != 1:
+                return
+        except GLib.Error:
+            return
+        try:
+            # Bewusst nicht ins Logfenster: das Upgrade fragt zurueck, und der
+            # Nutzer muss mitlesen und abbrechen koennen.
+            subprocess.Popen(argv)
+        except OSError as e:
+            self._alert(_("Terminal nicht gestartet"), str(e))
 
     # Vorfälle
 
@@ -4501,49 +5599,179 @@ class App(Gtk.Application):
 
     # Prüfstand
 
+    DYNO_KPI = ((N_("UNTER LAST"), "min"), (N_("GPU-TEMPERATUR"), "°C"),
+                (N_("GPU-TAKT"), "MHz"), (N_("GEDROSSELT"), "%"))
+
     def _page_dyno(self):
         p = box(spacing=16)
+        self.dyno_copy = Gtk.Button(label=_("Bericht kopieren"), sensitive=False)
+        self.dyno_copy.add_css_class("btn-ghost")
+        self.dyno_copy.connect("clicked", lambda *a: self._dyno_copy())
         self.dyno_btn = Gtk.Button(label=_("Aufzeichnung starten"))
         self.dyno_btn.add_css_class("btn-accent")
-        self.dyno_btn.connect("clicked", lambda *_: self._dyno_toggle())
-        head, self.dyno_sub = self._head(_("Prüfstand"), "bereit", self.dyno_btn)
+        self.dyno_btn.connect("clicked", lambda *a: self._dyno_toggle())
+        head, self.dyno_sub = self._head(_("Prüfstand"), _("bereit"),
+                                         self.dyno_copy, self.dyno_btn)
         p.append(head)
-        p.append(card(lbl(_("Starte die Aufzeichnung, dann belaste den Rechner wie "
-                          "im Alltag: spielen, rendern, kompilieren. Danach steht "
-                          "hier, wie heiß es wurde, wie tief der Takt fiel und ab "
-                          "wann gedrosselt wurde. Einzelne Momentwerte zeigen das "
-                          "nicht, weil die Drosselung erst nach Minuten einsetzt."),
-                          "lede", wrap=True, chars=95)))
+
+        v = box(spacing=0)
+        self.dyno_eyebrow = lbl("", "eyebrow")
+        v.append(self.dyno_eyebrow)
+        self.dyno_headline = lbl("", "headline", wrap=True, chars=42)
+        self.dyno_headline.set_margin_top(7)
+        v.append(self.dyno_headline)
+        self.dyno_lede = lbl("", "lede", wrap=True, chars=92)
+        self.dyno_lede.set_margin_top(7)
+        v.append(self.dyno_lede)
+        self.dyno_game_lbl = lbl("", "mono-dim")
+        self.dyno_game_lbl.set_margin_top(9)
+        v.append(self.dyno_game_lbl)
+        kpis = box(True, 10, homogeneous=True, margin_top=18)
+        self.dyno_kpi = {}
+        for key, unit in self.DYNO_KPI:
+            k = box(spacing=2)
+            k.add_css_class("kpi")
+            k.append(lbl(_(key), "kpi-key"))
+            row = box(True, 4)
+            val = lbl("-", "kpi-val")
+            u = lbl(unit, "kpi-unit")
+            u.set_valign(Gtk.Align.END)
+            u.set_margin_bottom(3)
+            row.append(val)
+            row.append(u)
+            k.append(row)
+            self.dyno_kpi[key] = val
+            kpis.append(k)
+        v.append(kpis)
+        p.append(card(v, 20))
+
+        charts = box(True, 16, homogeneous=True)
+        self.dyno_chart = Chart([("cpu_temp", "warn"), ("gpu_temp", "crit")],
+                                points=180, top=110, height=140, unit="°C")
+        self.dyno_clock = Chart([("gpu_clock", "acc")], points=180, top=None,
+                                height=140, unit="MHz", zoom=True)
+        for title, right, ch in ((_("Temperatur"), _("CPU und GPU"), self.dyno_chart),
+                                 (_("GPU-Takt"), _("hält er durch?"), self.dyno_clock)):
+            c = box()
+            c.add_css_class("card")
+            c.append(card_head(title, right))
+            ch.reset()
+            ch.set_margin_start(16)
+            ch.set_margin_end(16)
+            ch.set_margin_bottom(14)
+            c.append(ch)
+            charts.append(c)
+        p.append(charts)
 
         c = box()
         c.add_css_class("card")
-        c.append(card_head("Verlauf", _("Temperatur und Takt")))
-        self.dyno_chart = Chart([("cpu_temp", "warn"), ("gpu_temp", "crit")],
-                                points=180, top=110, height=150, unit="°C")
-        self.dyno_chart.set_margin_start(18)
-        self.dyno_chart.set_margin_end(18)
-        self.dyno_chart.set_margin_bottom(16)
-        c.append(self.dyno_chart)
+        c.append(card_head(_("Messwerte unter Last"),
+                           _("niedrigster · üblich · höchster")))
+        self.dyno_table = box()
+        c.append(self.dyno_table)
         p.append(c)
 
-        self.dyno_view = Gtk.TextView(editable=False, monospace=True,
-                                      cursor_visible=False)
-        self.dyno_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        for m in ("top", "bottom", "start", "end"):
-            getattr(self.dyno_view, f"set_margin_{m}")(18 if m in ("start", "end") else 14)
-        self.dyno_view.get_buffer().set_text(
-            "Noch keine Aufzeichnung.\n\n"
-            "Empfehlung: mindestens zehn Minuten unter der Last, die dich "
-            "interessiert. Kürzere Läufe zeigen die Drosselung oft noch nicht.")
-        res = box()
-        res.add_css_class("card")
-        res.append(card_head(_("Auswertung")))
-        res.append(self.dyno_view)
-        p.append(res)
-        self._fill_dyno_history(p)
+        c = box()
+        c.add_css_class("card")
+        c.append(card_head(_("Was du ändern kannst")))
+        self.dyno_advice = box()
+        c.append(self.dyno_advice)
+        p.append(c)
+
+        self.dyno_hist = box()
+        p.append(self.dyno_hist)
+        self._dyno_show(None)
+        self._fill_dyno_history()
         return self._scroll(p)
 
-    def _fill_dyno_history(self, parent):
+    def _dyno_show(self, summary):
+        """Verdikt, Kennzahlen, Messwerte und Empfehlungen aus einem Lauf."""
+        self.dyno_result = summary
+        self.dyno_copy.set_sensitive(bool(summary))
+        eyebrow, headline, lede, sev = record_verdict(summary)
+        self.dyno_eyebrow.set_text(eyebrow)
+        for cls in ("state-ok", "state-warn", "state-crit", "state-dim"):
+            self.dyno_eyebrow.remove_css_class(cls)
+        self.dyno_eyebrow.add_css_class({"ok": "state-ok", "warn": "state-warn",
+                                         "crit": "state-crit"}.get(sev, "state-dim"))
+        self.dyno_headline.set_text(headline)
+        self.dyno_lede.set_text(lede)
+        s = summary or {}
+        game = s.get("game", "") or self.dyno_game
+        self.dyno_game_lbl.set_text(
+            _("aufgezeichnet, während {game} lief").format(game=game) if game else "")
+        self.dyno_game_lbl.set_visible(bool(game))
+        thr = s.get("throttle_share")
+        for key, text in zip([k for k, _u in self.DYNO_KPI],
+                             (f"{s.get('load_secs', 0) // 60}" if summary else "-",
+                              f"{s.get('gpu_temp', {}).get('max', 0):.0f}"
+                              if s.get("gpu_temp") else "-",
+                              f"{s.get('gpu_clock', {}).get('med', 0):.0f}"
+                              if s.get("gpu_clock") else "-",
+                              str(thr) if thr else "0" if summary else "-")):
+            self.dyno_kpi[key].set_text(text)
+        self._fill_dyno_table(s)
+        self._fill_dyno_advice(summary)
+
+    def _fill_dyno_table(self, summary):
+        clear(self.dyno_table)
+        rows = [(k, summary[k]) for k in RECORD_LABEL if summary.get(k)]
+        if not rows:
+            e = box(halign=Gtk.Align.CENTER)
+            e.append(lbl(_("Noch keine Messwerte. Der Lauf füllt diese Tabelle."),
+                         "empty"))
+            self.dyno_table.append(card(e, 26))
+            return
+        for key, v in rows:
+            label, unit = RECORD_LABEL[key]
+            state = record_state(key, v["max"])
+            scale = RECORD_SCALE.get(key)
+            lo, hi = scale[:2] if scale else (0, max(v["max"] * 1.05, 1))
+            row = box(True, 16, margin_top=11, margin_bottom=11,
+                      margin_start=18, margin_end=18)
+            name = lbl(label, "row-title")
+            name.set_size_request(160, -1)
+            row.append(name)
+            sp = Span(lo, hi, v["min"], v["med"], v["max"], state or "acc")
+            sp.set_valign(Gtk.Align.CENTER)
+            row.append(sp)
+            nums = lbl(f"{v['min']:.0f} · {v['med']:.0f} · {v['max']:.0f} {unit}",
+                       "mono", xalign=1.0)
+            nums.set_size_request(150, -1)
+            row.append(nums)
+            w = box()
+            w.append(sep())
+            w.append(row)
+            self.dyno_table.append(w)
+
+    def _fill_dyno_advice(self, summary):
+        clear(self.dyno_advice)
+        advice = record_advice(summary)
+        if not advice:
+            e = box(halign=Gtk.Align.CENTER)
+            e.append(lbl(_("Hier stehen nach dem Lauf die Maßnahmen, die bei "
+                           "genau diesem Rechner etwas bringen."), "empty",
+                         0.5, True, 70))
+            self.dyno_advice.append(card(e, 26))
+            return
+        for sev, title, detail in advice:
+            row = box(True, 14, margin_top=13, margin_bottom=13,
+                      margin_start=18, margin_end=18)
+            dot = Gtk.Box(valign=Gtk.Align.START, margin_top=6)
+            dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn",
+                               "ok": "bullet-ok"}.get(sev, "bullet-info"))
+            row.append(dot)
+            txt = box(spacing=3, hexpand=True)
+            txt.append(lbl(title, "row-title"))
+            txt.append(lbl(detail, "row-detail", wrap=True, chars=86))
+            row.append(txt)
+            w = box()
+            w.append(sep())
+            w.append(row)
+            self.dyno_advice.append(w)
+
+    def _fill_dyno_history(self):
+        clear(self.dyno_hist)
         runs = history_read(6, kind="run")
         if not runs:
             return
@@ -4555,22 +5783,36 @@ class App(Gtk.Application):
             row = box(True, 12, margin_top=9, margin_bottom=9,
                       margin_start=18, margin_end=18)
             row.append(lbl(time.strftime("%d.%m. %H:%M", time.localtime(r["t"])), "mono"))
-            secs = s.get("secs", 0)
-            row.append(lbl(f"{secs // 60}:{secs % 60:02d} min", "mono-dim"))
-            for key in ("cpu_temp", "gpu_temp"):
-                v = s.get(key, {}).get("max")
-                t = lbl(f"{RECORD_LABEL[key][0]} max {v:.0f} °C" if v else "-",
-                        "mono", xalign=1.0)
-                t.set_hexpand(True)
-                row.append(t)
-            thr = s.get("throttle_share")
-            row.append(lbl(f"{thr} % gedrosselt" if thr else _("ohne Drosselung"),
-                           "mono-dim", xalign=1.0))
+            # Läufe aus älteren Versionen kennen nur die Gesamtdauer, die als
+            # Lastdauer auszugeben wäre eine erfundene Zahl.
+            row.append(lbl(_("{t} min Last").format(t=mmss(s["load_secs"]))
+                           if "load_secs" in s
+                           else _("{t} min").format(t=mmss(s.get("secs", 0))),
+                           "mono-dim"))
+            game = lbl(s.get("game", ""), "mono")
+            game.set_hexpand(True)
+            row.append(game)
+            v = s.get("gpu_temp", {}).get("max")
+            t = lbl(_("GPU max {v:.0f} °C").format(v=v) if v else "-",
+                    "mono", xalign=1.0)
+            t.set_hexpand(True)
+            row.append(t)
+            eyebrow, _h, _l, sev = record_verdict(s)
+            pill = lbl(eyebrow, "pill")
+            pill.set_valign(Gtk.Align.CENTER)
+            if sev in ("ok", "warn", "crit"):
+                pill.add_css_class(sev)
+            row.append(pill)
             w = box()
             w.append(sep())
             w.append(row)
             c.append(w)
-        parent.append(c)
+        self.dyno_hist.append(c)
+
+    def _dyno_copy(self):
+        Gdk.Display.get_default().get_clipboard().set(
+            format_summary(self.dyno_result))
+        self.dyno_sub.set_text(_("Bericht in der Zwischenablage"))
 
     def _dyno_toggle(self):
         if self.dyno_id:
@@ -4578,20 +5820,32 @@ class App(Gtk.Application):
             self.dyno_id = None
             self.dyno_btn.set_label(_("Aufzeichnung starten"))
             summary = record_summary(self.dyno_samples)
-            self.dyno_view.get_buffer().set_text(format_summary(summary))
-            self.dyno_sub.set_text("fertig")
+            if summary and self.dyno_game:
+                summary["game"] = self.dyno_game
+            self._dyno_show(summary or None)
+            self.dyno_sub.set_text(_("fertig · {game}").format(game=self.dyno_game)
+                                   if self.dyno_game else _("fertig"))
             if summary:
                 history_append({"t": time.time(), "kind": "run", "summary": summary})
+                self._fill_dyno_history()
             return
         self.dyno_samples = []
-        self.dyno_prev = cpu_times()
+        self.dyno_game = ""
+        self.dyno_scan = 0
+        self.dyno_prev = cpu_times(True)
         self.dyno_t0 = time.monotonic()
-        self.dyno_chart.data = {k: deque([0.0], maxlen=180)
-                                for k in ("cpu_temp", "gpu_temp")}
+        self.dyno_chart.reset()
+        self.dyno_clock.reset()
         self.dyno_btn.set_label(_("Aufzeichnung beenden"))
-        self.dyno_view.get_buffer().set_text(_("Läuft. Belaste den Rechner jetzt so, "
-                                             "wie du ihn im Alltag belastest."))
+        self._dyno_show(None)
+        self.dyno_eyebrow.set_text(_("LÄUFT"))
+        self.dyno_headline.set_text(_("Aufzeichnung läuft"))
+        self.dyno_lede.set_text(_("Starte jetzt das Spiel und spiel eine Runde, wie "
+                                  "du sie normal spielst. Zehn Minuten unter Last "
+                                  "reichen. Drosselung setzt erst nach Minuten ein, "
+                                  "kürzere Läufe übersehen sie."))
         # Zwei Sekunden reichen: Temperaturen ändern sich langsamer als das.
+        # Für einzelne Ruckler ist das zu grob, dafür ist der Prüfstand nicht da.
         self.dyno_id = GLib.timeout_add_seconds(2, self._dyno_tick)
         self._dyno_tick()
 
@@ -4602,6 +5856,12 @@ class App(Gtk.Application):
     def _dyno_worker(self):
         s, cur = record_sample(self.dyno_prev)
         self.dyno_prev = cur
+        # Die Kommandozeilen aller Prozesse zu lesen ist zu teuer für jeden
+        # Takt. Alle zehn Sekunden reicht, und ist das Spiel erkannt, hört das
+        # Suchen ganz auf.
+        self.dyno_scan += 1
+        if not self.dyno_game and self.dyno_scan % 5 == 1:
+            self.dyno_game = running_game()
         GLib.idle_add(self._dyno_add, s)
 
     def _dyno_add(self, s):
@@ -4610,12 +5870,13 @@ class App(Gtk.Application):
         self.dyno_samples.append(s)
         self.dyno_chart.push({"cpu_temp": s.get("cpu_temp", 0),
                               "gpu_temp": s.get("gpu_temp", 0)})
+        self.dyno_clock.push({"gpu_clock": s.get("gpu_clock", 0)})
         secs = int(time.monotonic() - self.dyno_t0)
+        load = len(load_samples(self.dyno_samples))
         thr = _(" · gedrosselt") if s.get("throttled") else ""
         self.dyno_sub.set_text(
-            _("läuft seit {mins}:{secs:02d} · {n} Messpunkte{thr}").format(
-                mins=secs // 60, secs=secs % 60, thr=thr,
-                n=len(self.dyno_samples)))
+            _("läuft seit {t} · {n} Messpunkte, {load} unter Last{thr}").format(
+                t=mmss(secs), thr=thr, n=len(self.dyno_samples), load=load))
         return False
 
     # App-Check
@@ -5435,6 +6696,35 @@ class App(Gtk.Application):
 
         c = box()
         c.add_css_class("card")
+        c.append(card_head(_("Zurückgestellte Befunde")))
+        snoozed_items = sorted(snoozed_all().items())
+        if not snoozed_items:
+            t = box(spacing=4, margin_start=18, margin_end=18, margin_bottom=16)
+            t.append(lbl(_("Nichts zurückgestellt. Wer im Systemcheck auf "
+                           "\"Später erinnern\" tippt, findet den Befund hier "
+                           "wieder."), "row-detail", wrap=True, chars=80))
+            c.append(t)
+        for i, (key, entry) in enumerate(snoozed_items):
+            if i:
+                c.append(sep())
+            row = box(True, 12, margin_start=18, margin_end=18, margin_top=12,
+                      margin_bottom=12 if i < len(snoozed_items) - 1 else 16)
+            t = box(spacing=2, hexpand=True)
+            t.append(lbl(_(SNOOZE_LABEL.get(key, key)), "row-title"))
+            until = entry.get("until_version", "?") if isinstance(entry, dict) else "?"
+            since = (entry.get("snoozed_at", "") if isinstance(entry, dict) else "")
+            t.append(lbl(_("Wieder ab {v}, zurückgestellt am {date}").format(
+                v=until, date=since[:10] or "?"), "row-detail"))
+            row.append(t)
+            b = Gtk.Button(label=_("Wieder anzeigen"), valign=Gtk.Align.CENTER)
+            b.add_css_class("btn-ghost")
+            b.connect("clicked", self._unsnooze, key)
+            row.append(b)
+            c.append(row)
+        p.append(c)
+
+        c = box()
+        c.add_css_class("card")
         c.append(card_head(_("Über")))
         t = box(spacing=4, margin_start=18, margin_end=18, margin_bottom=16)
         t.append(lbl(f"dynotiq {VERSION} · GTK4 · PyGObject", "mono"))
@@ -5445,6 +6735,11 @@ class App(Gtk.Application):
         c.append(t)
         p.append(c)
         return self._scroll(p)
+
+    def _unsnooze(self, _b, key):
+        snooze_set(key, "")
+        self._build_reload("Einstellungen")
+        self.rescan()
 
     def _set_accent(self, _b, col):
         self.cfg["accent"] = col
@@ -5538,7 +6833,9 @@ class App(Gtk.Application):
     def _scan_done(self, score, findings, ctx, secs):
         self.score, self.findings = score, findings
         crit = [f for f in findings if f.sev == "crit"]
-        warn = [f for f in findings if f.sev == "warn"]
+        # Alles, was nicht kritisch ist, zaehlt als Hinweis. Ein Befund, der in
+        # der Liste steht, aber in keiner Zahl auftaucht, sieht aus wie ein Fehler.
+        warn = [f for f in findings if f.sev != "crit"]
         history_append({"t": time.time(), "kind": "scan", "score": score,
                         "crit": len(crit), "warn": len(warn)})
 
@@ -5687,8 +6984,6 @@ class App(Gtk.Application):
             GLib.idle_add(self._fill_procs, procs[:6])
         finally:
             self.procs_busy = False
-        self.dyno_id = None
-        self.dyno_samples = []
 
     def _gpu_worker(self):
         try:
@@ -5848,6 +7143,43 @@ def selftest():
     assert newer_release("24.04", rel)[0] == "26.04 LTS"
     assert newer_release("26.04", rel) is None
     assert version_tuple("24.04 LTS") == (24, 4)
+    # Das Point-Release ist die Fassung, ab der Ubuntu den Wechsel anbietet
+    assert version_parts("26.04.1") > version_parts("26.04 LTS")
+    assert short_version("26.04 LTS") == "26.04" and short_version("keine") == ""
+    assert point_version("26.04 LTS") == "26.04.1" and point_version("") == ""
+
+    # Codename, Releasedatum und Supportende kommen aus distro-info, nie aus
+    # einem festen String im Quelltext
+    csv = ("version,codename,series,created,release,eol,eol-server,eol-esm\n"
+           "24.04 LTS,Noble Numbat,noble,2023-10-12,2024-04-25,2029-05-31,"
+           "2029-05-31,2034-04-25\n"
+           "26.04 LTS,Resolute Raccoon,resolute,2025-10-09,2026-04-23,2031-05-29,"
+           "2031-05-29,2036-04-23\n")
+    di = parse_distro_info(csv)
+    assert di["26.04"] == {"series": "resolute", "release": "2026-04-23",
+                           "eol": "2031-05-29"}, di
+    assert di["24.04"]["eol"].split("-")[0] == "2029"
+    assert parse_distro_info("") == {} and parse_distro_info("version\n") == {}
+    # 23. April plus rund dreieinhalb Monate landet im August, ohne dass der
+    # Monat irgendwo im Quelltext steht
+    assert point_release_month("2026-04-23") == _(MONTHS[7])
+    assert point_release_month("2024-04-25") == _(MONTHS[7])
+    assert point_release_month("") == "" and point_release_month(None) == ""
+    assert release_facts("26.04", path="/gibt/es/nicht") == {}
+
+    # Zurückstellen: der Befund kommt wieder, sobald Ubuntu die Fassung
+    # anbietet, auf die zurückgestellt wurde
+    assert snoozed("x", "26.04") is False
+    before_snooze = snoozed_all()
+    snooze_set("selftest_finding", "26.04.1")
+    assert snoozed("selftest_finding", "26.04 LTS")
+    assert not snoozed("selftest_finding", "26.04.1")
+    assert not snoozed("selftest_finding", "26.10")
+    # Der übrige Zustand darf dabei nicht verloren gehen
+    assert state_read().get("release_dist") == before.get("release_dist")
+    snooze_set("selftest_finding", "")
+    assert snoozed_all() == before_snooze
+    assert not snoozed("selftest_finding", "26.04")
     # Treiberwechsel ohne Neustart: Modul alt, Bibliothek neu
     assert parse_nvml_mismatch("Failed to initialize NVML: Driver/library version "
                                "mismatch\nNVML library version: 610.43") == "610.43"
@@ -5867,6 +7199,44 @@ def selftest():
         "Types: deb\nURIs: https://ppa.launchpadcontent.net/lutris/ubuntu/\n"
         "Suites: noble\nComponents: main\n") == [
             ("https://ppa.launchpadcontent.net/lutris/ubuntu/", "noble")]
+    # deb822 darf mehrere URIs und Suiten in einer Datei fuehren, seit 24.04
+    # steht Ubuntus eigene Quelle selbst in diesem Format
+    assert parse_apt_source(
+        "Types: deb\nURIs: https://a.example/ubuntu https://b.example/ubuntu\n"
+        "Suites: noble noble-updates\nComponents: main\n") == [
+            ("https://a.example/ubuntu", "noble"),
+            ("https://a.example/ubuntu", "noble-updates"),
+            ("https://b.example/ubuntu", "noble"),
+            ("https://b.example/ubuntu", "noble-updates")]
+    assert parse_apt_source("Types: deb\nURIs: https://x/y\nSuites: noble\n"
+                            "# Signed-By: /x.gpg\n") == [("https://x/y", "noble")]
+    assert parse_apt_source("") == []
+    # Ubuntus eigene Quellen samt Landes-Mirror fallen raus, der Rest bleibt
+    assert ubuntu_source("http://de.archive.ubuntu.com/ubuntu")
+    assert ubuntu_source("http://security.ubuntu.com/ubuntu")
+    assert ubuntu_source("http://ports.ubuntu.com/ubuntu-ports")
+    assert not ubuntu_source("https://ppa.launchpadcontent.net/lutris/ubuntu/")
+    assert not ubuntu_source("https://pkgs.tailscale.com/stable/ubuntu")
+    # Die Statusliste sortiert das Fehlende nach oben und zaehlt es aus
+    rows = [("tailscale", "https://pkgs.tailscale.com/stable/ubuntu", "ok"),
+            ("lutris", "https://ppa.launchpadcontent.net/lutris/ubuntu/", "missing"),
+            ("eigen", "https://down.example/repo", "unknown")]
+    text = sources_text(rows, "resolute")
+    assert text.index("lutris") < text.index("eigen") < text.index("tailscale")
+    assert _("{n} von {total} Quellen haben noch keine Pakete für {codename}."
+             ).format(n=1, total=3, codename="resolute") in text
+    assert all(_(SOURCE_STATUS[s]) in text for s in ("ok", "missing", "unknown"))
+    assert sources_text([], "resolute") == _("Keine Fremdquellen eingetragen. "
+                                             "Beim Upgrade wird nichts abgeschaltet.")
+    # Ohne Quellen faellt der Check sofort durch, ohne ins Netz zu gehen
+    assert sources_check("resolute", sources=[]) == []
+    # Eine Quelle ohne festen Codenamen wird gar nicht erst gefragt, sie haengt
+    # nicht am Release. Sonst stuende hier fuer jedes Flat-Repo faelschlich 'fehlt'.
+    assert sources_check("resolute", current="noble", sources=[
+        ("vscode", "https://packages.microsoft.com/repos/code", "stable"),
+        ("naps2", "https://downloads.naps2.com", "./")]) == [
+            ("vscode", "https://packages.microsoft.com/repos/code", "ok"),
+            ("naps2", "https://downloads.naps2.com", "ok")]
     # Aus dem PPA-Dateinamen faellt der Programmname, damit die Flatpak-Suche greift
     assert ppa_program("lutris-team-ubuntu-lutris-noble") == "lutris"
     assert ppa_program("tomtomtom-ubuntu-woeusb-noble") == "woeusb"
@@ -5891,28 +7261,125 @@ def selftest():
     assert isinstance(snap, dict) and all(
         k in ("ram", "cpu_temp", "gpu_temp", "gpu_clock", "gpu_throttled", "load")
         for k in snap), snap
-    # Pruefstand: aus Messpunkten wird die Frage beantwortet, ab wann gedrosselt wird
-    samples = [{"t": 100.0, "cpu": 20, "gpu_temp": 60, "gpu_clock": 2600},
-               {"t": 130.0, "cpu": 95, "gpu_temp": 78, "gpu_clock": 2600},
-               {"t": 160.0, "cpu": 97, "gpu_temp": 87, "gpu_clock": 1800,
-                "throttled": True},
-               {"t": 190.0, "cpu": 96, "gpu_temp": 88, "gpu_clock": 1750,
-                "throttled": True}]
-    su = record_summary(samples)
-    assert su["secs"] == 90 and su["n"] == 4
-    assert su["gpu_temp"] == {"min": 60, "max": 88, "med": 82.5}, su["gpu_temp"]
-    assert su["gpu_clock"]["min"] == 1750
-    assert su["throttle_share"] == 50 and su["throttle_from"] == 60
+    # Pruefstand. Der Leerlauf vor und nach der Last darf die Auswertung nicht
+    # verwaessern: sonst steht der Ruhetakt von 210 MHz als niedrigster GPU-Takt
+    # in der Tabelle, und das ist keine Aussage ueber das Spiel.
+    assert mmss(0) == "0:00" and mmss(599) == "9:59" and mmss(1120) == "18:40"
+    idle = [{"t": 2.0 * i, "cpu": 5, "core": 9, "gpu": 2, "gpu_temp": 38,
+             "gpu_clock": 210} for i in range(5)]
+    hot = [{"t": 10.0 + 2 * i, "cpu": 40, "core": 80, "gpu": 99, "vram": 70.0,
+            "gpu_temp": 60 + i // 3, "gpu_clock": 1950 - i,
+            "throttled": i >= 60} for i in range(90)]
+    su = record_summary(idle + hot)
+    assert su["n"] == 95 and su["load_n"] == 90
+    assert su["gpu_clock"] == {"min": 1861, "max": 1950, "med": 1905.5}, su["gpu_clock"]
+    assert su["gpu_temp"]["min"] == 60 and su["gpu_temp"]["max"] == 89
+    # Der Drosselanteil bezieht sich auf die Lastphase, nicht auf den Lauf
+    assert su["throttle_share"] == 33 and su["throttle_from"] == 130
+    assert su["gpu_full"] == 100 and su["cpu_wall"] == 0
+    assert su["gpu_clock_trend"][0] > su["gpu_clock_trend"][1], su["gpu_clock_trend"]
+    assert record_verdict(su)[0] == _("HITZE")
+    titles = [t for _s, t, _d in record_advice(su)]
+    assert _("Kühlung der Grafikkarte angehen") in titles, titles
+    assert _("Undervolting prüfen") in titles
+    # Dasselbe kuehl: dann ist es das Wattbudget, und der Rat lautet anders
+    cool = [dict(s, gpu_temp=62) for s in hot]
+    assert record_verdict(record_summary(idle + cool))[0] == _("POWERLIMIT")
+    # Ein Kern am Anschlag bei nicht ausgelasteter Karte ist das CPU-Limit
+    bound = [{"t": 2.0 * i, "cpu": 30, "core": 99, "gpu": 55, "gpu_temp": 55,
+              "gpu_clock": 1900} for i in range(80)]
+    sb = record_summary(bound)
+    assert sb["cpu_wall"] == 100 and record_verdict(sb)[0] == _("CPU-LIMIT")
+    assert _("Ein Kern ist der Flaschenhals") in [t for _s, t, _d in record_advice(sb)]
+    # Nur Leerlauf: dann gibt es nichts auszuwerten und das muss dastehen
+    assert record_verdict(record_summary(idle))[0] == _("KEINE LAST")
+    assert record_advice(record_summary(idle)) == []
+    # Sauberer Lauf: keine Drosselung, kein Takteinbruch, nichts zu raten
+    ok = [{"t": 2.0 * i, "cpu": 35, "core": 60, "gpu": 80, "gpu_temp": 62,
+           "gpu_clock": 1900} for i in range(300)]
+    so = dict(record_summary(ok), gov="performance")
+    assert record_verdict(so)[0] == _("SAUBER")
+    # Sauber heisst nicht ruckelfrei, und der Hinweis darauf gehoert dazu
+    assert [t for _s, t, _d in record_advice(so)] == [_("Nichts zu tun"),
+                                                      _("Trotzdem Ruckler?")]
+    assert _("Trotzdem Ruckler?") not in [t for _s, t, _d in record_advice(su)]
+    assert record_state("gpu_temp", 70) == "ok" and record_state("gpu_temp", 80) == "warn"
+    assert record_state("gpu_temp", 90) == "crit" and record_state("gpu_clock", 3000) == ""
     assert record_summary([]) == {} and format_summary({}) == _(
         "Keine Messpunkte aufgezeichnet.")
     text = format_summary(su)
-    assert "1:30 min" in text and "1:00 min" in text
-    assert _("Die Grafikkarte drosselte in {pct} % der Messpunkte, erstmals "
-             "nach {mins}:{secs:02d} min.").format(pct=50, mins=1, secs=0) in text
-    assert _("Keine Drosselung aufgezeichnet.") in format_summary(
-        record_summary(samples[:2]))
-    s, cur = record_sample(cpu_times())
-    assert "cpu" in s and "ram" in s and isinstance(cur, tuple)
+    assert "3:00 min" in text and _("Was du ändern kannst:") in text
+    assert _("Kühlung der Grafikkarte angehen") in text
+    s, cur = record_sample(cpu_times(True))
+    assert "cpu" in s and "ram" in s and isinstance(cur, list) and len(cur) > 1
+
+    # Spiele. Der Titel kommt aus dem Installationspfad, weil der Prozess unter
+    # Proton nur wine64-preloader heisst.
+    assert GAME_DIR.search(
+        "/home/x/.steam/steam/steamapps/common/ARC Raiders/ARC.exe\x00-nolog"
+    ).group(1) == "ARC Raiders"
+    assert GAME_DIR.search("/opt/heroic/resources/app.asar") is None
+    assert GAME_DIR.search("/usr/bin/firefox") is None
+    assert game_app({"Categories": "Game;", "Exec": "x"})
+    assert game_app({"Exec": "steam steam://rungameid/1808500"})
+    assert game_app({"Exec": "lutris lutris:rungame/x"})
+    assert not game_app({"Categories": "Utility;Development;", "Exec": "/usr/bin/code"})
+    # Der Kategorie-Vergleich muss auf ganze Eintraege gehen, sonst faellt jedes
+    # Programm mit 'GameKit' oder 'Games' im Namen mit hinein
+    assert not game_app({"Categories": "GNOME;GTK;Utility;", "Exec": "/usr/bin/x"})
+    # Der Starter ist kein Spiel, das Spiel dahinter schon
+    assert game_launcher({"Exec": "/usr/games/steam steam://open/main"})
+    assert game_launcher({"Exec": "lutris %U"})
+    assert game_launcher({"Exec": "flatpak run com.usebottles.bottles"},
+                         "flatpak", "com.usebottles.bottles")
+    assert not game_launcher({"Exec": "steam steam://rungameid/1808500"})
+    assert not game_launcher({"Exec": "/usr/bin/code"})
+    assert app_source({"Exec": "steam steam://rungameid/1808500"}) == ("steam", "1808500")
+    assert app_source({"Exec": "/usr/games/steam steam://open/main"})[0] != "steam"
+    # Ein Titel, den es nicht gibt, darf keinen erfundenen Bericht liefern
+    nothing = steam_game_check("999999999")
+    assert len(nothing) == 1 and nothing[0][0] == "info", nothing
+    assert steam_game("999999999") is None
+    assert vdf_value('"name"\t\t"ARC Raiders"', "name") == "ARC Raiders"
+    assert vdf_value("", "name") == "" and vdf_value('"a" "b"', "name") == ""
+    # Dieselbe AppID steht in localconfig.vdf auch als Wert eines fremden
+    # Eintrags, und zwar vor ihrem eigenen Block. Wer die erste Fundstelle
+    # nimmt, liest die Startoptionen des falschen Spiels oder gar keine.
+    vdf = ('"UserLocalConfigStore"\n{\n\t"1361210"\t\t"3800000004000000b6a2"\n'
+           '\t"apps"\n\t{\n'
+           '\t\t"999"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"falsch"\n\t\t}\n'
+           '\t\t"1361210"\n\t\t{\n'
+           '\t\t\t"tags"\n\t\t\t{\n\t\t\t\t"0"\t\t"Favoriten"\n\t\t\t}\n'
+           '\t\t\t"LaunchOptions"\t\t"gamemoderun %command%"\n\t\t}\n\t}\n}\n')
+    assert vdf_value(vdf_block(vdf, "1361210"), "LaunchOptions") \
+        == "gamemoderun %command%"
+    assert vdf_value(vdf_block(vdf, "999"), "LaunchOptions") == "falsch"
+    assert vdf_block(vdf, "gibtsnicht") == "" and vdf_block("", "x") == ""
+    # Ohne schliessende Klammer lieber nichts als den Rest der Datei
+    assert vdf_block('"a"\n{\n\t"b"\t"c"\n', "a") == ""
+    assert env_size("10737418240") == 10737418240
+    assert env_size("512MB") == 512 << 20 and env_size("1G") == 1 << 30
+    assert env_size("") == 0 and env_size(None) == 0 and env_size("viel") == 0
+    # Bibliotheken duerfen nicht doppelt zaehlen, ~/.steam/steam ist ein
+    # Symlink auf die eigentliche Installation
+    libs = steam_libraries()
+    assert len(libs) == len({os.path.realpath(p) for p in libs}), libs
+    assert all(os.path.isdir(os.path.join(p, "steamapps")) for p in libs)
+    caches = shader_caches()
+    assert all({"name", "path", "bytes", "limit"} <= set(c) for c in caches), caches
+    assert all(os.path.isdir(c["path"]) for c in caches)
+    # Jeder Befund muss die Form haben, die die Oberflaeche erwartet
+    for sev, title, detail, fix in shader_cache_check() + game_check():
+        assert sev in ("ok", "info", "warn", "crit") and title and detail
+        assert fix is None or (len(fix) == 2 and fix[0])
+    assert free_bytes("/") > 0 and free_bytes("/gibt/es/nicht") == 0
+    assert sysctl_int("vm.max_map_count") > 0 and sysctl_int("gibt.es.nicht") == 0
+    assert isinstance(running_game(), str)
+    assert game_runs("gibtesnicht") == []
+    # Der Shader-Cache wird nur zum Systemproblem, wenn er unbrauchbar ist.
+    # Wie voll er ist, gehoert zum Spiel und steht im App-Check.
+    sc = check_shader_cache({})
+    assert sc is None or sc.sev == "warn", sc
     # App-Prüfung: Herkunft und Sandbox-Lücken erkennen
     assert exec_binary("env BAMF_DESKTOP_FILE_HINT=x /snap/bin/obsidian %U") \
         == "/snap/bin/obsidian"
