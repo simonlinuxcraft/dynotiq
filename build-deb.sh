@@ -1,29 +1,29 @@
 #!/bin/bash
-# Baut dynolab_<version>_all.deb fuer den lokalen Test. Ohne debhelper: das
+# Baut dynotiq_<version>_all.deb fuer den lokalen Test. Ohne debhelper: das
 # Paket ist reines Python, der Rest sind Icons, Kataloge und ein Starter.
 # Der Weg in die Distribution laeuft ueber build-source.sh und das PPA.
 set -eu
 cd "$(dirname "$0")"
 
-VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynolab.py)
+VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynotiq.py)
 [ -n "$VER" ] || { echo "Version nicht gefunden"; exit 1; }
-PKG="build/dynolab_${VER}_all"
+PKG="build/dynotiq_${VER}_all"
 
 # Nur den eigenen Baum wegraeumen. build/ppa gehoert build-source.sh und
 # enthaelt signierte Quellpakete, die hier nichts verloren haben.
-rm -rf "$PKG" "build/dynolab_${VER}_all.deb"
+rm -rf "$PKG" "build/dynotiq_${VER}_all.deb"
 mkdir -p "$PKG/DEBIAN"
 ./install-tree.sh "$PKG"
 
-# Zweitkopie im Arbeitsbaum, damit sich 'LANGUAGE=en python3 dynolab.py'
+# Zweitkopie im Arbeitsbaum, damit sich 'LANGUAGE=en python3 dynotiq.py'
 # ohne Installation testen laesst.
 rm -rf locale
 cp -r "$PKG/usr/share/locale" locale
 
-install -Dm644 debian/copyright "$PKG/usr/share/doc/dynolab/copyright"
+install -Dm644 debian/copyright "$PKG/usr/share/doc/dynotiq/copyright"
 
 cat > "$PKG/DEBIAN/control" <<EOF
-Package: dynolab
+Package: dynotiq
 Version: $VER
 Section: utils
 Priority: optional
@@ -31,6 +31,8 @@ Architecture: all
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0
 Recommends: librsvg2-bin, pkexec, fonts-inter
 Suggests: fwupd, flatpak
+Conflicts: dynolab
+Replaces: dynolab
 Maintainer: simonlinuxcraft <simonlinuxcraft@pm.me>
 Description: System diagnostics and tuning for Ubuntu
  Scans the machine for what slows it down: outdated graphics drivers,
@@ -47,10 +49,10 @@ EOF
 # cp erbt die Rechte aus dem Arbeitsbaum, dpkg will 755/644
 find "$PKG" -type d -exec chmod 755 {} +
 find "$PKG" -type f -exec chmod 644 {} +
-chmod 755 "$PKG/usr/bin/dynolab"
+chmod 755 "$PKG/usr/bin/dynotiq"
 
 dpkg-deb --root-owner-group --build "$PKG" > /dev/null
-DEB="build/dynolab_${VER}_all.deb"
+DEB="build/dynotiq_${VER}_all.deb"
 mv "$PKG.deb" "$DEB" 2>/dev/null || true
 ls -lh "$DEB"
 dpkg-deb -I "$DEB" | sed -n '2,12p'

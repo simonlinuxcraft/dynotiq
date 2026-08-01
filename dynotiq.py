@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dynolab - Systemdiagnose und Optimierung für Ubuntu.
+"""dynotiq - Systemdiagnose und Optimierung für Ubuntu.
 
 Copyright 2026 simonlinuxcraft
 
@@ -33,14 +33,14 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
 VERSION = "0.1"
-APP_ID = "de.dynolab.Dynolab"
+APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Die Texte im Quelltext sind deutsch, der Katalog uebersetzt sie bei Bedarf.
 # Ohne passenden Katalog bleibt es beim deutschen Original.
 LOCALE_DIRS = [os.path.join(APP_DIR, "locale"), "/usr/share/locale",
                os.path.expanduser("~/.local/share/locale")]
-_ = gettext.translation("dynolab", next((d for d in LOCALE_DIRS
+_ = gettext.translation("dynotiq", next((d for d in LOCALE_DIRS
                                          if os.path.isdir(d)), None),
                         fallback=True).gettext
 
@@ -55,20 +55,20 @@ def N_(text):
     return text
 
 
-CONFIG_DIR = os.path.expanduser("~/.config/dynolab")
-DATA_DIR = os.path.expanduser("~/.local/share/dynolab")
+CONFIG_DIR = os.path.expanduser("~/.config/dynotiq")
+DATA_DIR = os.path.expanduser("~/.local/share/dynotiq")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 HISTORY_FILE = os.path.join(DATA_DIR, "history.jsonl")
 INCIDENTS_FILE = os.path.join(DATA_DIR, "incidents.jsonl")
-WATCH_UNIT = os.path.expanduser("~/.config/systemd/user/dynolab-watch.service")
+WATCH_UNIT = os.path.expanduser("~/.config/systemd/user/dynotiq-watch.service")
 AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
 HICOLOR = os.path.expanduser("~/.local/share/icons/hicolor")
-DESKTOP_FILE = os.path.expanduser("~/.local/share/applications/dynolab.desktop")
+DESKTOP_FILE = os.path.expanduser("~/.local/share/applications/dynotiq.desktop")
 TRAY_ICON_DIR = os.path.join(DATA_DIR, "icons")
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
 SIDEBAR_WIDTH = 208
 # Updates laufen ueber apt aus dieser Quelle, nicht ueber einen eigenen Downloader.
-PPA = "ppa:simonlinuxcraft/dynolab"
+PPA = "ppa:simonlinuxcraft/dynotiq"
 
 # Aus dem Logo: Ink als Basis, Gelb als Marke. Warn liegt bewusst im Orange,
 # sonst wäre es vom Akzent nicht zu unterscheiden.
@@ -180,13 +180,13 @@ def ensure_icons():
     dunklen Panels. Für den Tray die einfarbige Variante, so wie im Icon-README.
     """
     png, svg = os.path.join(APP_DIR, "icons", "png"), os.path.join(APP_DIR, "icons", "svg")
-    jobs = [(f"{png}/app/dynolab-app-dark-{s}.png", f"{HICOLOR}/{s}x{s}/apps/dynolab.png")
+    jobs = [(f"{png}/app/dynotiq-app-dark-{s}.png", f"{HICOLOR}/{s}x{s}/apps/dynotiq.png")
             for s in ICON_SIZES]
-    jobs.append((f"{svg}/dynolab-app-dark.svg", f"{HICOLOR}/scalable/apps/dynolab.svg"))
-    mono = f"{svg}/dynolab-icon-mono-white.svg"
-    jobs.append((mono, f"{HICOLOR}/scalable/apps/dynolab-tray.svg"))
-    jobs.append((mono, f"{TRAY_ICON_DIR}/dynolab-tray.svg"))
-    jobs.append((f"{png}/app/dynolab-app-dark-256.png", f"{TRAY_ICON_DIR}/dynolab.png"))
+    jobs.append((f"{svg}/dynotiq-app-dark.svg", f"{HICOLOR}/scalable/apps/dynotiq.svg"))
+    mono = f"{svg}/dynotiq-icon-mono-white.svg"
+    jobs.append((mono, f"{HICOLOR}/scalable/apps/dynotiq-tray.svg"))
+    jobs.append((mono, f"{TRAY_ICON_DIR}/dynotiq-tray.svg"))
+    jobs.append((f"{png}/app/dynotiq-app-dark-256.png", f"{TRAY_ICON_DIR}/dynotiq.png"))
     changed = False
     for src, dst in jobs:
         if not os.path.exists(src):
@@ -198,7 +198,7 @@ def ensure_icons():
         changed = True
     # Die Shell nimmt für die Leiste lieber Raster, sonst bleibt der Platz leer.
     for size in (16, 22, 24, 32, 48):
-        dst = f"{HICOLOR}/{size}x{size}/apps/dynolab-tray.png"
+        dst = f"{HICOLOR}/{size}x{size}/apps/dynotiq-tray.png"
         if os.path.exists(mono) and not os.path.exists(dst):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             if sh(["rsvg-convert", "-w", str(size), "-h", str(size), "-o", dst, mono]) == "" \
@@ -220,14 +220,14 @@ def ensure_desktop():
         return False
     entry = ("[Desktop Entry]\n"
              "Type=Application\n"
-             "Name=Dynolab\n"
+             "Name=dynotiq\n"
              "Comment=Systemdiagnose und Optimierung\n"
-             f"Exec={sys.executable} {os.path.join(APP_DIR, 'dynolab.py')}\n"
-             "Icon=dynolab\n"
+             f"Exec={sys.executable} {os.path.join(APP_DIR, 'dynotiq.py')}\n"
+             "Icon=dynotiq\n"
              "Terminal=false\n"
              "Categories=System;Settings;Monitor;\n"
              "StartupNotify=true\n"
-             "StartupWMClass=dynolab\n")
+             "StartupWMClass=dynotiq\n")
     if read(DESKTOP_FILE) == entry.strip():
         return False
     os.makedirs(os.path.dirname(DESKTOP_FILE), exist_ok=True)
@@ -739,7 +739,7 @@ def updates_scan(include_firmware=True):
     return out
 
 
-SNAPSHOT_CMD = ["pkexec", "timeshift", "--create", "--comments", "dynolab"]
+SNAPSHOT_CMD = ["pkexec", "timeshift", "--create", "--comments", "dynotiq"]
 # Zeilen, an denen sich ablesen lässt, welches Paket gerade drankommt. Die
 # Dateivariante steht getrennt, weil dort der Name im Dateinamen steckt.
 PROGRESS_LINE = re.compile(
@@ -1884,7 +1884,7 @@ def check_release_upgrade(ctx):
                        argv=terminal_cmd(["sudo", "do-release-upgrade"]) or None,
                        warn=_("Läuft bewusst in einem eigenen Terminal, nicht in "
                             "diesem Fenster: das Upgrade tauscht Python und GTK "
-                            "aus, unter denen Dynolab selbst läuft. Das "
+                            "aus, unter denen dynotiq selbst läuft. Das "
                             "Terminalfenster bis zum Ende offen lassen, sonst "
                             "bricht das Upgrade mittendrin ab. Vorher einen "
                             "Timeshift-Snapshot anlegen."),
@@ -2058,7 +2058,7 @@ def check_updates(ctx):
 
 
 def check_self_update(ctx):
-    """Neue Dynolab-Version aus dem PPA.
+    """Neue dynotiq-Version aus dem PPA.
 
     Bewusst ueber apt statt ueber einen eigenen Downloader: dieselbe Quelle,
     dieselbe Signaturpruefung und derselbe Passwortdialog wie bei jedem anderen
@@ -2068,34 +2068,34 @@ def check_self_update(ctx):
     if not shutil.which("apt-cache"):
         return None
     inst, cand, from_repo = parse_apt_policy(
-        sh(["apt-cache", "policy", "dynolab"], timeout=30))
+        sh(["apt-cache", "policy", "dynotiq"], timeout=30))
     if not inst or inst == "(none)":
         return None
     if not from_repo:
         # Von Hand eingespielt: es gibt keine Quelle, aus der etwas kaeme.
-        # Genau der Mangel, den Dynolab bei fremden Paketen auch anzeigt.
-        return Finding("info", _("Dynolab bekommt keine Updates"),
+        # Genau der Mangel, den dynotiq bei fremden Paketen auch anzeigt.
+        return Finding("info", _("dynotiq bekommt keine Updates"),
                        _("Version {v} wurde von Hand installiert und steht in "
                          "keiner Paketquelle. Aus dem PPA holt apt neue "
                          "Fassungen von selbst.").format(v=inst),
                        _("von Hand"), False,
                        f"sudo add-apt-repository -y {PPA} && "
-                       "sudo apt install dynolab",
+                       "sudo apt install dynotiq",
                        argv=[["pkexec", "add-apt-repository", "-y", PPA],
                              ["pkexec", "/usr/bin/env",
                               "DEBIAN_FRONTEND=noninteractive",
-                              "apt-get", "install", "-y", "dynolab"]],
+                              "apt-get", "install", "-y", "dynotiq"]],
                        warn=_("Trägt die Paketquelle ein und ersetzt die "
                               "Installation durch die aus dem PPA."))
     if not cand or cand == inst:
         return None
-    return Finding("info", _("Dynolab {v} ist verfügbar").format(v=cand),
+    return Finding("info", _("dynotiq {v} ist verfügbar").format(v=cand),
                    _("Installiert ist {v}. Das Update kommt aus der Paketquelle "
                      "und läuft wie jedes andere Paket über apt.").format(v=inst),
-                   cand, True, "sudo apt update && sudo apt install dynolab",
+                   cand, True, "sudo apt update && sudo apt install dynotiq",
                    argv=[["pkexec", "apt-get", "update"],
                          ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                          "apt-get", "install", "-y", "dynolab"]],
+                          "apt-get", "install", "-y", "dynotiq"]],
                    warn=_("Dieses Fenster läuft bis zum Schließen mit der alten "
                           "Fassung weiter."))
 
@@ -2530,7 +2530,7 @@ def classify(title, detail):
 
 
 def notify(title, body):
-    sh(["notify-send", "-a", "Dynolab", "-i", "dynolab", title, body], timeout=10)
+    sh(["notify-send", "-a", "dynotiq", "-i", "dynotiq", title, body], timeout=10)
 
 
 def release_notify():
@@ -2551,7 +2551,7 @@ def release_notify():
 
 def watch(interval=30):
     """Hintergrundmodus: Journal abfragen, neue Vorfälle melden."""
-    print(f"dynolab watch: Intervall {interval} s", flush=True)
+    print(f"dynotiq watch: Intervall {interval} s", flush=True)
     incidents_sync("-1h")
     last_release = 0.0
     while True:
@@ -2582,7 +2582,7 @@ def watch(interval=30):
 
 
 WATCH_UNIT_TEXT = """[Unit]
-Description=Dynolab Hintergrunduberwachung
+Description=dynotiq Hintergrunduberwachung
 After=graphical-session.target
 
 [Service]
@@ -2597,7 +2597,7 @@ WantedBy=default.target
 
 
 def watch_enabled():
-    return sh(["systemctl", "--user", "is-enabled", "dynolab-watch.service"]).strip() \
+    return sh(["systemctl", "--user", "is-enabled", "dynotiq-watch.service"]).strip() \
         == "enabled"
 
 
@@ -2606,11 +2606,11 @@ def watch_set(enabled):
         os.makedirs(os.path.dirname(WATCH_UNIT), exist_ok=True)
         with open(WATCH_UNIT, "w") as f:
             f.write(WATCH_UNIT_TEXT.format(python=sys.executable,
-                                           script=os.path.join(APP_DIR, "dynolab.py")))
+                                           script=os.path.join(APP_DIR, "dynotiq.py")))
         sh(["systemctl", "--user", "daemon-reload"])
-        sh(["systemctl", "--user", "enable", "--now", "dynolab-watch.service"])
+        sh(["systemctl", "--user", "enable", "--now", "dynotiq-watch.service"])
     else:
-        sh(["systemctl", "--user", "disable", "--now", "dynolab-watch.service"])
+        sh(["systemctl", "--user", "disable", "--now", "dynotiq-watch.service"])
     return watch_enabled()
 
 
@@ -3271,15 +3271,15 @@ class Tray:
 
     def _sni_get(self, _c, _s, _p, _i, prop):
         vals = {
-            "Category": ("s", "SystemServices"), "Id": ("s", "dynolab"),
-            "Title": ("s", "Dynolab"), "Status": ("s", "Active"),
-            "IconName": ("s", "dynolab-tray"), "IconThemePath": ("s", TRAY_ICON_DIR),
+            "Category": ("s", "SystemServices"), "Id": ("s", "dynotiq"),
+            "Title": ("s", "dynotiq"), "Status": ("s", "Active"),
+            "IconName": ("s", "dynotiq-tray"), "IconThemePath": ("s", TRAY_ICON_DIR),
             "AttentionIconName": ("s", ""), "OverlayIconName": ("s", ""),
             "ItemIsMenu": ("b", True), "Menu": ("o", "/MenuBar"),
             "WindowId": ("u", 0),
         }
         if prop == "ToolTip":
-            return GLib.Variant("(sa(iiay)ss)", ("dynolab-tray", [], "Dynolab", self.tooltip))
+            return GLib.Variant("(sa(iiay)ss)", ("dynotiq-tray", [], "dynotiq", self.tooltip))
         sig, val = vals.get(prop, ("s", ""))
         return GLib.Variant(sig, val)
 
@@ -3376,14 +3376,14 @@ class App(Gtk.Application):
                                                   self.provider, 900)
         self.apply_css()
 
-        Gtk.Window.set_default_icon_name("dynolab")
+        Gtk.Window.set_default_icon_name("dynotiq")
         self.win = Gtk.ApplicationWindow(application=self, default_width=1180,
-                                         default_height=800, title="Dynolab",
-                                         icon_name="dynolab")
+                                         default_height=800, title="dynotiq",
+                                         icon_name="dynotiq")
         hb = Gtk.HeaderBar(show_title_buttons=True)
         t = box(True, 10)
         t.append(self._logo(18))
-        t.append(lbl("Dynolab", "hb-title"))
+        t.append(lbl("dynotiq", "hb-title"))
         t.append(lbl(self._distro(), "hb-sub"))
         hb.set_title_widget(Gtk.Box())
         hb.pack_start(t)
@@ -3409,7 +3409,7 @@ class App(Gtk.Application):
         if self.start_page in NAV and self.start_page != "Übersicht":
             self._nav_clicked(self.nav_buttons[self.start_page], self.start_page)
 
-        self.tray = Tray([(1, _("Dynolab öffnen"), self._tray_open),
+        self.tray = Tray([(1, _("dynotiq öffnen"), self._tray_open),
                           (2, _("Neu scannen"), self._tray_rescan),
                           (3, None, None),
                           (4, _("Beenden"), self._tray_quit)], on_ready=self._tray_ready)
@@ -3466,9 +3466,9 @@ class App(Gtk.Application):
         return area
 
     def _logo(self, size):
-        path = os.path.join(APP_DIR, "icons", "svg", "dynolab-icon-light.svg")
+        path = os.path.join(APP_DIR, "icons", "svg", "dynotiq-icon-light.svg")
         img = (Gtk.Image.new_from_file(path) if os.path.exists(path)
-               else Gtk.Image.new_from_icon_name("dynolab"))
+               else Gtk.Image.new_from_icon_name("dynotiq"))
         img.set_pixel_size(size)
         img.set_valign(Gtk.Align.CENTER)
         return img
@@ -3539,7 +3539,7 @@ class App(Gtk.Application):
             row = box(True, 9)
             row.append(self._logo(30))
             txt = box()
-            txt.append(lbl("dynolab", "brand"))
+            txt.append(lbl("dynotiq", "brand"))
             txt.append(lbl(f"SYSTEMDIAGNOSE v{VERSION}", "brandsub"))
             row.append(txt)
             head.append(row)
@@ -3603,7 +3603,7 @@ class App(Gtk.Application):
 
     def _show_intro(self, first=True):
         win = Gtk.Window(transient_for=self.win, modal=True, default_width=560,
-                         title="Dynolab")
+                         title="dynotiq")
         win.add_css_class("page")
         inner = box(spacing=0, margin_top=30, margin_bottom=24,
                     margin_start=32, margin_end=32)
@@ -5296,7 +5296,7 @@ class App(Gtk.Application):
 
     def _page_settings(self):
         p = box(spacing=16)
-        head, _sub = self._head(_("Einstellungen"), f"Dynolab {VERSION}")
+        head, _sub = self._head(_("Einstellungen"), f"dynotiq {VERSION}")
         p.append(head)
 
         c = box()
@@ -5351,10 +5351,10 @@ class App(Gtk.Application):
         c.append(card_head(_("System")))
         row = box(True, 12, margin_start=18, margin_end=18, margin_top=6, margin_bottom=12)
         t = box(spacing=2, hexpand=True)
-        t.append(lbl(_("Dynolab beim Login starten"), "row-title"))
-        t.append(lbl(f"{AUTOSTART_DIR}/dynolab.desktop", "mono-dim"))
+        t.append(lbl(_("dynotiq beim Login starten"), "row-title"))
+        t.append(lbl(f"{AUTOSTART_DIR}/dynotiq.desktop", "mono-dim"))
         row.append(t)
-        sw = Gtk.Switch(active=os.path.exists(f"{AUTOSTART_DIR}/dynolab.desktop"),
+        sw = Gtk.Switch(active=os.path.exists(f"{AUTOSTART_DIR}/dynotiq.desktop"),
                         valign=Gtk.Align.CENTER)
         sw.connect("state-set", self._set_own_autostart)
         row.append(sw)
@@ -5435,7 +5435,7 @@ class App(Gtk.Application):
         c.add_css_class("card")
         c.append(card_head(_("Über")))
         t = box(spacing=4, margin_start=18, margin_end=18, margin_bottom=16)
-        t.append(lbl(f"Dynolab {VERSION} · GTK4 · PyGObject", "mono"))
+        t.append(lbl(f"dynotiq {VERSION} · GTK4 · PyGObject", "mono"))
         t.append(lbl(_("Analysiert von sich aus nur lesend. Was etwas ändert, also Updates "
                      "und Behebungen, läuft erst nach deinem Klick, zeigt vorher den "
                      "vollständigen Befehl und fragt per Systemdialog nach dem Passwort."),
@@ -5503,10 +5503,10 @@ class App(Gtk.Application):
 
     def _set_own_autostart(self, _sw, state):
         os.makedirs(AUTOSTART_DIR, exist_ok=True)
-        path = f"{AUTOSTART_DIR}/dynolab.desktop"
+        path = f"{AUTOSTART_DIR}/dynotiq.desktop"
         if state:
             with open(path, "w") as f:
-                f.write("[Desktop Entry]\nType=Application\nName=Dynolab\n"
+                f.write("[Desktop Entry]\nType=Application\nName=dynotiq\n"
                         f"Exec={os.path.abspath(sys.argv[0])}\nTerminal=false\n")
         elif os.path.exists(path):
             os.unlink(path)
@@ -5593,7 +5593,7 @@ class App(Gtk.Application):
         return False
 
     def _copy_report(self, btn):
-        lines = [f"Dynolab - Systemcheck {time.strftime('%Y-%m-%d %H:%M')}",
+        lines = [f"dynotiq - Systemcheck {time.strftime('%Y-%m-%d %H:%M')}",
                  f"{cpu_model()} · Kernel {os.uname().release}",
                  f"Score: {self.score}/100", ""]
         for f in self.findings:
@@ -5935,7 +5935,7 @@ def selftest():
     assert parse_apt_policy("N: Unable to locate package foo") == ("", "", False)
     # Der Selbst-Check haengt genau an diesen drei Werten
     assert parse_apt_policy(
-        "dynolab:\n  Installed: (none)\n  Candidate: 0.2\n  Version table:\n"
+        "dynotiq:\n  Installed: (none)\n  Candidate: 0.2\n  Version table:\n"
         "     0.2 500\n        500 https://ppa.launchpadcontent.net/x/y/ubuntu "
         "noble/main amd64 Packages\n") == ("(none)", "0.2", True)
     assert check_self_update({}) is None or shutil.which("apt-cache")
@@ -6067,8 +6067,8 @@ if __name__ == "__main__":
         print(f"Icons in {HICOLOR}, Starter in {DESKTOP_FILE}")
     else:
         # WM_CLASS kommt vom prgname und muss zum StartupWMClass im Starter passen.
-        GLib.set_prgname("dynolab")
-        GLib.set_application_name("Dynolab")
+        GLib.set_prgname("dynotiq")
+        GLib.set_application_name("dynotiq")
         page = (sys.argv[sys.argv.index("--page") + 1]
                 if "--page" in sys.argv else "Übersicht")
         # Die Seitennamen sind intern deutsch, auf Englisch tippt aber

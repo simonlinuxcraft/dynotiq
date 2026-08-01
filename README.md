@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="icons/png/wordmark/wordmark-dark-1200.png">
-  <img src="icons/png/wordmark/wordmark-light-1200.png" width="380" alt="Dynolab">
+  <img src="icons/png/wordmark/wordmark-light-1200.png" width="380" alt="dynotiq">
 </picture>
 
 **System diagnostics and tuning for Ubuntu**
@@ -11,7 +11,7 @@ One GTK4 application that finds what slows a machine down, explains every
 finding in plain language and offers the matching fix.
 Nothing runs without asking first.
 
-[**Download v0.1 Beta**](https://github.com/simonlinuxcraft/dynolab/releases/tag/v0.1)
+[**Download v0.1 Beta**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.1)
 
 </div>
 
@@ -49,47 +49,47 @@ slow boot services, and a history of every scan.
 
 ## Ubuntu for now
 
-Dynolab is built and tested on Ubuntu 24.04 and newer. It leans on apt, dpkg,
+dynotiq is built and tested on Ubuntu 24.04 and newer. It leans on apt, dpkg,
 snap and Ubuntu specifics such as the HWE kernel stack and `do-release-upgrade`,
 so on other distributions parts of it will report nothing useful. Support for
 further distributions is planned.
 
 ## Install
 
-Download `dynolab_0.1_all.deb` from the
-[v0.1 Beta release](https://github.com/simonlinuxcraft/dynolab/releases/tag/v0.1)
+Download `dynotiq_0.1_all.deb` from the
+[v0.1 Beta release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.1)
 and install it:
 
-    sudo dpkg -i dynolab_0.1_all.deb
+    sudo dpkg -i dynotiq_0.1_all.deb
 
 From the PPA once a version is published there, which also keeps it updated
 through apt:
 
-    sudo add-apt-repository ppa:simonlinuxcraft/dynolab
-    sudo apt install dynolab
+    sudo add-apt-repository ppa:simonlinuxcraft/dynotiq
+    sudo apt install dynotiq
 
 Build the package yourself:
 
     ./build-deb.sh
-    sudo dpkg -i build/dynolab_0.1_all.deb
+    sudo dpkg -i build/dynotiq_0.1_all.deb
 
 Or run it from the source tree without installing:
 
-    python3 dynolab.py
+    python3 dynotiq.py
 
 ## Updates
 
-Installed from a `.deb` by hand, Dynolab gets no updates and says so in the
+Installed from a `.deb` by hand, dynotiq gets no updates and says so in the
 system check. Installed from the PPA, it updates through apt like any other
 package. The system check also reports a new version on its own, with a button
 that runs the apt install after asking for your password. Nothing is downloaded
 or installed without that click.
 
-To publish a new version to the PPA, bump `VERSION` in `dynolab.py` and
+To publish a new version to the PPA, bump `VERSION` in `dynotiq.py` and
 `debian/changelog` to the same number, then:
 
     ./build-source.sh
-    dput ppa:simonlinuxcraft/dynolab build/ppa/dynolab_0.1~ubuntu24.04.1_source.changes
+    dput ppa:simonlinuxcraft/dynotiq build/ppa/dynotiq_0.1~ubuntu24.04.1_source.changes
 
 `build-source.sh` prints the exact upload lines when it finishes. It builds and
 signs one source package per Ubuntu series, it never uploads. It needs
@@ -112,7 +112,7 @@ interface font.
 German and English. The interface follows your desktop language and falls back
 to German. To force one:
 
-    LANGUAGE=en dynolab
+    LANGUAGE=en dynotiq
 
 Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 
@@ -120,11 +120,11 @@ Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 
 | Option | Effect |
 | --- | --- |
-| `dynolab` | open the window |
-| `dynolab --page Updates` | open on a specific page |
-| `dynolab --watch` | background service, reports new incidents |
-| `dynolab --install` | place icons and a launcher for the current user |
-| `dynolab --selftest` | run the built-in checks |
+| `dynotiq` | open the window |
+| `dynotiq --page Updates` | open on a specific page |
+| `dynotiq --watch` | background service, reports new incidents |
+| `dynotiq --install` | place icons and a launcher for the current user |
+| `dynotiq --selftest` | run the built-in checks |
 
 ## Licence
 

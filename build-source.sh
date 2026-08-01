@@ -12,12 +12,12 @@
 set -eu
 cd "$(dirname "$0")"
 
-PPA="${PPA:-ppa:simonlinuxcraft/dynolab}"
+PPA="${PPA:-ppa:simonlinuxcraft/dynotiq}"
 SERIES="${SERIES:-noble resolute}"
 # Eine hochgeladene Versionsnummer ist bei Launchpad fuer immer verbraucht, auch
 # nach einem fehlgeschlagenen Bau. Beim naechsten Anlauf REV hochzaehlen.
 REV="${REV:-1}"
-# Fest verdrahtet, weil die UID des Schluessels ("Simon (Dynolab)") nicht zum
+# Fest verdrahtet, weil die UID des Schluessels ("Simon (dynotiq)") nicht zum
 # Namen im changelog passt und debuild ihn sonst nicht findet.
 KEY="${KEY:-9D421A82D67E1656}"
 # dch nimmt sonst irgendwas aus der Systemumgebung und setzt eine fremde
@@ -30,12 +30,12 @@ for t in debuild dpkg-parsechangelog msgfmt ubuntu-distro-info; do
 done
 gpg --list-secret-keys > /dev/null 2>&1 || { echo "kein GPG-Schluessel"; exit 1; }
 
-VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynolab.py)
+VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynotiq.py)
 [ -n "$VER" ] || { echo "Version nicht gefunden"; exit 1; }
 DEB_VER=$(dpkg-parsechangelog -S Version)
 case "$DEB_VER" in
   "$VER"|"$VER"~*) ;;
-  *) echo "debian/changelog steht auf $DEB_VER, dynolab.py auf $VER"; exit 1 ;;
+  *) echo "debian/changelog steht auf $DEB_VER, dynotiq.py auf $VER"; exit 1 ;;
 esac
 
 # Die Serienkennung im Versionsstring muss aufsteigend sortieren, sonst gilt
@@ -48,20 +48,20 @@ suffix() {
   echo "${VER}~ubuntu${v}.${REV}"
 }
 
-python3 dynolab.py --selftest
+python3 dynotiq.py --selftest
 
 rm -rf build/ppa
 mkdir -p build/ppa
 for s in $SERIES; do
   # Verzeichnisname landet als Praefix im Quell-Tarball, deshalb die uebliche
   # Form paket-version und nicht der Serienname.
-  work="build/ppa/dynolab-$(suffix "$s")"
+  work="build/ppa/dynotiq-$(suffix "$s")"
   mkdir -p "$work"
   # Ein Quellbaum je Serie, weil Launchpad je Serie eine eigene Version braucht.
   # Ein natives Quellpaket nimmt alles mit, deshalb fliegt raus was nicht zum
   # Bau gehoert: Arbeitsdateien, Entwuerfe, das Ergebnis vorheriger Laeufe.
   tar --exclude=./build --exclude=./locale --exclude=./.git \
-      --exclude='./__pycache__' --exclude='./Dynolab Logo Icon Design' \
+      --exclude='./__pycache__' --exclude='./dynotiq Logo Icon Design' \
       --exclude='./Pruefstand-Dashboard.html' \
       -cf - . | (cd "$work" && tar -xf -)
   ( cd "$work"
@@ -74,5 +74,5 @@ done
 echo
 echo "Fertig. Hochladen mit:"
 for s in $SERIES; do
-  echo "  dput $PPA build/ppa/dynolab_$(suffix "$s")_source.changes"
+  echo "  dput $PPA build/ppa/dynotiq_$(suffix "$s")_source.changes"
 done

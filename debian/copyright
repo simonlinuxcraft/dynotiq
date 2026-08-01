@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: dynolab
-Source: https://github.com/simonlinuxcraft/dynolab
+Upstream-Name: dynotiq
+Source: https://github.com/simonlinuxcraft/dynotiq
 
 Files: *
 Copyright: 2026 simonlinuxcraft

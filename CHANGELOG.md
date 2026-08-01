@@ -2,7 +2,7 @@
 
 ## 0.1 - First release
 
-Dynolab scans an Ubuntu machine for what slows it down, explains every finding
+dynotiq scans an Ubuntu machine for what slows it down, explains every finding
 in plain language and offers the matching fix.
 
 ### Diagnostics
