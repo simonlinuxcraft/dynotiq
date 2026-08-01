@@ -17,8 +17,9 @@ SERIES="${SERIES:-noble resolute}"
 # Eine hochgeladene Versionsnummer ist bei Launchpad fuer immer verbraucht, auch
 # nach einem fehlgeschlagenen Bau. Beim naechsten Anlauf REV hochzaehlen.
 REV="${REV:-1}"
-# Fest verdrahtet, weil die UID des Schluessels ("Simon (dynotiq)") nicht zum
-# Namen im changelog passt und debuild ihn sonst nicht findet.
+# Fest verdrahtet, weil die UID des Schluessels ("Simon (Dynolab)", noch aus
+# der Zeit vor der Umbenennung) nicht zum Namen im changelog passt und debuild
+# ihn sonst nicht findet.
 KEY="${KEY:-9D421A82D67E1656}"
 # dch nimmt sonst irgendwas aus der Systemumgebung und setzt eine fremde
 # Adresse in den changelog-Eintrag. Muss zum GPG-Schluessel passen.
