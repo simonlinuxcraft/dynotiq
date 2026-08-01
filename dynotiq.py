@@ -179,14 +179,15 @@ def ensure_icons():
     App-Icon ist die deckende Kachel, sonst verschwindet der Ink-Bogen auf
     dunklen Panels. Für den Tray die einfarbige Variante, so wie im Icon-README.
     """
-    png, svg = os.path.join(APP_DIR, "icons", "png"), os.path.join(APP_DIR, "icons", "svg")
-    jobs = [(f"{png}/app/dynotiq-app-dark-{s}.png", f"{HICOLOR}/{s}x{s}/apps/dynotiq.png")
+    icon = os.path.join(APP_DIR, "icons", "app-icon")
+    png, svg = os.path.join(icon, "png"), os.path.join(icon, "svg")
+    jobs = [(f"{png}/dynotiq-app-dark-{s}.png", f"{HICOLOR}/{s}x{s}/apps/dynotiq.png")
             for s in ICON_SIZES]
     jobs.append((f"{svg}/dynotiq-app-dark.svg", f"{HICOLOR}/scalable/apps/dynotiq.svg"))
     mono = f"{svg}/dynotiq-icon-mono-white.svg"
     jobs.append((mono, f"{HICOLOR}/scalable/apps/dynotiq-tray.svg"))
     jobs.append((mono, f"{TRAY_ICON_DIR}/dynotiq-tray.svg"))
-    jobs.append((f"{png}/app/dynotiq-app-dark-256.png", f"{TRAY_ICON_DIR}/dynotiq.png"))
+    jobs.append((f"{png}/dynotiq-app-dark-256.png", f"{TRAY_ICON_DIR}/dynotiq.png"))
     changed = False
     for src, dst in jobs:
         if not os.path.exists(src):
@@ -3444,8 +3445,8 @@ class App(Gtk.Application):
         Die Vorlage wird doppelt so gross geladen wie die Anzeige, damit sie
         auf Bildschirmen mit doppelter Aufloesung scharf bleibt.
         """
-        path = os.path.join(APP_DIR, "icons", "png", "wordmark",
-                            "wordmark-dark-1200.png")
+        path = os.path.join(APP_DIR, "icons", "wordmark", "png",
+                            "dynotiq-wordmark-dark-w1200.png")
         if not os.path.exists(path):
             return None
         try:
@@ -3466,7 +3467,8 @@ class App(Gtk.Application):
         return area
 
     def _logo(self, size):
-        path = os.path.join(APP_DIR, "icons", "svg", "dynotiq-icon-light.svg")
+        path = os.path.join(APP_DIR, "icons", "app-icon", "svg",
+                            "dynotiq-icon-light.svg")
         img = (Gtk.Image.new_from_file(path) if os.path.exists(path)
                else Gtk.Image.new_from_icon_name("dynotiq"))
         img.set_pixel_size(size)
@@ -3527,8 +3529,8 @@ class App(Gtk.Application):
     def _sidebar(self):
         s = box(spacing=1)
         s.add_css_class("sidebar")
-        head = box(spacing=3, margin_bottom=18, margin_start=8, margin_top=2)
-        mark = self._wordmark(176)
+        head = box(spacing=8, margin_bottom=18, margin_start=8, margin_top=2)
+        mark = self._wordmark(150)
         if mark:
             mark.set_halign(Gtk.Align.START)
             head.append(mark)

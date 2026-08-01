@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="icons/png/wordmark/wordmark-dark-1200.png">
-  <img src="icons/png/wordmark/wordmark-light-1200.png" width="380" alt="dynotiq">
+  <source media="(prefers-color-scheme: dark)" srcset="icons/wordmark/png/dynotiq-wordmark-dark-w1200.png">
+  <img src="icons/wordmark/png/dynotiq-wordmark-light-w1200.png" width="380" alt="dynotiq">
 </picture>
 
 **System diagnostics and tuning for Ubuntu**

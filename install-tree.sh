@@ -6,8 +6,19 @@ cd "$(dirname "$0")"
 DEST="${1:?Zielverzeichnis fehlt}"
 
 install -Dm644 dynotiq.py "$DEST/usr/lib/dynotiq/dynotiq.py"
-mkdir -p "$DEST/usr/lib/dynotiq/icons"
-cp -r icons/. "$DEST/usr/lib/dynotiq/icons/"
+
+# Nur die Dateien, die die App zur Laufzeit oeffnet. icons/ enthaelt daneben
+# das Designmaterial in Groessen und Varianten, die nie geladen werden.
+for f in app-icon/svg/dynotiq-app-dark.svg \
+         app-icon/svg/dynotiq-icon-mono-white.svg \
+         app-icon/svg/dynotiq-icon-light.svg \
+         wordmark/png/dynotiq-wordmark-dark-w1200.png; do
+  install -Dm644 "icons/$f" "$DEST/usr/lib/dynotiq/icons/$f"
+done
+for s in 16 24 32 48 64 128 256 512; do
+  install -Dm644 "icons/app-icon/png/dynotiq-app-dark-$s.png" \
+    "$DEST/usr/lib/dynotiq/icons/app-icon/png/dynotiq-app-dark-$s.png"
+done
 
 install -Dm755 /dev/stdin "$DEST/usr/bin/dynotiq" <<'EOF'
 #!/bin/sh
@@ -16,12 +27,12 @@ EOF
 
 # Icons ins Systemtheme, damit der Menueintrag schon vor dem ersten Start stimmt
 for s in 16 24 32 48 64 128 256 512; do
-  install -Dm644 "icons/png/app/dynotiq-app-dark-$s.png" \
+  install -Dm644 "icons/app-icon/png/dynotiq-app-dark-$s.png" \
     "$DEST/usr/share/icons/hicolor/${s}x${s}/apps/dynotiq.png"
 done
-install -Dm644 icons/svg/dynotiq-app-dark.svg \
+install -Dm644 icons/app-icon/svg/dynotiq-app-dark.svg \
   "$DEST/usr/share/icons/hicolor/scalable/apps/dynotiq.svg"
-install -Dm644 icons/svg/dynotiq-icon-mono-white.svg \
+install -Dm644 icons/app-icon/svg/dynotiq-icon-mono-white.svg \
   "$DEST/usr/share/icons/hicolor/scalable/apps/dynotiq-tray.svg"
 
 install -Dm644 dynotiq.desktop "$DEST/usr/share/applications/dynotiq.desktop"
