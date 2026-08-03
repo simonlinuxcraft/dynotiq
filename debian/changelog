@@ -14,6 +14,13 @@ dynotiq (0.2~beta1) noble; urgency=medium
   * Fixes: the dyno filed runs under the runtime or the Proton build instead
     of the game, measuring threads could overlap, throttling was timed from
     the start of the recording, and AMD had no VRAM, power or throttle values.
+  * Findings lead to the page that can act on them instead of opening a dialog
+    that repeats the same sentence.
+  * Several checks counted raw entries without asking whether the thing behind
+    them still exists: Proton builds of uninstalled games, snap revisions
+    regardless of size, benchmark runs regardless of age, swap without looking
+    at free memory, and an HWE kernel that need not be newer than the running
+    one. The pending update count now uses dist-upgrade like the updates page.
 
  -- simonlinuxcraft <simonlinuxcraft@pm.me>  Sat, 01 Aug 2026 21:15:00 +0200
 

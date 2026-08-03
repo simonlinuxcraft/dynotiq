@@ -19,9 +19,9 @@ Nothing runs without asking first.
 ## What it does
 
 **System check** scans for outdated graphics drivers, thermal throttling, full
-filesystems, a growing journal, failed units, stale autostart entries and
-pending updates. Every finding says what is wrong, why it matters and what to
-do about it.
+filesystems, a growing journal, failed units, startup entries and pending
+updates. Every finding says what is wrong, why it matters and what to do about
+it, and where the app can act on it, the finding leads to the page that does.
 
 **Incidents** reads the journal for audio dropouts, GPU driver errors,
 out-of-memory kills and failed systemd units. Each entry records temperature,
