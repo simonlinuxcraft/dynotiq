@@ -12,6 +12,6 @@ override_dh_auto_install:
 
 # Kein Test beim Paketbau. dynotiq.py fordert schon beim Import GTK 4.0 an, das
 # muesste sonst als Build-Depends in die Chroot, nur um einen Test zu wiederholen
-# der ohnehin schon gelaufen ist. build-source.sh fuehrt ihn vor dem Paketieren
-# aus, dort mit echten Systemwerkzeugen, die eine Chroot gar nicht hat.
+# der ohnehin schon gelaufen ist. Der Selftest laeuft vor dem Paketieren auf dem
+# Entwicklungsrechner, dort mit echten Systemwerkzeugen.
 override_dh_auto_test:

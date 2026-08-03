@@ -67,8 +67,12 @@ DESKTOP_FILE = os.path.expanduser("~/.local/share/applications/dynotiq.desktop")
 TRAY_ICON_DIR = os.path.join(DATA_DIR, "icons")
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
 SIDEBAR_WIDTH = 208
-# Updates laufen ueber apt aus dieser Quelle, nicht ueber einen eigenen Downloader.
-PPA = "ppa:simonlinuxcraft/dynotiq"
+# Updates laufen ueber apt aus dieser Quelle, nicht ueber einen eigenen
+# Downloader. Das Paket bringt Quelle und Schluessel selbst mit, deshalb steht
+# hier nur, wo beides liegt, falls jemand sie entfernt hat.
+REPO_URL = "https://simonlinuxcraft.github.io/dynotiq"
+REPO_SOURCES = "/etc/apt/sources.list.d/dynotiq.sources"
+REPO_KEYRING = "/usr/share/keyrings/dynotiq.gpg"
 
 # Aus dem Logo: Ink als Basis, Gelb als Marke. Warn liegt bewusst im Orange,
 # sonst wäre es vom Akzent nicht zu unterscheiden.
@@ -3577,7 +3581,7 @@ def check_updates(ctx):
 
 
 def check_self_update(ctx):
-    """Neue dynotiq-Version aus dem PPA.
+    """Neue dynotiq-Version aus der eigenen Paketquelle.
 
     Bewusst ueber apt statt ueber einen eigenen Downloader: dieselbe Quelle,
     dieselbe Signaturpruefung und derselbe Passwortdialog wie bei jedem anderen
@@ -3591,21 +3595,21 @@ def check_self_update(ctx):
     if not inst or inst == "(none)":
         return None
     if not from_repo:
-        # Von Hand eingespielt: es gibt keine Quelle, aus der etwas kaeme.
-        # Genau der Mangel, den dynotiq bei fremden Paketen auch anzeigt.
+        # Quelle und Schluessel liegen im Paket. Fehlen sie trotzdem, wurden sie
+        # entfernt, und dann laesst sich das nur von aussen wiederherstellen:
+        # ein reinstall braucht die Quelle, die gerade fehlt.
         return Finding("info", _("dynotiq bekommt keine Updates"),
-                       _("Version {v} wurde von Hand installiert und steht in "
-                         "keiner Paketquelle. Aus dem PPA holt apt neue "
-                         "Fassungen von selbst.").format(v=inst),
-                       _("von Hand"), False,
-                       f"sudo add-apt-repository -y {PPA} && "
-                       "sudo apt install dynotiq",
-                       argv=[["pkexec", "add-apt-repository", "-y", PPA],
-                             ["pkexec", "/usr/bin/env",
-                              "DEBIAN_FRONTEND=noninteractive",
-                              "apt-get", "install", "-y", "dynotiq"]],
-                       warn=_("Trägt die Paketquelle ein und ersetzt die "
-                              "Installation durch die aus dem PPA."))
+                       _("Version {v} steht in keiner Paketquelle. Ohne sie "
+                         "kommt hier nie eine neue Fassung an. Die drei Befehle "
+                         "tragen Schlüssel und Quelle wieder ein.").format(v=inst),
+                       _("keine Quelle"), False,
+                       f"curl -fsSL {REPO_URL}/dynotiq.gpg | "
+                       f"sudo tee {REPO_KEYRING} > /dev/null\n"
+                       f"printf 'Types: deb\\nURIs: {REPO_URL}\\nSuites: ./\\n"
+                       f"Signed-By: {REPO_KEYRING}\\n' | "
+                       f"sudo tee {REPO_SOURCES} > /dev/null\n"
+                       "sudo apt update && sudo apt install --reinstall dynotiq",
+                       key="self_update_source")
     if not cand or cand == inst:
         return None
     return Finding("info", _("dynotiq {v} ist verfügbar").format(v=cand),

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Baut dynotiq_<version>_all.deb fuer den lokalen Test. Ohne debhelper: das
-# Paket ist reines Python, der Rest sind Icons, Kataloge und ein Starter.
-# Der Weg in die Distribution laeuft ueber build-source.sh und das PPA.
+# Baut dynotiq_<version>_all.deb. Ohne debhelper: das Paket ist reines Python,
+# der Rest sind Icons, Kataloge und ein Starter. build-repo.sh ruft dieses
+# Skript auf und legt das Ergebnis ins apt-Repo.
 set -eu
 cd "$(dirname "$0")"
 
@@ -9,8 +9,7 @@ VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynotiq.py)
 [ -n "$VER" ] || { echo "Version nicht gefunden"; exit 1; }
 PKG="build/dynotiq_${VER}_all"
 
-# Nur den eigenen Baum wegraeumen. build/ppa gehoert build-source.sh und
-# enthaelt signierte Quellpakete, die hier nichts verloren haben.
+# Nur den eigenen Baum wegraeumen. build/repo gehoert build-repo.sh.
 rm -rf "$PKG" "build/dynotiq_${VER}_all.deb"
 mkdir -p "$PKG/DEBIAN"
 ./install-tree.sh "$PKG"
@@ -45,6 +44,10 @@ Description: System diagnostics and tuning for Ubuntu
  selected ones, monitors CPU, GPU, RAM and disk live, and benchmarks the
  machine.
 EOF
+
+# Die Paketquelle liegt in /etc und gehoert dem Nutzer, sobald er sie anfasst.
+# Ohne diesen Eintrag ueberschreibt jedes Upgrade seine Aenderung stillschweigend.
+echo "/etc/apt/sources.list.d/dynotiq.sources" > "$PKG/DEBIAN/conffiles"
 
 # cp erbt die Rechte aus dem Arbeitsbaum, dpkg will 755/644
 find "$PKG" -type d -exec chmod 755 {} +

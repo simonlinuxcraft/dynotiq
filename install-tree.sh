@@ -37,6 +37,18 @@ install -Dm644 icons/app-icon/svg/dynotiq-icon-mono-white.svg \
 
 install -Dm644 dynotiq.desktop "$DEST/usr/share/applications/dynotiq.desktop"
 
+# Paketquelle und Schluessel gehoeren ins Paket, sonst bekommt niemand Updates,
+# der das .deb von Hand eingespielt hat. Flaches Repo: Suite "./", keine
+# Komponenten. Signed-By zeigt auf genau diesen Schluessel und auf keinen
+# anderen, damit die Quelle nichts ausserhalb von dynotiq signieren kann.
+install -Dm644 packaging/dynotiq.gpg "$DEST/usr/share/keyrings/dynotiq.gpg"
+install -Dm644 /dev/stdin "$DEST/etc/apt/sources.list.d/dynotiq.sources" <<'EOF'
+Types: deb
+URIs: https://simonlinuxcraft.github.io/dynotiq
+Suites: ./
+Signed-By: /usr/share/keyrings/dynotiq.gpg
+EOF
+
 # Sprachkataloge. de spiegelt nur den Quelltext, ohne ihn faellt
 # LANGUAGE=de_DE:en auf den englischen Katalog durch.
 command -v msgfmt > /dev/null || { echo "msgfmt fehlt: apt install gettext" >&2; exit 1; }

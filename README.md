@@ -64,17 +64,19 @@ further distributions is planned.
 
 ## Install
 
-Download `dynotiq_0.2~beta1_all.deb` from the
+From the apt repository, which also keeps it updated:
+
+    curl -fsSL https://simonlinuxcraft.github.io/dynotiq/dynotiq.gpg | sudo tee /usr/share/keyrings/dynotiq.gpg > /dev/null
+    printf 'Types: deb\nURIs: https://simonlinuxcraft.github.io/dynotiq\nSuites: ./\nSigned-By: /usr/share/keyrings/dynotiq.gpg\n' | sudo tee /etc/apt/sources.list.d/dynotiq.sources > /dev/null
+    sudo apt update
+    sudo apt install dynotiq
+
+Or download `dynotiq_0.2~beta1_all.deb` from the
 [v0.2 Beta 1 release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
-and install it:
+and install it directly. The package carries the repository and its key, so
+updates arrive through apt either way:
 
     sudo dpkg -i dynotiq_0.2~beta1_all.deb
-
-From the PPA once a version is published there, which also keeps it updated
-through apt:
-
-    sudo add-apt-repository ppa:simonlinuxcraft/dynotiq
-    sudo apt install dynotiq
 
 Build the package yourself:
 
@@ -87,22 +89,27 @@ Or run it from the source tree without installing:
 
 ## Updates
 
-Installed from a `.deb` by hand, dynotiq gets no updates and says so in the
-system check. Installed from the PPA, it updates through apt like any other
-package. The system check also reports a new version on its own, with a button
-that runs the apt install after asking for your password. Nothing is downloaded
-or installed without that click.
+The package carries its own apt source and signing key, so updates arrive
+through `apt upgrade` like for any other package, however it was installed. The
+system check also reports a new version on its own, with a button that runs the
+apt install after asking for your password. Nothing is downloaded or installed
+without that click. Remove the source and the check says so, with the commands
+to put it back.
 
-To publish a new version to the PPA, bump `VERSION` in `dynotiq.py` and
-`debian/changelog` to the same number, then:
+The repository is served from GitHub Pages and holds binary packages only. It
+is flat, one package for every Ubuntu release, because dynotiq is
+`Architecture: all` and pure Python.
 
-    ./build-source.sh
-    dput ppa:simonlinuxcraft/dynotiq build/ppa/dynotiq_0.2~beta1~ubuntu24.04.1_source.changes
+To publish a new version, bump `VERSION` in `dynotiq.py` and `debian/changelog`
+to the same number, then:
 
-`build-source.sh` prints the exact upload lines when it finishes. It builds and
-signs one source package per Ubuntu series, it never uploads. It needs
-`devscripts`, `dput`, `debhelper` and `gettext`, plus a GPG key registered on
-Launchpad.
+    ./build-repo.sh      # builds the .deb, indexes and signs the repository
+    ./publish-repo.sh    # pushes build/repo to the gh-pages branch
+
+`build-repo.sh` never publishes, that stays a separate step. It needs
+`dpkg-dev`, `apt-utils` and `gettext`, plus the GPG key the repository is
+signed with. `publish-repo.sh` replaces the `gh-pages` branch outright; it
+carries build artefacts only, the sources live in `main`.
 
 Versions carry the Ubuntu release rather than the series name, so
 `0.2~beta1~ubuntu24.04.1` sorts below `0.2~beta1~ubuntu26.04.1`. Series names
