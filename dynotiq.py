@@ -1316,12 +1316,17 @@ def shader_cache_check(steam=True):
     caches = [c for c in shader_caches() if steam or c["name"] != "Steam"]
     if not caches:
         return out
+    # Gelesen wird die Umgebung dieses Programms. Wer die Variable nur in den
+    # Startoptionen eines Spiels setzt, faellt hier nicht auf, deshalb sagt der
+    # Text, wo der Wert herkommt.
     if os.environ.get("__GL_SHADER_DISK_CACHE") == "0":
         out.append(("crit", _("Shader-Cache ist abgeschaltet"),
-                    _("__GL_SHADER_DISK_CACHE steht auf 0. Damit übersetzt der "
-                      "Treiber bei jedem Spielstart alles neu, und jede Szene "
-                      "ruckelt beim ersten Betreten wieder. Die Variable "
-                      "entfernen oder auf 1 setzen."), None))
+                    _("__GL_SHADER_DISK_CACHE steht in dieser Sitzung auf 0. "
+                      "Damit übersetzt der Treiber bei jedem Spielstart alles "
+                      "neu, und jede Szene ruckelt beim ersten Betreten wieder. "
+                      "Die Variable entfernen oder auf 1 setzen. Steht sie nur "
+                      "in den Startoptionen eines einzelnen Spiels, gilt das "
+                      "auch nur dort."), None))
     for c in caches:
         size = fmt_bytes(c["bytes"])
         if c["limit"] and c["bytes"] >= c["limit"] * 0.85:
@@ -2586,14 +2591,31 @@ def check_gpu_driver(ctx):
 
 
 def check_missing_driver(ctx):
+    """Ein Gerät, dessen Modul nur nicht geladen ist, ist etwas anderes als
+    eins, für das der Kernel überhaupt nichts mitbringt. Vorher war beides
+    gleich kritisch."""
     bad = [d for d in ctx.get("devices", [])
            if not d["driver"] and d["class"] != "USB controller"]
     if not bad:
         return None
-    return Finding("crit",
+    nothing = [d for d in bad if not d.get("modules")]
+    return Finding("crit" if nothing else "warn",
                    _("{n} Gerät(e) ohne Kernel-Treiber").format(n=len(bad)),
-                   ", ".join(d["name"][:40] for d in bad[:3]),
-                   _("kein Treiber"), False)
+                   _("Ohne Treiber bleibt das Gerät ungenutzt. Wo ein Modul "
+                     "vorhanden ist, wurde es nur nicht geladen. Wo keins steht, "
+                     "bringt der Kernel für dieses Gerät nichts mit.")
+                   if nothing else
+                   _("Das passende Modul ist jeweils vorhanden, es wurde nur "
+                     "nicht geladen."),
+                   _("kein Treiber"), False, key="missing_driver",
+                   lines=[("application-x-firmware-symbolic",
+                           "crit" if not d.get("modules") else "warn",
+                           _("{name}: {mods}").format(
+                               name=d["name"][:48],
+                               mods=", ".join(d["modules"]) if d.get("modules")
+                               else _("kein Modul vorhanden")))
+                          for d in bad[:8]],
+                   actions=[(_("Treiber öffnen"), "_goto_page", "Treiber")])
 
 
 def nvidia_loaded_version(text=None):
@@ -2663,10 +2685,16 @@ def check_governor(ctx):
     govs = cpu_governor()
     if not govs or govs == "performance":
         return None
+    label, action = governor_action()
     return Finding("warn", _("CPU-Governor steht auf {gov}").format(gov=govs),
                    _("Unter Last kostet das Takt. performance hält die Kerne oben."),
                    _("Takt"), False,
-                   "echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
+                   "echo performance | sudo tee "
+                   "/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor",
+                   # Nur mit cpupower gibt es etwas Ausfuehrbares. Sonst bleibt
+                   # der Shell-Befehl zum Kopieren, mit Glob und tee.
+                   argv=action if isinstance(action, list) else None,
+                   key="governor")
 
 
 def check_shader_cache(ctx):
@@ -2678,7 +2706,8 @@ def check_shader_cache(ctx):
     if not bad:
         return None
     _sev, title, detail, _fix = bad[0]
-    return Finding("warn", title, detail, _("Spiele"), False, key="shader_cache")
+    return Finding("warn", title, detail, _("Spiele"), False, key="shader_cache",
+                   actions=[(_("App-Check öffnen"), "_goto_page", "App-Check")])
 
 
 def missing_compat_games(mappings=None, known=None):
@@ -2730,10 +2759,15 @@ def check_compat_tools(ctx):
 def check_orphan_prefixes(ctx):
     """Proton-Prefixe von Spielen, die es nicht mehr gibt. Die bleiben beim
     Deinstallieren liegen, und in ihnen steckt eine komplette Windows-Ablage."""
-    orphans = orphan_prefixes()[:20]
+    # Erst messen, dann kappen: ein Deckel vor der Summe macht den Befund auf
+    # einem Rechner mit vielen Karteileichen kleiner als er ist. Der Timeout ist
+    # grosszuegig, weil dir_size bei Abbruch 0 liefert und dann ausgerechnet die
+    # groessten Prefixe fehlen.
+    orphans = orphan_prefixes()
     if not orphans:
         return None
-    size = sum(dir_size(p, 5) for _a, p in orphans)
+    sized = sorted(((dir_size(p, 20), a, p) for a, p in orphans), reverse=True)
+    size = sum(s for s, _a, _p in sized)
     if size < 2 * 2**30:
         return None
     return Finding(
@@ -2743,7 +2777,11 @@ def check_orphan_prefixes(ctx):
           "obwohl die Spiele selbst weg sind. Steam räumt das beim "
           "Deinstallieren nicht mit auf. Zu finden unter steamapps/compatdata, "
           "der Ordnername ist die Nummer des Spiels.").format(n=len(orphans)),
-        _("Spiele"), False, key="orphan_prefixes")
+        _("Spiele"), False, key="orphan_prefixes",
+        lines=[("folder-symbolic", "dim",
+                _("{appid}: {size} unter {path}").format(
+                    appid=a, size=fmt_bytes(s), path=p))
+               for s, a, p in sized[:8]])
 
 
 def check_cpu_temp(ctx):
@@ -2751,8 +2789,12 @@ def check_cpu_temp(ctx):
     if not t or t < 85:
         return None
     return Finding("crit", _("CPU läuft mit {temp:.0f} °C heiß").format(temp=t),
-                   _("Ab etwa 90 °C drosselt der Takt. Lüfterkurve und Kühler prüfen."),
-                   f"{t:.0f} °C", False)
+                   _("Ab etwa 90 °C drosselt der Takt. Lüfterkurve und Kühler "
+                     "prüfen. Der Live-Monitor zeigt, ob die Temperatur hält "
+                     "oder nur ein Ausschlag war."),
+                   f"{t:.0f} °C", False, key="cpu_temp",
+                   actions=[(_("Live-Monitor öffnen"), "_goto_page",
+                             "Live-Monitor")])
 
 
 def check_gpu_throttle(ctx):
@@ -2761,8 +2803,10 @@ def check_gpu_throttle(ctx):
         return None
     return Finding("warn", _("GPU drosselt gerade"),
                    _("Takt {mhz:.0f} MHz bei {temp:.0f} °C. Power-Limit oder "
-                     "Kühlung prüfen.").format(mhz=g["clock"], temp=g["temp"]),
-                   _("gedrosselt"), False)
+                     "Kühlung prüfen. Der Prüfstand misst unter Last, wie lange "
+                     "sie den Takt hält.").format(mhz=g["clock"], temp=g["temp"]),
+                   _("gedrosselt"), False, key="gpu_throttle",
+                   actions=[(_("Prüfstand öffnen"), "_goto_page", "Prüfstand")])
 
 
 def check_filesystems(ctx):
@@ -2786,7 +2830,8 @@ def check_filesystems(ctx):
                        detail + _(". Hier liegen deine eigenen Daten, aufräumen "
                        "musst du von Hand. Was am meisten belegt, steht unter "
                        "Speicher."),
-                       badge, False)
+                       badge, False, key="filesystems",
+                       actions=[(_("Speicher öffnen"), "_goto_page", "Speicher")])
     return Finding(sev, title, detail, badge, False,
                    "sudo apt autoremove --purge && sudo apt clean",
                    argv=["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
@@ -3287,6 +3332,12 @@ def release_actions(new, codename):
     return out
 
 
+def kernel_version_tuple(text):
+    """Die ersten vier Zahlen einer Kernel- oder Paketversion. Reicht, um
+    7.0.0-28-generic gegen 7.0.0-28.28~24.04.1 zu halten."""
+    return tuple(int(x) for x in re.findall(r"\d+", text)[:4])
+
+
 def check_hwe_kernel(ctx):
     """Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber."""
     ver = os_release("VERSION_ID")
@@ -3295,6 +3346,12 @@ def check_hwe_kernel(ctx):
     pkg = f"linux-generic-hwe-{ver}"
     policy = sh(["apt-cache", "policy", pkg], timeout=30)
     if not policy.strip() or "Installed: (none)" not in policy:
+        return None
+    # Auf einem OEM- oder Mainline-Kernel waere der HWE-Stack ein Rueckschritt.
+    # "Neuerer Kernel" darf nur dastehen, wenn er wirklich neuer ist.
+    cand = re.search(r"Candidate:\s*(\S+)", policy)
+    if not cand or kernel_version_tuple(cand.group(1)) <= kernel_version_tuple(
+            os.uname().release):
         return None
     return Finding("warn", _("Neuerer Kernel verfügbar"),
                    _("{pkg} bringt den aktuellen Kernel samt Grafikstack. "
@@ -3316,6 +3373,10 @@ def check_bench_drop(ctx):
     Läufen wird daraus ein Befund: gedrosselte CPU, alternde SSD, volles
     Dateisystem."""
     runs = history_read(20, kind="bench")
+    # Ohne Altersgrenze warnt ein einmal gemessener Ausrutscher fuer immer
+    # weiter, obwohl laengst niemand mehr misst.
+    if not runs or time.time() - runs[-1].get("t", 0) > 30 * 86400:
+        return None
     worst = None
     for key in BENCH_KEYS:
         d = bench_drop(runs, key)
@@ -3332,7 +3393,8 @@ def check_bench_drop(ctx):
                      "Gründe: Wärmedrosselung, ein volles Dateisystem oder ein "
                      "Hintergrundprozess, der gerade mitläuft.").format(
                          now=now, base=base),
-                   f"-{abs(delta) * 100:.0f} %", False)
+                   f"-{abs(delta) * 100:.0f} %", False, key="bench_drop",
+                   actions=[(_("Nochmal messen"), "_goto_page", "Benchmark")])
 
 
 def check_journal(ctx):
@@ -3358,16 +3420,38 @@ def parse_disabled_snaps(text):
     return out
 
 
+def snap_revision_size(name, rev):
+    """Eine Datei, deshalb getsize statt du. Fehlt sie, zaehlt sie nicht mit."""
+    try:
+        return os.path.getsize(f"/var/lib/snapd/snaps/{name}_{rev}.snap")
+    except OSError:
+        return 0
+
+
 def check_old_snaps(ctx):
+    """snapd behaelt nach jedem Refresh die Vorgaengerrevision. Das ist der
+    Normalfall und erst dann ein Befund, wenn es spuerbar Platz kostet."""
     old = parse_disabled_snaps(sh(["snap", "list", "--all"]))
-    if not old:
+    sizes = sorted(((snap_revision_size(n, r), n, r) for n, r in old), reverse=True)
+    total = sum(s for s, _n, _r in sizes)
+    if total < 2 * 2**30:
         return None
-    return Finding("warn",
-                   _("{n} alte Snap-Revisionen liegen herum").format(n=len(old)),
-                   ", ".join(sorted({n for n, _r in old})[:6]),
+    return Finding("info",
+                   _("{size} in alten Snap-Revisionen").format(size=fmt_bytes(total)),
+                   _("Das sind die Vorgängerversionen, auf die snap zurückrollen "
+                     "könnte. Nach dem Entfernen geht das nicht mehr."),
                    _("{n} Pakete").format(n=len(old)), False,
                    "snap list --all | awk '/disabled/{print $1, $3}' | "
-                   "while read s r; do sudo snap remove \"$s\" --revision=\"$r\"; done")
+                   "while read s r; do sudo snap remove \"$s\" --revision=\"$r\"; done",
+                   argv=[["pkexec", "snap", "remove", n, f"--revision={r}"]
+                         for _s, n, r in sizes],
+                   warn=_("Auf diese Versionen lässt sich danach nicht mehr "
+                          "zurückrollen."),
+                   key="old_snaps",
+                   lines=[("package-x-generic-symbolic", "dim",
+                           _("{name}, Revision {rev}, {size}").format(
+                               name=n, rev=r, size=fmt_bytes(s)))
+                          for s, n, r in sizes[:8]])
 
 
 def check_autostart(ctx):
@@ -3387,13 +3471,23 @@ def check_autostart(ctx):
 
 
 def check_swap(ctx):
+    """Belegter Swap allein sagt nichts: ausgelagerte Seiten, die niemand mehr
+    anfasst, kosten nichts. Erst zusammen mit knappem Arbeitsspeicher wird
+    daraus der Zustand, den man als Zaehfluessigkeit merkt."""
     total, free = swapinfo()
     if total == 0 or (total - free) / total < 0.5:
         return None
+    ram, avail = meminfo()
+    if avail > ram * 0.2:
+        return None
     return Finding("warn", _("Swap zu {pct:.0f} % belegt").format(
                        pct=100 * (total - free) / total),
-                   _("Das System lagert aus. Mehr RAM oder weniger offene Programme."),
-                   f"{total - free:.1f} GB", False)
+                   _("Das System lagert aus, und frei sind nur noch {avail:.1f} "
+                     "von {ram:.0f} GB. Mehr RAM oder weniger offene Programme.")
+                   .format(avail=avail, ram=ram),
+                   f"{total - free:.1f} GB", False, key="swap",
+                   actions=[(_("Speicherfresser zeigen"), "_goto_page",
+                             "Live-Monitor")])
 
 
 def check_incidents(ctx):
@@ -3405,40 +3499,64 @@ def check_incidents(ctx):
     return Finding("crit", _("{n} kritische Vorfälle in den letzten 24 Stunden"
                              ).format(n=len(recent)),
                    ", ".join(kinds),
-                   _("{n} Ereignisse").format(n=len(recent)), False)
+                   _("{n} Ereignisse").format(n=len(recent)), False,
+                   key="incidents",
+                   lines=[("dialog-warning-symbolic", "crit",
+                           _("{when}: {what}").format(
+                               when=time.strftime("%d.%m. %H:%M",
+                                                  time.localtime(i["t"])),
+                               what=_(i["title"]))) for i in recent[-8:]],
+                   actions=[(_("Vorfälle öffnen"), "_goto_page", "Vorfälle")])
+
+
+def parse_journal_top(text):
+    """'   1234 progname' je Zeile, wie es uniq -c liefert."""
+    out = []
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) == 2 and f[0].isdigit():
+            out.append((int(f[0]), f[1]))
+    return out
 
 
 def check_journal_rate(ctx):
     """Fünf-Minuten-Stichprobe, ein Vollscan des Journals wäre zu teuer."""
-    lines = sh(["journalctl", "--user", "--since", "-5min", "--no-pager", "-o", "cat"],
+    count = sh(["journalctl", "--user", "--since", "-5min", "--no-pager", "-o", "cat"],
                timeout=30).count("\n")
-    rate = lines / 5
+    rate = count / 5
     if rate < 400:
         return None
-    top = sh(["bash", "-c", "journalctl --user --since -5min --no-pager -o json "
-              "--output-fields=_COMM | sed -n 's/.*\"_COMM\":\"\\([^\"]*\\)\".*/\\1/p' "
-              "| sort | uniq -c | sort -rn | head -1"], timeout=30).split()
-    who = _(", überwiegend {prog}").format(prog=top[1]) if len(top) > 1 else ""
+    # Kein Beheben-Knopf: was hier hilft, haengt am Verursacher. Der steht
+    # deshalb im Befund statt in einem Befehl, der ihn nur nochmal sucht.
+    top = parse_journal_top(
+        sh(["bash", "-c", "journalctl --user --since -5min --no-pager -o json "
+            "--output-fields=_COMM | sed -n 's/.*\"_COMM\":\"\\([^\"]*\\)\".*/\\1/p' "
+            "| sort | uniq -c | sort -rn | head -5"], timeout=30))
+    who = _(", überwiegend {prog}").format(prog=top[0][1]) if top else ""
     return Finding("crit" if rate > 2000 else "warn",
                    _("Journal wächst mit {rate:.0f} Zeilen pro Minute"
                      ).format(rate=rate),
                    _("Hochgerechnet {k:.0f} Tausend Zeilen pro Tag{who}. Das füllt "
                      "die Platte und macht jede Journalsuche langsam.").format(
                          k=rate * 1440 / 1000, who=who),
-                   f"{rate:.0f}/min", False,
-                   "journalctl --user --since -5min -o json --output-fields=_COMM | "
-                   "jq -r ._COMM | sort | uniq -c | sort -rn | head")
+                   f"{rate:.0f}/min", False, key="journal_rate",
+                   lines=[("utilities-terminal-symbolic", "dim",
+                           _("{prog}: {n} Zeilen in fünf Minuten").format(
+                               prog=p, n=c)) for c, p in top])
 
 
 def check_updates(ctx):
-    out = sh(["apt-get", "-s", "-o", "Debug::NoLocking=1", "upgrade"], timeout=40)
+    """dist-upgrade wie in updates_scan, sonst nennt diese Seite eine andere
+    Zahl als die Updates-Seite, auf die sie verweist."""
+    out = sh(["apt-get", "-s", "-o", "Debug::NoLocking=1", "dist-upgrade"], timeout=60)
     n = len(re.findall(r"^Inst ", out, re.M))
     if n < 20:
         return None
     return Finding("warn", _("{n} Paket-Updates stehen aus").format(n=n),
-                   _("Sicherheits- und Treiber-Updates bleiben sonst liegen."),
-                   _("{n} Pakete").format(n=n), False,
-                   "sudo apt update && sudo apt upgrade")
+                   _("Sicherheits- und Treiber-Updates bleiben sonst liegen. "
+                     "Die Updates-Seite zeigt sie einzeln und installiert sie."),
+                   _("{n} Pakete").format(n=n), False, key="updates",
+                   actions=[(_("Updates öffnen"), "_goto_page", "Updates")])
 
 
 def check_self_update(ctx):
@@ -7035,8 +7153,7 @@ class App(Gtk.Application):
         if old:
             eaters.append((_("Alte Snap-Revisionen ({n})").format(n=len(old)),
                            "/var/lib/snapd/snaps",
-                           sum(dir_size(f"/var/lib/snapd/snaps/{n}_{r}.snap", 5)
-                               for n, r in old),
+                           sum(snap_revision_size(n, r) for n, r in old),
                            "snap list --all | awk '/disabled/{print $1, $3}' | "
                            "while read s r; do sudo snap remove \"$s\" "
                            "--revision=\"$r\"; done",
@@ -8200,6 +8317,18 @@ def selftest():
     # Steam laesst den Eintrag stehen, wenn der Titel deinstalliert wird. Wer
     # die Eintraege zaehlt statt die Spiele, meldet ueberwiegend Karteileichen.
     assert missing_compat_games({"999999999": "GE-Proton-gibtsnicht"}, {}) == []
+    # Ein Geraet, dessen Modul nur nicht geladen ist, ist kein Notfall.
+    dev = {"name": "Netz", "class": "Ethernet controller", "driver": "",
+           "modules": ["r8169"]}
+    assert check_missing_driver({"devices": [dev]}).sev == "warn"
+    assert check_missing_driver({"devices": [dict(dev, modules=[])]}).sev == "crit"
+    # uniq -c liefert '   42 foo', Zeilen ohne Zahl gehoeren nicht dazu.
+    assert parse_journal_top("   42 foo\n  7 bar\nkaputt\n") == [(42, "foo"), (7, "bar")]
+    # Der HWE-Kandidat muss wirklich neuer sein als der laufende Kernel.
+    assert kernel_version_tuple("7.0.0-28-generic") == (7, 0, 0, 28)
+    assert kernel_version_tuple("7.0.0-28.28~24.04.1") == (7, 0, 0, 28)
+    assert kernel_version_tuple("(none)") == ()
+    assert snap_revision_size("gibtsnicht", "999") == 0
     # Steams eigene Vorlage und die Nicht-Steam-Verknuepfungen bleiben aussen
     # vor: die erste gehoert dorthin, die zweiten haben nie ein Manifest.
     assert all(a.isdigit() and 0 < int(a) < 2**31 for a, _p in orphan_prefixes())

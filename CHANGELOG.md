@@ -100,6 +100,30 @@
 - Seven startup entries are not a warning. That finding moved to the notice
   group, lists what it counted and offers the way to the page where entries can
   be switched off
+- Findings that name a problem now offer the way to the page that can act on
+  it: startup entries, updates, incidents, drivers, storage, the live monitor,
+  the dyno and the benchmark. All of them were dead ends before, where the
+  button next to the finding opened a dialog repeating the same sentence
+- Old snap revisions are measured instead of counted. snapd keeps the previous
+  revision after every refresh, so the finding used to fire on every healthy
+  system. It reports only when they add up to more than 2 GB now, lists the
+  largest ones and removes them without a copied shell loop
+- The count of pending updates comes from dist-upgrade, the same command the
+  updates page uses. The two pages named different numbers
+- The journal finding names the processes writing the most instead of offering
+  a command that needs jq, which the package does not depend on
+- A benchmark result older than 30 days no longer warns. One slow run used to
+  warn forever, long after anyone last measured
+- A device whose module is present but not loaded is no longer as critical as
+  one the kernel has nothing for at all
+- Proton prefixes are summed before the list is capped, so the size was
+  reported too small on a machine with many leftovers
+- Swap running full only warns when memory is actually short as well. Pages
+  swapped out and never touched again cost nothing
+- The HWE kernel is only offered when its candidate is really newer than the
+  running kernel. On an OEM or mainline kernel it would have been a step back
+- The shader cache finding says that it read the variable from this session. Set
+  in the launch options of a single game, it applies there and nowhere else
 
 ## 0.1 - First release
 
