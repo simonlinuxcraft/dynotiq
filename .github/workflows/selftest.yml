@@ -1,0 +1,55 @@
+name: selftest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # dynotiq.py fordert GTK 4.0 schon beim Import an, deshalb muessen die
+      # Bindings da sein, auch wenn der Selftest kein Fenster oeffnet. Ein
+      # Display braucht er nicht.
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-gi-cairo gir1.2-gtk-4.0 gettext dpkg-dev
+
+      # Zweimal, weil ein Test, der Teilstrings uebersetzter Texte vergleicht,
+      # nur unter einer der beiden Sprachen auffaellt.
+      - name: Selftest, German source strings
+        run: python3 dynotiq.py --selftest
+
+      - name: Selftest, English catalogue
+        run: |
+          msgfmt --check po/en.po -o locale/en/LC_MESSAGES/dynotiq.mo
+          LANGUAGE=en python3 dynotiq.py --selftest
+        env:
+          LC_ALL: C.UTF-8
+
+      # Faengt Fehler in install-tree.sh, die der Selftest nie sieht: fehlende
+      # Dateien, falsche Rechte, ein Katalog der nicht uebersetzt.
+      - name: Build the package
+        run: |
+          ./build-deb.sh
+          # Ohne die Version aus dem Quelltext trifft ein Glob auch aeltere
+          # Pakete, die neben dem frischen liegen.
+          deb="build/dynotiq_$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynotiq.py)_all.deb"
+          dpkg-deb -I "$deb"
+          dpkg-deb -c "$deb" | grep -q usr/bin/dynotiq
+
+      # Die Kataloge muessen zum Quelltext passen. Weicht die Vorlage ab, hat
+      # jemand Texte geaendert, ohne update-po.sh laufen zu lassen.
+      - name: Catalogues match the source
+        run: |
+          xgettext --language=Python --keyword=_ --keyword=N_ --from-code=UTF-8 \
+                   -o /tmp/fresh.pot dynotiq.py
+          msgcmp --use-untranslated po/en.po /tmp/fresh.pot \
+            || { echo "po/en.po is out of date, run ./update-po.sh"; exit 1; }

@@ -143,6 +143,7 @@ Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 | `dynotiq --watch` | background service, reports new incidents |
 | `dynotiq --install` | place icons and a launcher for the current user |
 | `dynotiq --selftest` | run the built-in checks |
+| `dynotiq --version` | print the version and exit |
 
 ## Licence
 

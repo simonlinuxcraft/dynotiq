@@ -8618,7 +8618,9 @@ def selftest():
 
 
 if __name__ == "__main__":
-    if "--selftest" in sys.argv:
+    if "--version" in sys.argv:
+        print(f"dynotiq {VERSION}")
+    elif "--selftest" in sys.argv:
         selftest()
     elif "--watch" in sys.argv:
         watch()
