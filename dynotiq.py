@@ -8086,12 +8086,16 @@ def selftest():
     # anbietet, auf die zurückgestellt wurde
     assert snoozed("x", "26.04") is False
     before_snooze = snoozed_all()
+    # Erst hier lesen: der Aufruf von release_notify() weiter oben darf den
+    # Zustand aendern, und auf einem Rechner ohne gespeicherten Zustand tut er
+    # das auch. Verglichen wird, was snooze_set anrichtet, sonst nichts.
+    before_state = state_read()
     snooze_set("selftest_finding", "26.04.1")
     assert snoozed("selftest_finding", "26.04 LTS")
     assert not snoozed("selftest_finding", "26.04.1")
     assert not snoozed("selftest_finding", "26.10")
     # Der übrige Zustand darf dabei nicht verloren gehen
-    assert state_read().get("release_dist") == before.get("release_dist")
+    assert state_read().get("release_dist") == before_state.get("release_dist")
     snooze_set("selftest_finding", "")
     assert snoozed_all() == before_snooze
     assert not snoozed("selftest_finding", "26.04")
