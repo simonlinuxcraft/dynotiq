@@ -1,13 +1,13 @@
 # English translation for dynotiq.
-# Copyright 2026 simonlinuxcraft
+# Copyright (C) 2026 Simon Gettkandt (simonlinuxcraft)
 # This file is distributed under the same license as the dynotiq package.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: dynotiq 0.2~beta1\n"
 "Report-Msgid-Bugs-To: https://github.com/simonlinuxcraft/dynotiq/issues\n"
-"POT-Creation-Date: 2026-08-03 12:06+0200\n"
-"PO-Revision-Date: 2026-08-03 12:06+0200\n"
+"POT-Creation-Date: 2026-08-03 12:20+0200\n"
+"PO-Revision-Date: 2026-08-03 12:20+0200\n"
 "Last-Translator: simonlinuxcraft\n"
 "Language-Team: English\n"
 "Language: en\n"

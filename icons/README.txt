@@ -1,4 +1,4 @@
-dynotiq — Wortmarke + App-Icon
+dynotiq: Wortmarke + App-Icon
 
 Der Name wird immer kleingeschrieben: dynotiq.
 
@@ -8,7 +8,7 @@ FARBEN
 
 SCHRIFT
   Space Grotesk Bold, Laufweite −0.03 em
-  In den SVGs eingebettet — sieht überall gleich aus, auch ohne installierte Fonts.
+  In den SVGs eingebettet, sieht überall gleich aus, auch ohne installierte Fonts.
 
 
 wordmark/     Schriftzug
@@ -21,18 +21,18 @@ wordmark/     Schriftzug
   svg/…                                            Vektor
 
   w = Breite des Schriftzugs in Pixel.
-  Mindestbreite 150 px — darunter läuft der Zeiger im Tacho zu.
+  Mindestbreite 150 px, darunter läuft der Zeiger im Tacho zu.
 
 
 app-icon/     App-Icon
-  png/dynotiq-app-<größe>.png        deckend, weiße Kachel, 16–1024 px  ← installieren
+  png/dynotiq-app-<größe>.png        deckend, weiße Kachel, 16-1024 px  ← installieren
   png/dynotiq-app-dark-<größe>.png   deckend, dunkle Kachel
-  png/dynotiq-<größe>.png            transparent, 16–512 px
+  png/dynotiq-<größe>.png            transparent, 16-512 px
   svg/dynotiq-app.svg / -dark.svg    Kachel als Vektor, Eckradius 30 %
   svg/dynotiq-app-square*.svg        ohne Eckrundung (wenn die Umgebung selbst maskiert)
   svg/dynotiq-icon-mono*.svg         einfarbig: Top-Bar / Tray / Favicon
 
-  Glyph steht auf 80 % der Kachelkante — der Rest ist Schutzraum.
+  Glyph steht auf 80 % der Kachelkante, der Rest ist Schutzraum.
 
 
 BENENNUNG
@@ -55,4 +55,4 @@ INSTALLATION UNTER UBUNTU
 REGELN
   Das „o“ nie durch ein normales o ersetzen.
   Tacho nie drehen, spiegeln, verzerren oder umfärben.
-  Ab 24 px farbig nicht mehr verlässlich — dort dynotiq-icon-mono verwenden.
+  Ab 24 px farbig nicht mehr verlässlich, dort dynotiq-icon-mono verwenden.
