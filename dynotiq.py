@@ -587,6 +587,25 @@ def dir_size(path, timeout=20):
         return 0
 
 
+def dir_sizes(paths, timeout=60):
+    """Mehrere Verzeichnisse in einem du-Aufruf: ein Prozess und ein Zeitlimit
+    fuer alles. Einzeln gemessen waechst die Wartezeit mit der Anzahl, und
+    genau das war bei den Proton-Prefixen unbegrenzt.
+
+    Was du nicht nennt, fehlt im Ergebnis. Der Aufrufer entscheidet, ob ihm 0
+    reicht oder ob er dann lieber gar nichts meldet.
+    """
+    if not paths:
+        return {}
+    _rc, out = sh_rc(["du", "-sb"] + list(paths), timeout=timeout)
+    sizes = {}
+    for line in out.splitlines():
+        n, _tab, p = line.partition("\t")
+        if p and n.isdigit():
+            sizes[p] = int(n)
+    return sizes
+
+
 def net_bytes():
     rx = tx = 0
     for line in open("/proc/net/dev").readlines()[2:]:
@@ -2685,7 +2704,7 @@ def check_governor(ctx):
     govs = cpu_governor()
     if not govs or govs == "performance":
         return None
-    label, action = governor_action()
+    _label, action = governor_action()
     return Finding("warn", _("CPU-Governor steht auf {gov}").format(gov=govs),
                    _("Unter Last kostet das Takt. performance hält die Kerne oben."),
                    _("Takt"), False,
@@ -2760,13 +2779,14 @@ def check_orphan_prefixes(ctx):
     """Proton-Prefixe von Spielen, die es nicht mehr gibt. Die bleiben beim
     Deinstallieren liegen, und in ihnen steckt eine komplette Windows-Ablage."""
     # Erst messen, dann kappen: ein Deckel vor der Summe macht den Befund auf
-    # einem Rechner mit vielen Karteileichen kleiner als er ist. Der Timeout ist
-    # grosszuegig, weil dir_size bei Abbruch 0 liefert und dann ausgerechnet die
-    # groessten Prefixe fehlen.
+    # einem Rechner mit vielen Karteileichen kleiner als er ist. Gemessen wird
+    # in einem einzigen du-Aufruf, sonst waechst die Wartezeit mit jedem
+    # weiteren Prefix.
     orphans = orphan_prefixes()
     if not orphans:
         return None
-    sized = sorted(((dir_size(p, 20), a, p) for a, p in orphans), reverse=True)
+    sizes = dir_sizes([p for _a, p in orphans])
+    sized = sorted(((sizes.get(p, 0), a, p) for a, p in orphans), reverse=True)
     size = sum(s for s, _a, _p in sized)
     if size < 2 * 2**30:
         return None
@@ -8329,6 +8349,12 @@ def selftest():
     assert kernel_version_tuple("7.0.0-28.28~24.04.1") == (7, 0, 0, 28)
     assert kernel_version_tuple("(none)") == ()
     assert snap_revision_size("gibtsnicht", "999") == 0
+    # du nennt nur, was es lesen konnte. Ein Pfad, den es nicht gibt, taucht
+    # nicht als 0 auf, sondern gar nicht.
+    assert dir_sizes([]) == {}
+    here = os.path.dirname(os.path.abspath(__file__))
+    got = dir_sizes([here, "/gibt-es-nicht-12345"])
+    assert list(got) == [here] and got[here] > 0, got
     # Jedes Sprungziel eines Befunds muss in der Navigation stehen, sonst laeuft
     # der Knopf beim Klick in einen KeyError.
     targets = set(re.findall(r'"_goto_page",\s*\n?\s*"([^"]+)"', read(__file__) or ""))
