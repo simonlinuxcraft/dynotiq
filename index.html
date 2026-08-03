@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>dynotiq apt repository</title>
+<style>
+ body{font:16px/1.6 system-ui,sans-serif;max-width:44rem;margin:3rem auto;padding:0 1rem;
+      background:#12161B;color:#D7DCE3}
+ h1{font-weight:600;letter-spacing:-.02em} code,pre{font-family:ui-monospace,monospace}
+ pre{background:#1B2027;padding:1rem;border-radius:8px;overflow-x:auto;font-size:14px}
+ a{color:#F5C242}
+</style>
+<h1>dynotiq</h1>
+<p>System diagnostics and tuning for Ubuntu. Current version: <code>0.2~beta1</code></p>
+<h2>Install</h2>
+<pre>curl -fsSL https://simonlinuxcraft.github.io/dynotiq/dynotiq.gpg | sudo tee /usr/share/keyrings/dynotiq.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/dynotiq.gpg] https://simonlinuxcraft.github.io/dynotiq ./" | sudo tee /etc/apt/sources.list.d/dynotiq.list
+sudo apt update
+sudo apt install dynotiq</pre>
+<p>Updates then arrive through <code>apt upgrade</code> like any other package.</p>
+<p><a href="https://github.com/simonlinuxcraft/dynotiq">Source on GitHub</a>.
+Proprietary software, all rights reserved. See the LICENSE file.</p>
