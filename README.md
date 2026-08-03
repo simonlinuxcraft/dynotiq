@@ -138,4 +138,17 @@ Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 
 ## Licence
 
-GPL-3.0-or-later. Copyright 2026 simonlinuxcraft.
+Copyright (c) 2026 Simon Gettkandt (simonlinuxcraft). All rights reserved.
+
+**This is proprietary software, not open source.** The source is here to be
+read, and reading it grants no permission to use it. Copying, modifying,
+redistributing, sublicensing or using this code for any purpose, commercial or
+not, needs written consent from the copyright holder. The full terms are in
+[LICENSE](LICENSE), enquiries go to <simonlinuxcraft@pm.me>.
+
+Version 0.1 was released under GPL-3.0-or-later. That release stays under those
+terms; everything from 0.2 onwards is covered by the licence above.
+
+Pull requests are not accepted. Bug reports and feature ideas are welcome as
+issues, but any code posted in an issue is taken as offered for use in this
+project without conditions.

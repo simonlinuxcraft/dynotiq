@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """dynotiq - Systemdiagnose und Optimierung für Ubuntu.
 
-Copyright 2026 simonlinuxcraft
-
-Dieses Programm ist freie Software: Sie können es unter den Bedingungen
-der GNU General Public License, Version 3 oder später, weitergeben und
-verändern. Der Lizenztext liegt der Datei als LICENSE bei.
+Copyright (c) 2026 Simon Gettkandt (simonlinuxcraft). Alle Rechte vorbehalten.
+Keine Open-Source-Lizenz, die Bedingungen stehen in der Datei LICENSE.
 """
 
 import datetime
