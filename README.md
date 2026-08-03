@@ -71,12 +71,13 @@ From the apt repository, which also keeps it updated:
     sudo apt update
     sudo apt install dynotiq
 
-Or download `dynotiq_0.2~beta1_all.deb` from the
+Or download the `.deb` from the
 [v0.2 Beta 1 release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
 and install it directly. The package carries the repository and its key, so
-updates arrive through apt either way:
+updates arrive through apt either way. GitHub replaces the tilde in the version
+with a dot in the attachment name, the package itself is unaffected:
 
-    sudo dpkg -i dynotiq_0.2~beta1_all.deb
+    sudo dpkg -i dynotiq_0.2.beta1_all.deb
 
 Build the package yourself:
 
