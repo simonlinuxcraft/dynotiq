@@ -8329,6 +8329,10 @@ def selftest():
     assert kernel_version_tuple("7.0.0-28.28~24.04.1") == (7, 0, 0, 28)
     assert kernel_version_tuple("(none)") == ()
     assert snap_revision_size("gibtsnicht", "999") == 0
+    # Jedes Sprungziel eines Befunds muss in der Navigation stehen, sonst laeuft
+    # der Knopf beim Klick in einen KeyError.
+    targets = set(re.findall(r'"_goto_page",\s*\n?\s*"([^"]+)"', read(__file__) or ""))
+    assert not targets - set(NAV), targets - set(NAV)
     # Steams eigene Vorlage und die Nicht-Steam-Verknuepfungen bleiben aussen
     # vor: die erste gehoert dorthin, die zweiten haben nie ein Manifest.
     assert all(a.isdigit() and 0 < int(a) < 2**31 for a, _p in orphan_prefixes())
