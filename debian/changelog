@@ -1,3 +1,22 @@
+dynotiq (0.2~beta1) noble; urgency=medium
+
+  * Dyno records what the machine waits for: CPU, memory and disk stalls from
+    the kernel pressure counters, the run queue wait of the game process and
+    its paging accesses. New PAGING verdict for stutter without any heat.
+  * Throttling reason now comes from the driver instead of the temperature,
+    and AMD cards get a verdict at all for the first time.
+  * Game check knows ntsync and Resizable BAR.
+  * Steam: titles pointing at a Proton build that is not installed, and
+    prefixes left behind by uninstalled games.
+  * New incidents: ext4 errors, NVMe resets, uncorrectable PCIe errors, page
+    flip failures, AMD ring timeouts and applications killed by systemd-oomd.
+  * App check explains journal lines, and its search matches inside a name.
+  * Fixes: the dyno filed runs under the runtime or the Proton build instead
+    of the game, measuring threads could overlap, throttling was timed from
+    the start of the recording, and AMD had no VRAM, power or throttle values.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Sat, 01 Aug 2026 21:15:00 +0200
+
 dynotiq (0.1) noble; urgency=medium
 
   * Initial release.

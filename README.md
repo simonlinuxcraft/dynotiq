@@ -11,7 +11,7 @@ One GTK4 application that finds what slows a machine down, explains every
 finding in plain language and offers the matching fix.
 Nothing runs without asking first.
 
-[**Download v0.1 Beta**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.1)
+[**Download v0.2 Beta 1**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
 
 </div>
 
@@ -38,8 +38,16 @@ permissions, crashes, journal errors. Technical terms get translated, so
 `audio-record` reads as microphone. Where a fix exists, there is a button.
 
 
-**Dyno** records temperature and clock over minutes under real load and answers
-what a snapshot cannot: at which point does it start throttling.
+**Games** checks what actually bites while playing: shader caches and their
+limits, the Proton build a title is set to, launch options, ntsync, Resizable
+BAR, titles pointing at a Proton build that is no longer installed, and prefixes
+left behind by games you uninstalled long ago.
+
+**Dyno** records temperature, clock and waiting times over minutes under real
+load and answers what a snapshot cannot: at which point does it start
+throttling, and did the machine ever stand still waiting for a free core, for
+memory or for the disk. The last part matters because stutter without any heat
+looks like nothing at all in a temperature curve.
 
 **Benchmark** measures CPU, memory and disk against the median of your own
 earlier runs. A number without a baseline says nothing.
@@ -56,11 +64,11 @@ further distributions is planned.
 
 ## Install
 
-Download `dynotiq_0.1_all.deb` from the
-[v0.1 Beta release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.1)
+Download `dynotiq_0.2~beta1_all.deb` from the
+[v0.2 Beta 1 release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
 and install it:
 
-    sudo dpkg -i dynotiq_0.1_all.deb
+    sudo dpkg -i dynotiq_0.2~beta1_all.deb
 
 From the PPA once a version is published there, which also keeps it updated
 through apt:
@@ -71,7 +79,7 @@ through apt:
 Build the package yourself:
 
     ./build-deb.sh
-    sudo dpkg -i build/dynotiq_0.1_all.deb
+    sudo dpkg -i build/dynotiq_0.2~beta1_all.deb
 
 Or run it from the source tree without installing:
 
@@ -89,7 +97,7 @@ To publish a new version to the PPA, bump `VERSION` in `dynotiq.py` and
 `debian/changelog` to the same number, then:
 
     ./build-source.sh
-    dput ppa:simonlinuxcraft/dynotiq build/ppa/dynotiq_0.1~ubuntu24.04.1_source.changes
+    dput ppa:simonlinuxcraft/dynotiq build/ppa/dynotiq_0.2~beta1~ubuntu24.04.1_source.changes
 
 `build-source.sh` prints the exact upload lines when it finishes. It builds and
 signs one source package per Ubuntu series, it never uploads. It needs
@@ -97,9 +105,11 @@ signs one source package per Ubuntu series, it never uploads. It needs
 Launchpad.
 
 Versions carry the Ubuntu release rather than the series name, so
-`0.1~ubuntu24.04.1` sorts below `0.1~ubuntu26.04.1`. Series names cycle back
-through the alphabet, which would eventually make a newer Ubuntu look older to
-apt.
+`0.2~beta1~ubuntu24.04.1` sorts below `0.2~beta1~ubuntu26.04.1`. Series names
+cycle back through the alphabet, which would eventually make a newer Ubuntu look
+older to apt. A tilde sorts below everything, which is what makes `0.2~beta1`
+an upgrade from `0.1` and still a downgrade from the final `0.2`. Git refuses a
+tilde in tag names, so the matching tag is written `v0.2-beta1`.
 
 ## Requirements
 
