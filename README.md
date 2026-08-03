@@ -13,6 +13,8 @@ Nothing runs without asking first.
 
 [**Download v0.2 Beta 1**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
 
+[![selftest](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml/badge.svg)](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml)
+
 </div>
 
 
