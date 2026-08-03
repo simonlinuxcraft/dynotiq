@@ -29,6 +29,9 @@ jobs:
 
       - name: Selftest, English catalogue
         run: |
+          # locale/ ist gitignored und wird sonst beim Paketbau angelegt.
+          # msgfmt legt keine Verzeichnisse an.
+          mkdir -p locale/en/LC_MESSAGES
           msgfmt --check po/en.po -o locale/en/LC_MESSAGES/dynotiq.mo
           LANGUAGE=en python3 dynotiq.py --selftest
         env:
