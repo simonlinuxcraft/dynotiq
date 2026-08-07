@@ -37,19 +37,25 @@ for lang in de en; do
   fi
   # msgen und msgmerge ersetzen den Kopf durch Vorlagentext. Der alte Kopf
   # traegt Sprache, Uebersetzer und bei de die Plural-Forms, deshalb kommt er
-  # zurueck und nur die Zeitstempel wandern mit. Getrennt wird am ersten
-  # Absatzende, das ist in einer po-Datei genau die Grenze zwischen Kopf und
-  # erstem Eintrag.
+  # zurueck, und nur Zeitstempel und Version wandern mit. Getrennt wird am
+  # ersten Absatzende, das ist in einer po-Datei genau die Grenze zwischen Kopf
+  # und erstem Eintrag.
   python3 - "$po" "$po.new" po/dynotiq.pot <<'PY'
 import re, sys
 po, new, pot = sys.argv[1:4]
-stamp = re.search(r'POT-Creation-Date: ([^\\]+)', open(pot).read()).group(1)
+tpl = open(pot).read()
+stamp = re.search(r'POT-Creation-Date: ([^\\]+)', tpl).group(1)
+version = re.search(r'Project-Id-Version: ([^\\]+)', tpl).group(1)
 head = open(po).read().split('\n\n', 1)[0]
 for field in ('POT-Creation-Date', 'PO-Revision-Date'):
     head = re.sub(rf'{field}: [^\\]+', f'{field}: {stamp}', head)
+head = re.sub(r'Project-Id-Version: [^\\]+', f'Project-Id-Version: {version}', head)
 open(po, 'w').write(head + '\n\n' + open(new).read().split('\n\n', 1)[1])
 PY
   rm -f "$po.new"
+  # In einem frischen Klon gibt es locale/ nicht, msgfmt legt es nicht selbst an.
+  # Ohne das bricht der Lauf hier ab, nachdem .pot und de.po schon neu sind.
+  mkdir -p "locale/$lang/LC_MESSAGES"
   msgfmt --check --statistics "$po" -o "locale/$lang/LC_MESSAGES/dynotiq.mo"
 done
 

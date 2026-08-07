@@ -27,6 +27,7 @@ Version: $VER
 Section: utils
 Priority: optional
 Architecture: all
+Installed-Size: $(du -sk "$PKG" | cut -f1)
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0
 Recommends: librsvg2-bin, pkexec, fonts-inter
 Suggests: fwupd, flatpak

@@ -1,3 +1,90 @@
+dynotiq (0.3~beta) noble; urgency=medium
+
+  * The background watcher is configurable: how often it looks, and whether it
+    notifies about anything below a critical incident. Both are read on every
+    pass, so a change takes effect without restarting the service.
+  * One button puts colours, intervals and switches back to the defaults.
+    History and snoozed findings stay.
+  * A setting whose program is missing offers the way to install it instead of
+    a dead switch.
+  * Settings are grouped by subject, drop-downs have a border and an arrow, the
+    version is on the page once instead of three times, and paths that sit next
+    to a button moved into its tooltip.
+  * Updates: packages with no installed predecessor are listed. A kernel with a
+    new ABI showed the meta package alone and announced two kilobytes for a
+    download of several hundred megabytes.
+  * Updates: the age of the package lists is on the page and a button fetches
+    them. The page only ever read what apt already knew locally.
+  * Updates: a dist-upgrade that would remove packages names them and the
+    command that can do it, instead of leaving the update stuck.
+  * History records updates, so the app can say "since the update of 28.07 all
+    CPU cores are 14 % slower" and name the order of events without claiming a
+    cause. The benchmark finding in the system check says it too.
+  * Benchmark page relates the latest run to the first one on this machine once
+    thirty days lie between them. The existing baseline is a moving median and
+    misses slow degradation.
+  * A scan is only written to the history when something changed, and dyno runs
+    no longer show up there as a benchmark full of zeroes.
+  * The background service can remind about pending updates once a week.
+    Ubuntu 26.04 turned its own notification off with no toggle in settings.
+  * The dyno records on its own: the background service notices a running game,
+    measures along, and has the report ready when you stop playing.
+  * Frame rate and frame times in the report. They cannot be measured from
+    outside, so dynotiq sets up MangoHud in its own colours and reads its
+    recording, instead of building a second overlay.
+  * Fix: the overview tore a gap open in a maximised window. The header is
+    137 px shorter, and the live tiles at the bottom fit on screen again.
+  * Fix: resetting the settings left the dyno page showing the old state of the
+    same switch it carries a second time.
+  * Fix: a hand-edited or half written config.json could feed a timer a string
+    or a value the interface never offers. Values are checked on load.
+  * Fix: one damaged line in the history file took the whole history page down.
+    Lines without a usable timestamp are dropped when reading.
+  * Fix: old snap revisions went unreported on a non-English desktop. snap takes
+    its language from LANG and ignores LC_ALL, so the parser found nothing.
+  * Fix: the journal check measured only the user journal and named the process
+    rather than the unit, which for any Python service reads as "python3".
+  * Fix: on an LTS, a non-LTS release is no longer offered as an upgrade.
+  * Fix: the app and the background service could corrupt the state file when
+    writing at the same time, which loses snoozed findings and the release
+    cache. Both go through one helper with a unique temporary file and fsync.
+  * Fix: a source check without network cached "unknown" for a week, and the
+    finding then read like clearance.
+  * Fix: clearing the user cache had no warning although it removes compiled
+    game shaders, and thumbnails were counted twice in the total.
+  * Fix: free space for the shader cache is checked on every partition holding
+    one, not just the one with /home.
+  * Fix: disabling an autostart entry with a second group wrote Hidden=true into
+    that group, where nothing reads it.
+  * Fix: MangoHud recordings are cleared after evaluation instead of growing by
+    around 25 MB per hour played.
+  * Fix: stopping a recording evaluated the run in the interface thread, and two
+    clicks on rescan started two scans that undid each other.
+  * Fix: the undervolting advice pointed at a curve editor nvidia-settings does
+    not have on Linux.
+  * Fix: the self-test wrote to the real state file and suppressed the app's own
+    release check for 24 hours.
+  * Fix: update-po.sh failed in a fresh clone, and the repository install page
+    told people to write a .list file while the package ships a .sources one.
+  * Fix: counts of one read as counts of one, and several strings that stayed
+    German in an English session are translated.
+  * Fix: download sizes were wrong on a multi-arch system, both architectures of
+    a package overwrote each other.
+  * Fix: a clock set backwards froze the release check, the source check and the
+    update reminder.
+  * Fix: the history file measured its limit in bytes but trimmed by lines, so
+    it was rewritten in full on every append.
+  * Fix: reading the NVMe temperature and switching the background service ran
+    in the interface thread and froze the window when either hung.
+  * Fix: stopping a recording and starting a new one immediately mixed samples
+    from both runs.
+  * A scan is around four seconds faster, ubuntu-drivers is asked once instead
+    of twice.
+  * Installed from the package, the app no longer copies icons into the home
+    directory that are already in /usr/share/icons.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Fri, 07 Aug 2026 23:35:00 +0200
+
 dynotiq (0.2~beta1) noble; urgency=medium
 
   * Dyno records what the machine waits for: CPU, memory and disk stalls from

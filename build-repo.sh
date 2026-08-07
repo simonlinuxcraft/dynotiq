@@ -54,8 +54,12 @@ cp "$DEB" "$OUT/"
   rm -f InRelease
   gpg --batch --yes --local-user "$KEY" --clearsign -o InRelease Release )
 
-# Binaerer Keyring, genau die Form, die apt hinter signed-by erwartet.
+# Binaerer Keyring, genau die Form, die apt hinter signed-by erwartet. Der
+# Abgleich faengt den Schluesselwechsel ab: sonst baut das Skript kommentarlos
+# ein Paket, das seine eigene Quelle nicht verifizieren kann.
 gpg --export "$KEY" > "$OUT/dynotiq.gpg"
+cmp -s "$OUT/dynotiq.gpg" packaging/dynotiq.gpg || {
+  echo "packaging/dynotiq.gpg passt nicht zu $KEY"; exit 1; }
 
 cat > "$OUT/index.html" <<HTML
 <!doctype html>
@@ -72,7 +76,7 @@ cat > "$OUT/index.html" <<HTML
 <p>System diagnostics and tuning for Ubuntu. Current version: <code>$VER</code></p>
 <h2>Install</h2>
 <pre>curl -fsSL $URL/dynotiq.gpg | sudo tee /usr/share/keyrings/dynotiq.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/dynotiq.gpg] $URL ./" | sudo tee /etc/apt/sources.list.d/dynotiq.list
+printf 'Types: deb\nURIs: $URL\nSuites: ./\nSigned-By: /usr/share/keyrings/dynotiq.gpg\n' | sudo tee /etc/apt/sources.list.d/dynotiq.sources > /dev/null
 sudo apt update
 sudo apt install dynotiq</pre>
 <p>Updates then arrive through <code>apt upgrade</code> like any other package.</p>

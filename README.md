@@ -11,7 +11,7 @@ One GTK4 application that finds what slows a machine down, explains every
 finding in plain language and offers the matching fix.
 Nothing runs without asking first.
 
-[**Download v0.2 Beta 1**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
+[**Download v0.3 Beta**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.3-beta)
 
 [![selftest](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml/badge.svg)](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml)
 
@@ -74,17 +74,17 @@ From the apt repository, which also keeps it updated:
     sudo apt install dynotiq
 
 Or download the `.deb` from the
-[v0.2 Beta 1 release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.2-beta1)
+[v0.3 Beta release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.3-beta)
 and install it directly. The package carries the repository and its key, so
 updates arrive through apt either way. GitHub replaces the tilde in the version
 with a dot in the attachment name, the package itself is unaffected:
 
-    sudo dpkg -i dynotiq_0.2.beta1_all.deb
+    sudo dpkg -i dynotiq_0.3.beta_all.deb
 
 Build the package yourself:
 
     ./build-deb.sh
-    sudo dpkg -i build/dynotiq_0.2~beta1_all.deb
+    sudo dpkg -i build/dynotiq_0.3~beta_all.deb
 
 Or run it from the source tree without installing:
 
@@ -115,11 +115,11 @@ signed with. `publish-repo.sh` replaces the `gh-pages` branch outright; it
 carries build artefacts only, the sources live in `main`.
 
 Versions carry the Ubuntu release rather than the series name, so
-`0.2~beta1~ubuntu24.04.1` sorts below `0.2~beta1~ubuntu26.04.1`. Series names
+`0.3~beta~ubuntu24.04.1` sorts below `0.3~beta~ubuntu26.04.1`. Series names
 cycle back through the alphabet, which would eventually make a newer Ubuntu look
-older to apt. A tilde sorts below everything, which is what makes `0.2~beta1`
+older to apt. A tilde sorts below everything, which is what makes `0.3~beta`
 an upgrade from `0.1` and still a downgrade from the final `0.2`. Git refuses a
-tilde in tag names, so the matching tag is written `v0.2-beta1`.
+tilde in tag names, so the matching tag is written `v0.3-beta`.
 
 ## Requirements
 
