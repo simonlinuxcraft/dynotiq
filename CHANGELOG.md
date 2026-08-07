@@ -216,6 +216,13 @@
 - Installed from the package, the app no longer copies ten icons into your home
   directory that are already in `/usr/share/icons`. They shadowed the packaged
   ones and stayed behind as a user theme after purging
+- Clearing old snap revisions asks for the password once instead of once per
+  revision. It ran one `pkexec` per revision, and polkit grants
+  `org.freedesktop.policykit.exec` as `auth_admin` without `keep`, so it asks
+  every single time. With 29 revisions that was 29 prompts, and dismissing one
+  in the middle left the job half done. The finding also names the setting that
+  keeps them from piling up again, `snap set system refresh.retain=2`, as text
+  rather than a button, because it changes a system setting
 
 ## 0.2~beta1 - Waiting, not just heat
 

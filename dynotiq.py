@@ -4102,6 +4102,26 @@ def check_journal(ctx):
                    argv=["pkexec", "journalctl", "--vacuum-size=500M"])
 
 
+def snap_remove_argv(pairs):
+    """Ein pkexec für alle alten Revisionen statt eins je Revision.
+
+    polkit gibt fuer org.freedesktop.policykit.exec nur auth_admin her, kein
+    auth_admin_keep. pkexec fragt also bei jedem Aufruf neu nach dem Passwort.
+    Bei 29 Revisionen waren das 29 Abfragen, und wer mittendrin abbricht, steht
+    mit einem halb aufgeraeumten System da.
+
+    Name und Revision gehen als Argumente an die Shell, nicht in den
+    Skripttext. Sie kommen von snapd, aber ein Name mit Sonderzeichen soll
+    trotzdem nichts anderes ausfuehren koennen.
+    """
+    if not pairs:
+        return []
+    args = [str(x) for n, r in pairs for x in (n, r)]
+    return ["pkexec", "sh", "-c",
+            'rc=0; while [ "$#" -ge 2 ]; do snap remove "$1" --revision="$2" '
+            '|| rc=1; shift 2; done; exit $rc', "sh"] + args
+
+
 def parse_disabled_snaps(text):
     out = []
     for line in text.splitlines()[1:]:
@@ -4134,15 +4154,21 @@ def check_old_snaps(ctx):
                    _("{n} Pakete").format(n=len(old)), False,
                    "snap list --all | awk '/disabled/{print $1, $3}' | "
                    "while read s r; do sudo snap remove \"$s\" --revision=\"$r\"; done",
-                   argv=[["pkexec", "snap", "remove", n, f"--revision={r}"]
-                         for _s, n, r in sizes],
+                   argv=snap_remove_argv([(n, r) for _s, n, r in sizes]),
                    warn=_("Auf diese Versionen lässt sich danach nicht mehr "
                           "zurückrollen."),
                    key="old_snaps",
                    lines=[("package-x-generic-symbolic", "dim",
                            _("{name}, Revision {rev}, {size}").format(
                                name=n, rev=r, size=fmt_bytes(s)))
-                          for s, n, r in sizes[:8]])
+                          for s, n, r in sizes[:8]]
+                   # Einmal aufraeumen hilft nur bis zum naechsten Update. Der
+                   # Befehl steht als Text da, weil er eine Systemeinstellung
+                   # aendert, und das macht die App nicht auf einen Knopf hin.
+                   + [("preferences-system-symbolic", "dim",
+                       _("Damit es nicht wiederkommt: snap hebt drei Fassungen "
+                         "auf, zwei sind das Minimum. "
+                         "sudo snap set system refresh.retain=2"))])
 
 
 def check_autostart(ctx):
@@ -8142,8 +8168,7 @@ class App(Gtk.Application):
                            "snap list --all | awk '/disabled/{print $1, $3}' | "
                            "while read s r; do sudo snap remove \"$s\" "
                            "--revision=\"$r\"; done",
-                           [["pkexec", "snap", "remove", n, f"--revision={r}"]
-                            for n, r in old],
+                           snap_remove_argv(old),
                            _("Das sind die Vorgängerversionen, auf die snap "
                            "zurückrollen könnte. Danach geht das nicht mehr.")))
         thumbs = os.path.expanduser("~/.cache/thumbnails")
@@ -9055,6 +9080,14 @@ def selftest():
         "Name  Version  Rev  Tracking  Publisher  Notes\n"
         "blender 5.2.0 7599 latest/stable bf** classic\n"
         "livepatch v10.15.0 393 latest/stable canonical** disabled\n") == [("livepatch", "393")]
+    # Ein pkexec fuer alle Revisionen. Eins je Revision hiesse eine
+    # Passwortabfrage je Revision, polkit haelt die Berechtigung nicht.
+    argv = snap_remove_argv([("firefox", "8702"), ("cups", "1229")])
+    assert argv.count("pkexec") == 1 and argv[0] == "pkexec"
+    # Name und Revision stehen als Argumente hinter dem Skript, nicht darin
+    assert argv[-4:] == ["firefox", "8702", "cups", "1229"]
+    assert "firefox" not in argv[3]
+    assert snap_remove_argv([]) == []
 
     # Die ID behält :arch, sonst aktualisiert der Befehl auf Multi-Arch-Systemen
     # das falsche Paket. Größe kommt aus der --print-uris-Ausgabe.

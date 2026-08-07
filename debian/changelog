@@ -82,6 +82,9 @@ dynotiq (0.3~beta) noble; urgency=medium
     of twice.
   * Installed from the package, the app no longer copies icons into the home
     directory that are already in /usr/share/icons.
+  * Fix: clearing old snap revisions asks for the password once instead of once
+    per revision. polkit grants pkexec as auth_admin without keep, so 29
+    revisions meant 29 prompts.
 
  -- simonlinuxcraft <simonlinuxcraft@pm.me>  Fri, 07 Aug 2026 23:35:00 +0200
 
