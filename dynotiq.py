@@ -12007,6 +12007,12 @@ def selftest():
     # Trennt Paketnamen von allem, was als Option oder Löschbefehl durchginge
     assert valid_pkg("libfoo1.2+git") and valid_pkg("org.fd.GL/x86_64/24.08")
     assert valid_pkg("libfoo:i386")
+    # Echte Namen dieses Archivs, die nach Sonderzeichen aussehen. Wer hier zu
+    # streng ist, sperrt genau dieses Paket dauerhaft vom Aktualisieren aus.
+    for echt in ("g++", "g++-13-x86-64-linux-gnu", "lib32stdc++6",
+                 "geoclue-2.0", "gir1.2-accountsservice-1.0", "python3.12",
+                 "libc6:amd64", "fonts-noto-cjk-extra"):
+        assert valid_pkg(echt), echt
     assert not valid_pkg("--force-yes") and not valid_pkg("foo-") \
         and not valid_pkg("rm -rf") and not valid_pkg("")
     # pkexec setzt die Umgebung zurück, deshalb muss env davor stehen
