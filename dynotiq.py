@@ -2563,12 +2563,12 @@ def proton_check():
                     + (_(" Steam hat ihm die Dateien am {date} selbst "
                         "entzogen, nach einer Änderung der Konfiguration. "
                         "Sein eigenes Protokoll sagt dazu 'config changed: "
-                        "removed depots'. Führt der Knopf zu nichts, hat "
-                        "Steam eine veraltete Zuordnung im Zwischenspeicher: "
-                        "dann Steam ganz beenden, neu starten und es noch "
-                        "einmal versuchen. Hilft auch das nicht, in Steam "
-                        "deinstallieren und danach installieren, dann "
-                        "verwirft es seinen alten Eintrag.").format(
+                        "removed depots'. Warum, steht dort nicht, und diese "
+                        "Seite rät es nicht. Führt der Knopf zu nichts, in "
+                        "dieser Reihenfolge weiter: Steam ganz beenden und "
+                        "neu starten, dann noch einmal installieren, und "
+                        "zuletzt in Steam deinstallieren und danach neu "
+                        "installieren.").format(
                             date=time.strftime("%d.%m.%Y um %H:%M",
                                                time.localtime(entzogen)))
                        if entzogen else "")) if state == "empty" else
