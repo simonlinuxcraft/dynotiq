@@ -1,0 +1,119 @@
+<!-- @dsCard group="Foundations" name="Color" subtitle="Surfaces, text ramp, accents, status palettes" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color</title>
+<style>
+:root{
+  --bg:#0E1116; --ink:#12161B; --surface:#161A20; --raised:#1B2027;
+  --text:#F2F3F5; --title:#E6E8EA; --dim:#9AA1AA; --faint:#767C85; --label:#5E656E;
+  --accent:#F5C242; --ok:#2ED27A; --warn:#FF8A3D; --crit:#FF4747;
+  --line:rgba(255,255,255,.07); --line-strong:rgba(255,255,255,.12);
+  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
+h1{font:600 29px var(--sans);margin:0 0 4px;letter-spacing:-.4px}
+.lede{font:12.5px var(--sans);color:var(--dim);margin:0 0 34px;max-width:62ch}
+h2{font:600 10px var(--sans);color:var(--label);letter-spacing:1px;text-transform:uppercase;margin:38px 0 14px}
+h2:first-of-type{margin-top:0}
+.note{font:11.5px var(--sans);color:var(--faint);margin:-6px 0 14px;max-width:62ch}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+.sw{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.chip{height:64px;border-bottom:1px solid var(--line)}
+.meta{padding:9px 11px 11px}
+.nm{font:500 12px var(--sans);color:var(--title);display:block}
+.hx{font:11px var(--mono);color:var(--faint);letter-spacing:.2px}
+.use{font:10.5px var(--sans);color:var(--label);display:block;margin-top:3px}
+.ramp{display:flex;flex-wrap:wrap;gap:8px}
+.rt{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px 12px;min-width:150px}
+.rt b{font:600 13px var(--sans);display:block;margin-bottom:2px}
+table{border-collapse:collapse;width:100%;max-width:640px;font:12px var(--sans)}
+td,th{text-align:left;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+th{font:600 9.5px var(--sans);color:var(--label);letter-spacing:.9px;text-transform:uppercase}
+td.c{width:26px}
+.dot{width:14px;height:14px;border-radius:50%;display:block}
+code{font:11.5px var(--mono);color:var(--dim)}
+</style>
+</head>
+<body>
+
+<h1>Color</h1>
+<p class="lede">A single dark scheme. Surfaces separate by a few percent of lightness, never by a border colour, and every line is white at low alpha so it survives an accent change. Colour carries state only: yellow means brand, green/orange/red mean condition. Nothing else is coloured.</p>
+
+<h2>Surfaces</h2>
+<p class="note">Five steps from window to raised. Cards sit above the page, tiles above cards.</p>
+<div class="grid">
+  <div class="sw"><div class="chip" style="background:#0E1116"></div><div class="meta"><span class="nm">Background</span><span class="hx">#0E1116</span><span class="use">window, page</span></div></div>
+  <div class="sw"><div class="chip" style="background:#12161B"></div><div class="meta"><span class="nm">Ink</span><span class="hx">#12161B</span><span class="use">sidebar, logo base</span></div></div>
+  <div class="sw"><div class="chip" style="background:#161A20"></div><div class="meta"><span class="nm">Surface</span><span class="hx">#161A20</span><span class="use">card</span></div></div>
+  <div class="sw"><div class="chip" style="background:#1B2027"></div><div class="meta"><span class="nm">Raised</span><span class="hx">#1B2027</span><span class="use">tile, dropdown, popover</span></div></div>
+  <div class="sw"><div class="chip" style="background:linear-gradient(#232932,#1A1F26)"></div><div class="meta"><span class="nm">Chrome</span><span class="hx">#232932 → #1A1F26</span><span class="use">headerbar gradient</span></div></div>
+  <div class="sw"><div class="chip" style="background:#272E38"></div><div class="meta"><span class="nm">Disabled</span><span class="hx">#272E38</span><span class="use">dead button, switch off</span></div></div>
+</div>
+
+<h2>Text ramp</h2>
+<p class="note">Ten steps. Loudness is the only thing that changes down the ramp, so hierarchy never needs a second colour.</p>
+<div class="ramp">
+  <div class="rt"><b style="color:#F2F3F5">Primary</b><span class="hx">#F2F3F5</span></div>
+  <div class="rt"><b style="color:#EDEEF0">Strong</b><span class="hx">#EDEEF0</span></div>
+  <div class="rt"><b style="color:#E6E8EA">Title</b><span class="hx">#E6E8EA</span></div>
+  <div class="rt"><b style="color:#D6DAE0">Body</b><span class="hx">#D6DAE0</span></div>
+  <div class="rt"><b style="color:#C8CDD3">Muted</b><span class="hx">#C8CDD3</span></div>
+  <div class="rt"><b style="color:#9AA1AA">Dim</b><span class="hx">#9AA1AA</span></div>
+  <div class="rt"><b style="color:#767C85">Faint</b><span class="hx">#767C85</span></div>
+  <div class="rt"><b style="color:#6F757E">Fainter</b><span class="hx">#6F757E</span></div>
+  <div class="rt"><b style="color:#5E656E">Label</b><span class="hx">#5E656E</span></div>
+  <div class="rt"><b style="color:#5A6069">Disabled</b><span class="hx">#5A6069</span></div>
+</div>
+
+<h2>Accent</h2>
+<p class="note">Four, switchable in Settings. Signal Yellow is the default and comes out of the logo. Hover is <code>lighten(accent, .25)</code>, the text on top is <code>darken(accent, .90)</code> so it keeps the hue instead of falling back to grey.</p>
+<div class="grid">
+  <div class="sw"><div class="chip" style="background:#F5C242;display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);color:#181306">Aa button label</div><div class="meta"><span class="nm">Signal Yellow</span><span class="hx">#F5C242</span><span class="use">default · on #181306</span></div></div>
+  <div class="sw"><div class="chip" style="background:#E95420;display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);color:#170803">Aa button label</div><div class="meta"><span class="nm">Ubuntu Orange</span><span class="hx">#E95420</span><span class="use">on #170803</span></div></div>
+  <div class="sw"><div class="chip" style="background:#58C6E8;display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);color:#081317">Aa button label</div><div class="meta"><span class="nm">Instrument Cyan</span><span class="hx">#58C6E8</span><span class="use">on #081317</span></div></div>
+  <div class="sw"><div class="chip" style="background:#A78BFA;display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);color:#100D18">Aa button label</div><div class="meta"><span class="nm">Violet</span><span class="hx">#A78BFA</span><span class="use">on #100D18</span></div></div>
+</div>
+
+<h2>Status palettes</h2>
+<p class="note">Three sets, one meaning. Warn stays in the orange band on purpose, otherwise it reads as the accent. Backgrounds are always the same colour at 12 % alpha.</p>
+<table>
+  <tr><th></th><th>Ampel (default)</th><th></th><th>Warm</th><th></th><th>Mono</th></tr>
+  <tr>
+    <td>OK</td>
+    <td class="c"><span class="dot" style="background:#2ED27A"></span></td><td><code>#2ED27A</code></td>
+    <td class="c"><span class="dot" style="background:#9BD44F"></span></td><td><code>#9BD44F</code></td>
+    <td class="c"><span class="dot" style="background:#9EA4AC"></span></td><td><code>#9EA4AC</code></td>
+  </tr>
+  <tr>
+    <td>Warn</td>
+    <td class="c"><span class="dot" style="background:#FF8A3D"></span></td><td><code>#FF8A3D</code></td>
+    <td class="c"><span class="dot" style="background:#FF9F1C"></span></td><td><code>#FF9F1C</code></td>
+    <td class="c"><span class="dot" style="background:#D8DDE3"></span></td><td><code>#D8DDE3</code></td>
+  </tr>
+  <tr>
+    <td>Critical</td>
+    <td class="c"><span class="dot" style="background:#FF4747"></span></td><td><code>#FF4747</code></td>
+    <td class="c"><span class="dot" style="background:#FF4D3D"></span></td><td><code>#FF4D3D</code></td>
+    <td class="c"><span class="dot" style="background:#FFFFFF"></span></td><td><code>#FFFFFF</code></td>
+  </tr>
+</table>
+
+<h2>Lines and overlays</h2>
+<p class="note">White alpha only. A hover is the same overlay everywhere, which is why nothing needs a hover colour of its own.</p>
+<table>
+  <tr><th>Token</th><th>Value</th><th>Where</th></tr>
+  <tr><td><code>--dq-line</code></td><td><code>rgba(255,255,255,.07)</code></td><td>card border</td></tr>
+  <tr><td><code>--dq-line-soft</code></td><td><code>rgba(255,255,255,.06)</code></td><td>tile border, sidebar edge</td></tr>
+  <tr><td><code>--dq-line-strong</code></td><td><code>rgba(255,255,255,.12)</code></td><td>ghost button, dropdown</td></tr>
+  <tr><td><code>--dq-line-faint</code></td><td><code>rgba(255,255,255,.05)</code></td><td>row separator</td></tr>
+  <tr><td><code>--dq-hover</code></td><td><code>rgba(255,255,255,.05)</code></td><td>nav, quiet button</td></tr>
+  <tr><td><code>--dq-hover-row</code></td><td><code>rgba(255,255,255,.04)</code></td><td>clickable list row</td></tr>
+</table>
+
+</body>
+</html>

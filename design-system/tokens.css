@@ -1,0 +1,90 @@
+/* dynotiq design tokens
+   Source of truth: CSS_TEMPLATE, ACCENTS and PALETTES in dynotiq.py.
+   Accent, accent-hover, accent-on and the status colors are user-switchable
+   at runtime; everything else is fixed. */
+
+:root {
+  /* Surfaces */
+  --dq-bg:               #0E1116;  /* window, page */
+  --dq-ink:              #12161B;  /* sidebar, logo base */
+  --dq-surface:          #161A20;  /* card */
+  --dq-surface-raised:   #1B2027;  /* rig, kpi, dropdown, popover, tooltip */
+  --dq-surface-hover:    #222933;  /* dropdown hover */
+  --dq-chrome-top:       #232932;  /* headerbar gradient start */
+  --dq-chrome-bottom:    #1A1F26;  /* headerbar gradient end */
+  --dq-surface-disabled: #272E38;  /* disabled button, switch off */
+  --dq-control:          #2C333D;  /* window controls */
+  --dq-control-close:    #C0402B;  /* close button */
+
+  /* Text, darkest surface upward */
+  --dq-text:          #F2F3F5;  /* h1, headline */
+  --dq-text-strong:   #EDEEF0;  /* brand, row title, kpi value */
+  --dq-text-title:    #E6E8EA;  /* card head, headerbar title */
+  --dq-text-body:     #D6DAE0;  /* dropdown, nav hover */
+  --dq-text-muted:    #C8CDD3;  /* ghost button, rig value */
+  --dq-text-icon:     #B9BEC5;  /* window control glyph */
+  --dq-text-dim:      #9AA1AA;  /* nav, lede, mono */
+  --dq-text-arrow:    #8A9099;  /* dropdown arrow */
+  --dq-text-faint:    #767C85;  /* sub, keys, dim state */
+  --dq-text-fainter:  #6F757E;  /* rig key, brandsub, info bullet */
+  --dq-text-label:    #5E656E;  /* nav group label */
+  --dq-text-disabled: #5A6069;
+
+  /* Accent. Default is Signal Yellow, taken from the logo.
+     hover = lighten(accent, .25), on = darken(accent, .90) */
+  --dq-accent:       #F5C242;
+  --dq-accent-hover: #F7D171;
+  --dq-accent-on:    #181306;
+  --dq-accent-a13:   rgba(245,194,66,.13);
+
+  /* Status, palette "Ampel" */
+  --dq-ok:       #2ED27A;
+  --dq-warn:     #FF8A3D;
+  --dq-crit:     #FF4747;
+  --dq-ok-a12:   rgba(46,210,122,.12);
+  --dq-warn-a12: rgba(255,138,61,.12);
+  --dq-crit-a12: rgba(255,71,71,.12);
+
+  /* Lines and overlays. All white alpha, never a solid border colour. */
+  --dq-line:        rgba(255,255,255,.07);  /* card */
+  --dq-line-soft:   rgba(255,255,255,.06);  /* rig, sidebar edge */
+  --dq-line-strong: rgba(255,255,255,.12);  /* ghost button, dropdown, swatch */
+  --dq-line-faint:  rgba(255,255,255,.05);  /* row separator */
+  --dq-hover:       rgba(255,255,255,.05);
+  --dq-hover-row:   rgba(255,255,255,.04);
+  --dq-hover-ghost: rgba(255,255,255,.06);
+  --dq-scroll:      rgba(255,255,255,.16);
+
+  /* Radius */
+  --dq-r-pill: 6px;
+  --dq-r-sm:   7px;   /* nav item, fix button, dropdown */
+  --dq-r-md:   8px;   /* ghost button, accent button, swatch */
+  --dq-r-lg:   9px;   /* rig, kpi, popover, badge */
+  --dq-r-xl:   12px;  /* card, switch track */
+
+  /* Type */
+  --dq-sans: Inter, Ubuntu, "Noto Sans", system-ui, sans-serif;
+  --dq-mono: "JetBrains Mono", "Ubuntu Mono", ui-monospace, monospace;
+
+  /* Layout */
+  --dq-sidebar-w:  208px;
+  --dq-headerbar-h: 46px;
+}
+
+/* Live numbers need tabular figures or the columns jitter on every refresh. */
+.dq-tnum { font-feature-settings: "tnum" 1; }
+
+/* Alternate accents, switchable in Settings */
+[data-dq-accent="ubuntu"] { --dq-accent:#E95420; --dq-accent-hover:#EE7E57; --dq-accent-on:#170803; --dq-accent-a13:rgba(233,84,32,.13); }
+[data-dq-accent="cyan"]   { --dq-accent:#58C6E8; --dq-accent-hover:#81D4ED; --dq-accent-on:#081317; --dq-accent-a13:rgba(88,198,232,.13); }
+[data-dq-accent="violet"] { --dq-accent:#A78BFA; --dq-accent-hover:#BDA8FB; --dq-accent-on:#100D18; --dq-accent-a13:rgba(167,139,250,.13); }
+
+/* Alternate status palettes */
+[data-dq-palette="warm"] {
+  --dq-ok:#9BD44F; --dq-warn:#FF9F1C; --dq-crit:#FF4D3D;
+  --dq-ok-a12:rgba(155,212,79,.12); --dq-warn-a12:rgba(255,159,28,.12); --dq-crit-a12:rgba(255,77,61,.12);
+}
+[data-dq-palette="mono"] {
+  --dq-ok:#9EA4AC; --dq-warn:#D8DDE3; --dq-crit:#FFFFFF;
+  --dq-ok-a12:rgba(158,164,172,.12); --dq-warn-a12:rgba(216,221,227,.12); --dq-crit-a12:rgba(255,255,255,.12);
+}

@@ -1,0 +1,159 @@
+<!-- @dsCard group="Components" name="Navigation" subtitle="Sidebar, nav item, group label, badge, headerbar" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Navigation</title>
+<style>
+:root{
+  --bg:#0E1116; --ink:#12161B; --surface:#161A20; --raised:#1B2027;
+  --chrome-top:#232932; --chrome-bottom:#1A1F26; --control:#2C333D; --close:#C0402B;
+  --text:#F2F3F5; --strong:#EDEEF0; --title:#E6E8EA; --body:#D6DAE0; --muted:#C8CDD3;
+  --icon:#B9BEC5; --dim:#9AA1AA; --faint:#767C85; --fainter:#6F757E; --label:#5E656E;
+  --accent:#F5C242; --accent-hover:#F7D171; --accent-on:#181306; --crit:#FF4747;
+  --line:rgba(255,255,255,.07); --line-soft:rgba(255,255,255,.06);
+  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
+h1{font:600 29px var(--sans);margin:0 0 4px;letter-spacing:-.4px}
+.lede{font:12.5px var(--sans);color:var(--dim);margin:0 0 34px;max-width:62ch}
+h2{font:600 10px var(--sans);color:var(--label);letter-spacing:1px;text-transform:uppercase;margin:36px 0 12px}
+h2:first-of-type{margin-top:0}
+.note{font:11.5px var(--sans);color:var(--faint);margin:-4px 0 14px;max-width:62ch}
+
+.sidebar{width:208px;background:var(--ink);box-shadow:inset -1px 0 var(--line-soft);padding:18px 12px 14px;border-radius:12px 0 0 12px}
+.brandrow{display:flex;align-items:center;gap:9px;padding:0 8px 4px}
+.brand{font:700 15px var(--sans);color:var(--strong);letter-spacing:-.3px;display:block}
+.brandsub{font:9.5px var(--sans);color:var(--fainter);letter-spacing:.6px;text-transform:uppercase;display:block}
+.navgroup{font:600 9.5px var(--sans);color:var(--label);letter-spacing:1px;text-transform:uppercase;padding:14px 0 5px 12px}
+.nav{font:12.5px var(--sans);color:var(--dim);background:transparent;border:none;width:100%;text-align:left;
+     border-radius:7px;padding:8px 10px 8px 22px;display:flex;align-items:center;cursor:pointer}
+.nav:hover,.nav.is-hover{background:rgba(255,255,255,.05);color:var(--body)}
+.nav.active{background:var(--accent);color:var(--accent-on);font-weight:600}
+.nav.active:hover,.nav.active.is-hover{background:var(--accent-hover);color:var(--accent-on)}
+.navbadge{font:600 10px var(--sans);background:var(--crit);color:#2A0F0F;border-radius:9px;padding:2px 7px;margin-left:auto;
+          font-feature-settings:"tnum" 1}
+
+.hb{background:linear-gradient(var(--chrome-top),var(--chrome-bottom));box-shadow:inset 0 -1px rgba(0,0,0,.6);
+    min-height:46px;padding:0 8px;display:flex;align-items:center;gap:10px;border-radius:12px 12px 0 0;max-width:620px}
+.dot{width:9px;height:9px;border-radius:2px;background:var(--accent);margin-left:6px;flex:none}
+.hb-title{font:600 12.5px var(--sans);color:var(--title)}
+.hb-sub{font:11px var(--sans);color:var(--faint)}
+.wc{margin-left:auto;display:flex;gap:4px;padding-right:2px}
+.wc button{width:22px;height:22px;border-radius:50%;background:var(--control);color:var(--icon);border:none;
+           font:11px var(--sans);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.wc button.close{background:var(--close);color:#fff}
+.frame{display:flex;max-width:640px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.pane{flex:1;padding:20px;background:var(--bg)}
+.rule{font:12px var(--sans);color:var(--dim);margin:0 0 8px;padding-left:16px;position:relative;max-width:62ch}
+.rule:before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.states{display:flex;flex-direction:column;gap:6px;width:208px;background:var(--ink);padding:12px;border-radius:9px}
+.lbl{font:11px var(--mono);color:var(--label);margin:8px 0 2px}
+code{font:11.5px var(--mono);color:var(--dim)}
+</style>
+</head>
+<body>
+
+<h1>Navigation</h1>
+<p class="lede">One fixed sidebar at 208 px, three groups, no nesting and no collapse. Twelve pages fit on the shortest supported screen, so there is never a second level to hide anything in. The active page is the only accent-filled thing in the whole window.</p>
+
+<h2>Sidebar</h2>
+<p class="note">Grouped by what the user came for: what is wrong, what the system is doing, what the numbers say. Group labels are 9.5 px caps and are not clickable.</p>
+<div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+  <div class="sidebar">
+    <div class="brandrow">
+      <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M13.87 45.45A20 20 0 1 1 50.79 30.16" fill="none" stroke="#EDEEF0" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M50.79 30.16A20 20 0 0 1 50.13 45.45" fill="none" stroke="#F5C242" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M32 37L41.58 28.97" fill="none" stroke="#EDEEF0" stroke-width="5" stroke-linecap="round"></path>
+        <circle cx="32" cy="37" r="4" fill="#EDEEF0"></circle>
+      </svg>
+      <span><span class="brand">dynotiq</span><span class="brandsub">Diagnostics</span></span>
+    </div>
+    <div class="navgroup">Diagnose</div>
+    <button class="nav active">Overview</button>
+    <button class="nav">Problems<span class="navbadge">3</span></button>
+    <button class="nav">Incidents</button>
+    <button class="nav">Drivers</button>
+    <div class="navgroup">System</div>
+    <button class="nav">Updates<span class="navbadge">12</span></button>
+    <button class="nav">App check</button>
+    <button class="nav is-hover">Startup</button>
+    <button class="nav">Live monitor</button>
+    <button class="nav">Storage</button>
+    <div class="navgroup">Data</div>
+    <button class="nav">Test bench</button>
+    <button class="nav">Benchmark</button>
+    <button class="nav">History</button>
+    <button class="nav">Settings</button>
+  </div>
+
+  <div>
+    <div class="lbl">nav item states</div>
+    <div class="states">
+      <button class="nav">Rest</button>
+      <button class="nav is-hover">Hover</button>
+      <button class="nav active">Active</button>
+      <button class="nav active is-hover">Active hover</button>
+      <button class="nav">With badge<span class="navbadge">3</span></button>
+    </div>
+    <p class="note" style="margin-top:14px;max-width:240px">The 22 px left padding is deliberate: labels line up with the group label above them instead of with the group's own indent.</p>
+  </div>
+</div>
+
+<h2>Badge</h2>
+<p class="note">A count, never a dot. It is always critical red, because a badge that can be any colour stops being a count and starts being a mood. Tabular figures so a jump from 9 to 10 does not shift the row.</p>
+
+<h2>Headerbar</h2>
+<p class="note">46 px, a vertical gradient and one dark inset line at the bottom. It carries the current page and the state of the last scan, nothing else. The square dot takes the accent, the only place in the chrome that does.</p>
+<div class="hb">
+  <span class="dot"></span>
+  <span><span class="hb-title">Overview</span></span>
+  <span class="hb-sub">· last scan 4 min ago</span>
+  <span class="wc">
+    <button aria-label="Minimise">−</button>
+    <button aria-label="Maximise">□</button>
+    <button class="close" aria-label="Close">✕</button>
+  </span>
+</div>
+<p class="note" style="margin-top:12px">Window controls are overridden explicitly, including <code>background-image: none</code>. System themes paint their buttons with a gradient image, and without the reset they punch through on half the distributions.</p>
+
+<h2>Assembled</h2>
+<div class="frame">
+  <div class="sidebar" style="border-radius:0">
+    <div class="brandrow">
+      <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M13.87 45.45A20 20 0 1 1 50.79 30.16" fill="none" stroke="#EDEEF0" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M50.79 30.16A20 20 0 0 1 50.13 45.45" fill="none" stroke="#F5C242" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M32 37L41.58 28.97" fill="none" stroke="#EDEEF0" stroke-width="5" stroke-linecap="round"></path>
+        <circle cx="32" cy="37" r="4" fill="#EDEEF0"></circle>
+      </svg>
+      <span><span class="brand">dynotiq</span><span class="brandsub">Diagnostics</span></span>
+    </div>
+    <div class="navgroup">Diagnose</div>
+    <button class="nav active">Overview</button>
+    <button class="nav">Problems<span class="navbadge">3</span></button>
+    <button class="nav">Incidents</button>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div class="hb" style="border-radius:0;max-width:none">
+      <span class="dot"></span><span class="hb-title">Overview</span><span class="hb-sub">· last scan 4 min ago</span>
+    </div>
+    <div class="pane">
+      <span style="font:600 10px var(--sans);color:var(--crit);letter-spacing:1px;text-transform:uppercase">3 critical findings</span>
+      <div style="font:600 22px var(--sans);color:var(--text);margin:6px 0 4px">Something is holding this machine back</div>
+      <div style="font:11px var(--sans);color:var(--faint)">Nothing runs without asking first.</div>
+    </div>
+  </div>
+</div>
+
+<h2>Rules</h2>
+<p class="rule">The sidebar never collapses and never scrolls. If a page does not fit, the page count is wrong, not the sidebar.</p>
+<p class="rule">Exactly one nav item is active. The accent fill is reserved for it and for the primary button.</p>
+<p class="rule">Badges count things a user can act on. Never badge a page that only displays.</p>
+
+</body>
+</html>

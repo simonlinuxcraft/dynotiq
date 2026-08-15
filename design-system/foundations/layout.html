@@ -1,0 +1,98 @@
+<!-- @dsCard group="Foundations" name="Layout" subtitle="Spacing, radius, elevation, window frame" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Layout</title>
+<style>
+:root{
+  --bg:#0E1116; --ink:#12161B; --surface:#161A20; --raised:#1B2027;
+  --text:#F2F3F5; --strong:#EDEEF0; --title:#E6E8EA; --dim:#9AA1AA;
+  --faint:#767C85; --label:#5E656E; --accent:#F5C242;
+  --line:rgba(255,255,255,.07); --line-soft:rgba(255,255,255,.06);
+  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
+h1{font:600 29px var(--sans);margin:0 0 4px;letter-spacing:-.4px}
+.lede{font:12.5px var(--sans);color:var(--dim);margin:0 0 34px;max-width:62ch}
+h2{font:600 10px var(--sans);color:var(--label);letter-spacing:1px;text-transform:uppercase;margin:38px 0 14px}
+h2:first-of-type{margin-top:0}
+.note{font:11.5px var(--sans);color:var(--faint);margin:-6px 0 16px;max-width:62ch}
+.bars{display:flex;flex-direction:column;gap:7px;max-width:520px}
+.bar{display:flex;align-items:center;gap:12px}
+.bar b{background:var(--accent);height:12px;border-radius:2px;display:block;flex:none}
+.bar span{font:11px var(--mono);color:var(--label)}
+.bar em{font:11.5px var(--sans);color:var(--faint);font-style:normal}
+.radii{display:flex;gap:12px;flex-wrap:wrap}
+.rad{background:var(--raised);border:1px solid var(--line-soft);width:88px;height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px}
+.rad span{font:11px var(--mono);color:var(--label)}
+.elev{display:flex;gap:0;flex-direction:column;max-width:420px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.elev div{padding:14px 16px;font:12px var(--sans);color:var(--title)}
+.elev div small{font:11px var(--mono);color:var(--faint);float:right}
+.frame{max-width:600px;border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;background:var(--bg)}
+.sb{width:208px;background:var(--ink);padding:18px 12px 14px;box-shadow:inset -1px 0 var(--line-soft);flex:none;position:relative}
+.sb .m{position:absolute;inset:0;border:1px dashed rgba(245,194,66,.4);margin:18px 12px 14px}
+.body{flex:1;padding:24px;position:relative}
+.body .m{position:absolute;inset:24px;border:1px dashed rgba(245,194,66,.4)}
+.dim{font:10px var(--mono);color:var(--accent);position:absolute;background:var(--bg);padding:0 4px}
+.rule{font:12px var(--sans);color:var(--dim);margin:0 0 8px;padding-left:16px;position:relative;max-width:62ch}
+.rule:before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+code{font:11.5px var(--mono);color:var(--dim)}
+</style>
+</head>
+<body>
+
+<h1>Layout</h1>
+<p class="lede">The window is a fixed sidebar and one scrolling column. No responsive breakpoints, no panels that come and go: this is a desktop application on a machine whose screen does not change size mid-session, so the layout does not either.</p>
+
+<h2>Spacing</h2>
+<p class="note">Not a strict 8 px grid. The app is dense and the small steps carry real information, so the scale runs 2, 5, 8, 12, 14, 18, 24. Anything above 24 is page-level.</p>
+<div class="bars">
+  <div class="bar"><b style="width:2px"></b><span>2</span><em>badge padding, hairline offsets</em></div>
+  <div class="bar"><b style="width:5px"></b><span>5</span><em>pill vertical padding</em></div>
+  <div class="bar"><b style="width:8px"></b><span>8</span><em>nav vertical padding, gaps in a row</em></div>
+  <div class="bar"><b style="width:9px"></b><span>9</span><em>button vertical padding</em></div>
+  <div class="bar"><b style="width:12px"></b><span>12</span><em>tile padding, sidebar side padding</em></div>
+  <div class="bar"><b style="width:14px"></b><span>14</span><em>ghost button side padding</em></div>
+  <div class="bar"><b style="width:16px"></b><span>16</span><em>card padding, accent button side padding</em></div>
+  <div class="bar"><b style="width:18px"></b><span>18</span><em>sidebar top padding</em></div>
+  <div class="bar"><b style="width:24px"></b><span>24</span><em>page margin</em></div>
+</div>
+
+<h2>Radius</h2>
+<p class="note">Five steps, and the rule is that radius follows size: the bigger the surface, the rounder it gets. A 12 px radius on a pill would swallow the label.</p>
+<div class="radii">
+  <div class="rad" style="border-radius:6px"><span>6 · pill</span></div>
+  <div class="rad" style="border-radius:7px"><span>7 · nav, dd</span></div>
+  <div class="rad" style="border-radius:8px"><span>8 · button</span></div>
+  <div class="rad" style="border-radius:9px"><span>9 · tile</span></div>
+  <div class="rad" style="border-radius:12px"><span>12 · card</span></div>
+  <div class="rad" style="border-radius:50%"><span>round · dot</span></div>
+</div>
+
+<h2>Elevation</h2>
+<p class="note">No shadows anywhere. Depth is lightness plus one hairline, which is the only approach that survives on a compositor that may or may not be drawing shadows for the window at all.</p>
+<div class="elev">
+  <div style="background:#0E1116">Page<small>#0E1116</small></div>
+  <div style="background:#161A20;border-top:1px solid var(--line)">Card, one step up plus a hairline<small>#161A20</small></div>
+  <div style="background:#1B2027;border-top:1px solid var(--line)">Tile inside the card<small>#1B2027</small></div>
+</div>
+
+<h2>Window frame</h2>
+<p class="note">Sidebar is 208 px, fixed. The content column takes the rest at 24 px margin and is the only thing that scrolls.</p>
+<div class="frame">
+  <div class="sb"><div class="m"></div><span class="dim" style="left:50%;top:50%;transform:translate(-50%,-50%)">208 px fixed</span></div>
+  <div class="body" style="min-height:190px"><div class="m"></div><span class="dim" style="left:50%;top:50%;transform:translate(-50%,-50%)">fluid · 24 px margin</span></div>
+</div>
+
+<h2>Rules</h2>
+<p class="rule">One column of content. Two columns of findings means the user has to choose where to look first.</p>
+<p class="rule">Cards stack, they never sit side by side unless both are shorter than four rows.</p>
+<p class="rule">Nothing animates except the live values changing. A diagnostic tool that slides its panels around looks like it is guessing.</p>
+<p class="rule">Minimum supported window is 1100 by 700. Below that the sidebar would have to collapse, and it does not collapse.</p>
+
+</body>
+</html>

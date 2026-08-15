@@ -1,0 +1,83 @@
+<!-- @dsCard group="Foundations" name="Type" subtitle="Inter scale, weights, tabular figures, mono" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Type</title>
+<style>
+:root{
+  --bg:#0E1116; --surface:#161A20; --raised:#1B2027;
+  --text:#F2F3F5; --strong:#EDEEF0; --title:#E6E8EA; --dim:#9AA1AA;
+  --faint:#767C85; --label:#5E656E; --crit:#FF4747;
+  --line:rgba(255,255,255,.07);
+  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
+h1{font:600 29px var(--sans);margin:0 0 4px;letter-spacing:-.4px}
+.lede{font:12.5px var(--sans);color:var(--dim);margin:0 0 34px;max-width:62ch}
+h2{font:600 10px var(--sans);color:var(--label);letter-spacing:1px;text-transform:uppercase;margin:38px 0 14px}
+h2:first-of-type{margin-top:0}
+.note{font:11.5px var(--sans);color:var(--faint);margin:-6px 0 16px;max-width:62ch}
+.row{display:flex;align-items:baseline;gap:20px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.spec{flex:1;min-width:0}
+.tag{font:11px var(--mono);color:var(--label);white-space:nowrap;width:180px;text-align:right;flex:none}
+.stack{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;max-width:640px}
+.stack p{margin:0 0 10px;font:12px var(--mono);color:var(--dim)}
+.stack p:last-child{margin:0}
+.stack b{color:var(--title);font-weight:500}
+.fig{display:flex;gap:26px;flex-wrap:wrap;margin-top:6px}
+.figbox{background:var(--raised);border-radius:9px;padding:12px 16px}
+.figbox span{display:block;font:9.5px var(--sans);color:var(--faint);letter-spacing:.7px;text-transform:uppercase;margin-bottom:5px}
+.figbox b{font:700 21px var(--sans);color:var(--strong)}
+.tnum{font-feature-settings:"tnum" 1}
+code{font:11.5px var(--mono);color:var(--dim)}
+</style>
+</head>
+<body>
+
+<h1>Type</h1>
+<p class="lede">Inter for the interface, JetBrains Mono for anything a machine wrote. Sizes are half-step values because the app is dense and a full 2 px jump would push a card off a 1366 px screen. Weight does the ranking, size only sets the scale.</p>
+
+<h2>Families</h2>
+<div class="stack">
+  <p><b>Sans</b>: Inter, Ubuntu, "Noto Sans", sans-serif</p>
+  <p><b>Mono</b>: "JetBrains Mono", "Ubuntu Mono", monospace</p>
+</div>
+<p class="note" style="margin-top:12px">Inter is the interface face, Ubuntu is the guaranteed fallback on the target system. Both are OFL or Ubuntu Font Licence, so they can ship with the package.</p>
+
+<h2>Scale</h2>
+<div class="row"><div class="spec" style="font:600 29px var(--sans);color:#F2F3F5;letter-spacing:-.4px">Nothing runs without asking</div><div class="tag">600 · 29px · headline</div></div>
+<div class="row"><div class="spec tnum" style="font:700 27px var(--sans);color:#EDEEF0">64.2 °C</div><div class="tag">700 · 27px · big value</div></div>
+<div class="row"><div class="spec" style="font:600 22px var(--sans);color:#F2F3F5">Page heading</div><div class="tag">600 · 22px · h1</div></div>
+<div class="row"><div class="spec tnum" style="font:700 21px var(--sans);color:#EDEEF0">3 842</div><div class="tag">700 · 21px · kpi value</div></div>
+<div class="row"><div class="spec" style="font:700 15px var(--sans);color:#EDEEF0;letter-spacing:-.3px">dynotiq</div><div class="tag">700 · 15px · brand</div></div>
+<div class="row"><div class="spec tnum" style="font:700 15px var(--sans);color:#EDEEF0">18.4 GB</div><div class="tag">700 · 15px · tile value</div></div>
+<div class="row"><div class="spec" style="font:500 13px var(--sans);color:#EDEEF0">Thermal throttling on core 4</div><div class="tag">500 · 13px · row title</div></div>
+<div class="row"><div class="spec" style="font:12.5px var(--sans);color:#9AA1AA">Every finding says what is wrong and why it matters.</div><div class="tag">400 · 12.5px · lede</div></div>
+<div class="row"><div class="spec" style="font:600 12.5px var(--sans);color:#E6E8EA">Card heading</div><div class="tag">600 · 12.5px · card head</div></div>
+<div class="row"><div class="spec" style="font:12.5px var(--sans);color:#9AA1AA">Navigation item</div><div class="tag">400 · 12.5px · nav</div></div>
+<div class="row"><div class="spec" style="font:600 12px var(--sans);color:#F5C242">Run the check</div><div class="tag">600 · 12px · accent button</div></div>
+<div class="row"><div class="spec" style="font:500 12px var(--sans);color:#C8CDD3">Show details</div><div class="tag">500 · 12px · ghost button</div></div>
+<div class="row"><div class="spec" style="font:11.5px var(--mono);color:#9AA1AA">systemd-resolved.service: failed</div><div class="tag">400 · 11.5px · mono</div></div>
+<div class="row"><div class="spec" style="font:11.5px var(--sans);color:#767C85">Last checked 4 minutes ago</div><div class="tag">400 · 11.5px · row detail</div></div>
+<div class="row"><div class="spec" style="font:11px var(--sans);color:#767C85">Supporting text under a heading</div><div class="tag">400 · 11px · sub</div></div>
+<div class="row"><div class="spec" style="font:600 11px var(--sans);color:#C8CDD3">PILL LABEL</div><div class="tag">600 · 11px · pill</div></div>
+<div class="row"><div class="spec" style="font:600 10px var(--sans);color:#FF4747;letter-spacing:1px">CRITICAL</div><div class="tag">600 · 10px · eyebrow · +1px</div></div>
+<div class="row"><div class="spec" style="font:600 9.5px var(--sans);color:#5E656E;letter-spacing:1px">DIAGNOSE</div><div class="tag">600 · 9.5px · nav group · +1px</div></div>
+<div class="row"><div class="spec" style="font:9.5px var(--sans);color:#767C85;letter-spacing:.7px">CPU PACKAGE</div><div class="tag">400 · 9.5px · key · +0.7px</div></div>
+
+<h2>Letter spacing</h2>
+<p class="note">Only two rules. Anything at 22 px and above tightens to −0.3 to −0.4 px. Anything below 11 px that is set in caps opens up 0.6 to 1 px, otherwise small caps close into a block.</p>
+
+<h2>Tabular figures</h2>
+<p class="note">Every live number carries <code>font-feature-settings: "tnum" 1</code>. Without it the values twitch on each refresh and columns stop lining up.</p>
+<div class="fig">
+  <div class="figbox"><span>Proportional</span><b>1 111 · 8 888</b></div>
+  <div class="figbox"><span>Tabular</span><b class="tnum">1 111 · 8 888</b></div>
+</div>
+
+</body>
+</html>
