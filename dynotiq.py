@@ -12082,6 +12082,94 @@ def selftest():
         # Ohne bekanntes Alter der Listen wird nichts behauptet
         assert not source_newer_than_lists("https://neu.example/r", None, [quelle])
 
+    # Die uebrigen Update-Funktionen sind keine blossen Huellen, sie zerlegen
+    # Ausgaben fremder Programme. Jede Zerlegung, die niemand prueft, geht
+    # still kaputt, sobald das Werkzeug sein Format anfasst.
+    alt_sh, alt_hist, alt_read = sh, history_read, read
+    try:
+        globals()["sh"] = lambda *a, **k: (
+            "Auflistung...\n"
+            "code/now 1.2 amd64 [installiert,lokal]\n"
+            "eigenes/now 2.0 amd64 [installed,local]\n"
+            "firefox/noble,now 1.0 amd64 [installiert,automatisch]\n")
+        # Beide Schreibweisen, die apt je nach Sprache liefert
+        assert local_packages() == ["eigenes"], local_packages()
+
+        globals()["sh"] = lambda *a, **k: (
+            "nvidia/550.144.03, 6.11.0-25-generic, x86_64: installed\n"
+            "virtualbox/7.0.16, 6.11.0-25-generic, x86_64: installed\n"
+            "kaputte Zeile ohne Trenner\n")
+        assert dkms_modules() == ["nvidia", "virtualbox"], dkms_modules()
+
+        globals()["sh"] = lambda *a, **k: (
+            "com.vysp3r.ProtonPlus\n"
+            "org.videolan.VLC\n"
+            "  \n"
+            "ohnePunkt\n")
+        idx = flatpak_index()
+        assert idx == {"protonplus": "com.vysp3r.ProtonPlus",
+                       "vlc": "org.videolan.VLC"}, idx
+
+        globals()["sh"] = lambda *a, **k: (
+            "flathub\thttps://dl.flathub.org/repo/\t\n"
+            "alt\thttps://alt.example/repo/\tdisabled\n"
+            "kaputt\n")
+        assert flatpak_remotes() == [
+            ("flathub", "https://dl.flathub.org/repo/", False),
+            ("alt", "https://alt.example/repo/", True)], flatpak_remotes()
+
+        # Der juengste gescheiterte Lauf gewinnt, kaputte Eintraege fallen raus
+        globals()["history_read"] = lambda *a, **k: [
+            {"src": "flatpak", "items": {"a/x/s": "alt"}},
+            {"src": "apt", "items": "kein dict"},
+            {"src": "flatpak", "items": {"a/x/s": "neu"}}]
+        assert update_fail_notes() == {"flatpak": {"a/x/s": "neu"}}
+
+        globals()["read"] = lambda p: (
+            "version,codename,series,created,release,eol\n"
+            "24.04 LTS,Noble Numbat,noble,2023-10-12,2024-04-25,2029-05-31\n"
+            "26.04 LTS,Resolute,resolute,2025-10-01,2026-04-23,2031-05-29\n")
+        assert ubuntu_series() == {"noble", "resolute"}, ubuntu_series()
+    finally:
+        globals()["sh"] = alt_sh
+        globals()["history_read"] = alt_hist
+        globals()["read"] = alt_read
+
+    # Das Alter der Paketlisten: der juengste der beiden Zeitpunkte zaehlt,
+    # und ohne beide wird nichts behauptet statt "uralt" zu melden.
+    alt_stamp, alt_lists = APT_STAMP, APT_LISTS
+    try:
+        with tempfile.TemporaryDirectory() as ad:
+            globals()["APT_STAMP"] = os.path.join(ad, "stamp")
+            globals()["APT_LISTS"] = os.path.join(ad, "lists")
+            assert apt_lists_age() is None
+            os.makedirs(globals()["APT_LISTS"])
+            os.utime(globals()["APT_LISTS"], (time.time() - 7200,) * 2)
+            alter = apt_lists_age()
+            assert alter is not None and 7000 < alter < 7400, alter
+            # Der Stempel ist juenger, also gilt er
+            open(globals()["APT_STAMP"], "w").close()
+            assert apt_lists_age() < 60
+    finally:
+        globals()["APT_STAMP"], globals()["APT_LISTS"] = alt_stamp, alt_lists
+
+    # updates_scan traegt den Fehlerzustand je Quelle. fwupd meldet mit 2,
+    # dass es nichts gefunden hat, und das ist kein Fehler.
+    alt_sh_rc, alt_which = sh_rc, shutil.which
+    try:
+        globals()["shutil"].which = lambda p: "/usr/bin/" + p if p == "fwupdmgr" \
+            else None
+        globals()["sh_rc"] = lambda a, timeout=15: (2, "")
+        d = updates_scan(True)
+        assert list(d) == ["fwupd"] and d["fwupd"]["error"] is None, d
+        globals()["sh_rc"] = lambda a, timeout=15: (1, "")
+        assert updates_scan(True)["fwupd"]["error"], "Code 1 ist ein Fehler"
+        # Ohne Firmware-Wunsch bleibt fwupd ganz draussen
+        assert updates_scan(False) == {}
+    finally:
+        globals()["sh_rc"] = alt_sh_rc
+        globals()["shutil"].which = alt_which
+
     assert fmt_lists_age(None) == "" and fmt_lists_age(60)
     # Ungleich heisst nicht neuer. Eine Quelle mit einer aelteren Fassung darf
     # kein Update anbieten, das in Wahrheit ein Rueckschritt ist.
