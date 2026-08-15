@@ -6,7 +6,14 @@ Report security issues to simonlinuxcraft@pm.me. Please do not open a public
 issue for them.
 
 Include what you did, what happened, and which version you ran (`dynotiq
---version`). A reply comes within a week.
+--version`).
+
+This is a one-person project, so the honest number is a week: you get an
+acknowledgement within seven days, and it will say whether the report is
+understood and what happens next. If nothing arrives in that time, assume the
+mail went astray and open a public issue asking me to check my inbox, without
+the details.
+
 If a fix is warranted it goes into the apt repository as a new version, and the
 release notes name the issue once the fix is out.
 
@@ -24,7 +31,8 @@ that changes the system. Of interest are:
   corrupted one
 
 Not in scope: findings that require root to begin with, and the fact that the
-source is readable. dynotiq is source available on purpose.
+source is readable. dynotiq is free software under the GPL, the source is meant
+to be read, and being able to read it is not a weakness.
 
 ## How it handles privilege
 

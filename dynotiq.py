@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """dynotiq - Systemdiagnose und Optimierung für Ubuntu.
 
-Copyright (c) 2026 Simon Gettkandt (simonlinuxcraft). Alle Rechte vorbehalten.
-Keine Open-Source-Lizenz, die Bedingungen stehen in der Datei LICENSE.
+Copyright (C) 2026 Simon Gettkandt (simonlinuxcraft)
+
+Dieses Programm ist freie Software: Sie können es weitergeben und/oder
+verändern unter den Bedingungen der GNU General Public License, wie von der
+Free Software Foundation veröffentlicht, entweder Version 3 der Lizenz oder
+(nach Ihrer Wahl) jeder späteren Version.
+
+Die Veröffentlichung erfolgt in der Hoffnung, dass es nützlich ist, aber OHNE
+JEDE GEWÄHRLEISTUNG, sogar ohne die implizite Gewährleistung der MARKTREIFE
+oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Einzelheiten stehen in der GNU
+General Public License. Der vollständige Text liegt der Software in der Datei
+LICENSE bei, sonst unter <https://www.gnu.org/licenses/>.
 """
 
 import datetime
@@ -542,10 +552,22 @@ def _amd_clock(dev):
     return 0.0
 
 
+def short_cpu(name):
+    """Der Name der CPU ohne den Werbeanhang der Hersteller.
+
+    '8-Core Processor', '(R)', 'CPU @ 3.80GHz': nichts davon unterscheidet zwei
+    Rechner, es macht die Zeile in der Seitenleiste nur doppelt so lang. Die
+    Kernzahl steht im Live-Monitor, der Takt ebenfalls.
+    """
+    out = re.sub(r"\((?:R|TM)\)|\bCPU\b|\bProcessor\b|\b\d+-Core\b|@.*$",
+                 " ", name)
+    return re.sub(r"\s{2,}", " ", out).strip(" -") or name.strip() or "CPU"
+
+
 def cpu_model():
     for line in open("/proc/cpuinfo"):
         if line.startswith("model name"):
-            return line.split(":", 1)[1].strip()
+            return short_cpu(line.split(":", 1)[1].strip())
     return "Unbekannte CPU"
 
 
@@ -763,8 +785,22 @@ def processes():
 # apt-get und snap direkt, das spart die Installation nach /usr/lib und die
 # eigene Polkit-Regel. Namen gehen als eigene Argumente raus, nie als Shell.
 
-UPDATE_SOURCES = {"apt": "APT-Pakete", "snap": "Snaps",
-                  "flatpak": "Flatpaks", "fwupd": "Firmware"}
+UPDATE_SOURCES = {"apt": N_("APT-Pakete"), "snap": N_("Snaps"),
+                  "flatpak": N_("Flatpaks"), "fwupd": N_("Firmware")}
+# Ein einzelnes Update ist keine "1 Flatpaks". Firmware bleibt gleich, das ist
+# im Deutschen wie im Englischen kein zaehlbares Wort.
+UPDATE_SOURCE_ONE = {"apt": N_("APT-Paket"), "snap": N_("Snap"),
+                     "flatpak": N_("Flatpak"), "fwupd": N_("Firmware")}
+
+
+def source_label(src, n=0):
+    """Name einer Update-Quelle, bei genau einem Eintrag in der Einzahl.
+
+    Uebersetzt erst hier: die Tabellen stehen vor dem Laden des Katalogs, ein
+    _() dort haette die deutschen Namen festgeschrieben.
+    """
+    return _(UPDATE_SOURCE_ONE[src] if n == 1 else UPDATE_SOURCES[src]) \
+        if src in UPDATE_SOURCES else src
 # Wie im Helfer von allinone-updater: erstes Zeichen alphanumerisch, damit
 # keine Option durchrutscht, und kein '-' am Ende, das hieße für apt entfernen.
 PKG_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9.+:/_-]*", re.ASCII)
@@ -836,6 +872,31 @@ def parse_apt_removals(text):
     das Update haengen und niemand wuesste warum.
     """
     return sorted({m for m in re.findall(r"^Remv (\S+)", text, re.M)})
+
+
+# apt nennt die zurueckgehaltenen Pakete in der Simulation selbst, also kostet
+# das Auslesen keinen zweiten Lauf. Unter LC_ALL=C steht der Satz englisch da.
+PHASED_HEAD = "The following upgrades have been deferred due to phasing:"
+
+
+def parse_apt_phased(text):
+    """Pakete, die apt wegen der schrittweisen Ausrollung noch zurueckhaelt.
+
+    Die stehen in keiner Inst-Zeile, apt zieht sie jetzt nicht. Ohne sie meldet
+    die Seite "alles aktuell", waehrend `apt list --upgradable` neun Zeilen
+    zeigt, und der Widerspruch sieht nach einem Fehler der App aus.
+    """
+    out, hit = [], False
+    for line in text.splitlines():
+        if line.startswith(PHASED_HEAD):
+            hit = True
+        elif not hit:
+            continue
+        elif line.startswith("  "):
+            out.extend(line.split())
+        else:
+            break
+    return sorted(set(out))
 
 
 def parse_snap_updates(text, installed=""):
@@ -939,6 +1000,50 @@ def fmt_lists_age(secs):
     return _("Paketlisten frisch geholt")
 
 
+# Woran ein gescheiterter Lauf gelegen hat, in Worten. Nur woertlich Bekanntes
+# wird gedeutet, alles andere bleibt beim Exitcode: eine erfundene Ursache ist
+# schlimmer als eine nackte Zahl. Die Muster stehen englisch da, weil sh_rc
+# LC_ALL und LANG auf C setzt.
+TOOL_ERRORS = [
+    (("could not get lock", "unable to acquire the dpkg frontend lock",
+      "unable to lock the administration directory"),
+     N_("Die Paketverwaltung ist gerade belegt. Meist läuft die automatische "
+        "Aktualisierung im Hintergrund oder ein zweites Programm hat sie "
+        "geöffnet. Das erledigt sich von selbst, in ein paar Minuten noch "
+        "einmal einlesen.")),
+    (("no_pubkey", "is not signed", "no longer signed", "signatures couldn't be "
+      "verified"),
+     N_("Eine Paketquelle ist nicht sauber signiert. Von dort kommt nichts, "
+        "solange das so ist. Welche es ist, steht in der Ausgabe unter "
+        "'Paketlisten holen'.")),
+    (("failed to fetch", "temporary failure resolving", "could not resolve",
+      "connection failed", "network is unreachable"),
+     N_("Eine Paketquelle war nicht erreichbar. Das kann an der Verbindung "
+        "liegen oder daran, dass der Anbieter gerade nichts ausliefert.")),
+    (("you have held broken packages", "unmet dependencies",
+      "broken packages"),
+     N_("Die Paketverwaltung hat unerfüllte Abhängigkeiten und kommt so nicht "
+        "weiter. Im Terminal hilft: sudo apt --fix-broken install")),
+    (("no space left on device",),
+     N_("Kein Platz mehr auf dem Datenträger. Erst aufräumen, dann noch "
+        "einmal einlesen.")),
+]
+
+
+def tool_error(tool, rc, text):
+    """Der Grund eines gescheiterten Laufs im Klartext, sonst der Exitcode.
+
+    'apt-get endete mit Code 100' sagt einem Laien nichts, und der haeufigste
+    Grund dafuer ist im Alltag immer derselbe: die Paketverwaltung ist gerade
+    von der automatischen Aktualisierung belegt.
+    """
+    low = (text or "").lower()
+    for muster, satz in TOOL_ERRORS:
+        if any(m in low for m in muster):
+            return _(satz)
+    return _("{tool} endete mit Code {rc}").format(tool=tool, rc=rc)
+
+
 def updates_scan(include_firmware=True):
     """{quelle: {"items": [(id, name, alt, neu, byte)], "error": str|None}}.
 
@@ -956,9 +1061,7 @@ def updates_scan(include_firmware=True):
                         "error": _("{tool} antwortet nicht").format(
                             tool=cmd[0])}
         elif rc != 0:
-            out[src] = {"items": [],
-                        "error": _("{tool} endete mit Code {rc}").format(
-                            tool=cmd[0], rc=rc)}
+            out[src] = {"items": [], "error": tool_error(cmd[0], rc, text)}
         else:
             out[src] = {"items": parse(text, *extra), "error": None}
             return text
@@ -972,6 +1075,7 @@ def updates_scan(include_firmware=True):
         sim = run("apt", ["apt-get", "-s", "-o", "Debug::NoLocking=1",
                           "dist-upgrade"], 60, parse_apt_updates, uris)
         out["apt"]["removals"] = parse_apt_removals(sim)
+        out["apt"]["phased"] = parse_apt_phased(sim)
     if shutil.which("snap"):
         run("snap", ["snap", "refresh", "--list"], 60, parse_snap_updates,
             sh(["snap", "list"], timeout=30))
@@ -995,6 +1099,9 @@ SNAPSHOT_CMD = ["pkexec", "timeshift", "--create", "--comments", "dynotiq"]
 PROGRESS_LINE = re.compile(
     r"^(?:Setting up|Unpacking|Installing|Updating|Refreshing|Refresh)\s+(\S+)")
 PROGRESS_FILE = re.compile(r"^Preparing to unpack .*?/([^/_]+)_")
+# flatpak schreibt seinen Fortschritt im Sekundentakt als eigene Zeile. Die
+# Zahl vorn reicht als Erkennung, der Rest der Zeile ist uebersetzt.
+PROGRESS_PCT = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*%")
 
 
 def progress_name(line):
@@ -1049,6 +1156,11 @@ def update_cmd(src, ids, fresh=False):
     Name aus einem veralteten Scan etwas neu installiert.
     """
     if src == "apt":
+        # --force-confold behaelt eine geaenderte Konfigurationsdatei still,
+        # statt zu fragen. Das muss so sein, weil im Protokollfenster niemand
+        # eine dpkg-Rueckfrage beantworten kann. Gesagt wird es trotzdem, siehe
+        # UPDATE_CONF_HINT auf der Updates-Seite.
+        #
         # pkexec setzt die Umgebung des Kindes auf ein Minimum zurueck, deshalb
         # muss DEBIAN_FRONTEND ueber env gesetzt werden statt ueber Popen(env=).
         return ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
@@ -1061,6 +1173,141 @@ def update_cmd(src, ids, fresh=False):
     if src == "flatpak":
         return ["flatpak", "update", "-y", "--noninteractive", *ids]
     return ["fwupdmgr", "update", "-y", *ids]
+
+
+def needs_fresh(src, ids, fresh):
+    """Steckt in der Auswahl ein Paket, das es noch gar nicht gibt?
+
+    fresh traegt (Quelle, Kennung), denn ein Snap und ein Paket duerfen gleich
+    heissen. Wer hier mit nackten Kennungen vergleicht, bekommt immer eine
+    leere Schnittmenge, und dann bleibt --only-upgrade auch dann stehen, wenn
+    apt genau deshalb ein Paket kommentarlos uebergeht.
+    """
+    return bool({(src, i) for i in ids} & set(fresh))
+
+
+def pkexec_apt_argv(pkgs, recommends=False):
+    """Paketlisten holen und installieren, in einem einzigen pkexec.
+
+    Als zwei Schritte fragt polkit zweimal nach dem Passwort: fuer
+    org.freedesktop.policykit.exec gibt es nur auth_admin, kein
+    auth_admin_keep. Wer beim zweiten Mal abbricht, hat die Listen geholt und
+    sonst nichts, und beim Grafiktreiber sieht das aus wie ein Fehlschlag.
+    Die Paketnamen gehen als Argumente in die Shell, nie in den Skripttext.
+    """
+    return ["pkexec", "sh", "-c",
+            "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y "
+            + ("--install-recommends " if recommends else "") + '-- "$@"',
+            "sh", *pkgs]
+
+
+# 'flatpak update' nennt jeden gescheiterten Eintrag in einer eigenen Zeile.
+# Der Rahmen bleibt englisch, der Grund dahinter kommt uebersetzt: flatpak hat
+# nur den inneren Text in seinen Katalogen.
+FLATPAK_FAIL = re.compile(r"Failed to update (\S+?):\s*(.+?)\s*$", re.M)
+# Nur woertlich Bekanntes wird gedeutet. Je Schluessel die englische Fassung
+# und die Uebersetzungen, alles klein geschrieben.
+FLATPAK_REASONS = {
+    "too_old": ("needs a later flatpak version", "neuere flatpak-version"),
+}
+
+
+def flatpak_appid(ref):
+    """Die nackte Anwendungskennung aus jeder Schreibweise einer Ref."""
+    p = ref.split("/")
+    return p[1] if len(p) == 4 and p[0] in ("app", "runtime") else p[0]
+
+
+def parse_flatpak_fails(text):
+    """{Kennung: (Grund im Klartext, Schluessel oder "")} aus dem Lauf."""
+    out = {}
+    for ref, why in FLATPAK_FAIL.findall(text):
+        low = why.lower()
+        out[flatpak_appid(ref)] = (why, next(
+            (k for k, pats in FLATPAK_REASONS.items()
+             if any(p in low for p in pats)), ""))
+    return out
+
+
+def update_failures(src, left, log):
+    """({Ref: Grund oder ""}, Schluessel des ersten erkannten Grundes).
+
+    Der Grund ist der Rohtext des Laufs. Wo keiner steht, bleibt es beim
+    blossen Namen, geraten wird nichts.
+    """
+    fails = parse_flatpak_fails(log) if src == "flatpak" else {}
+    notes, kind = {}, ""
+    for ref in left:
+        why, k = fails.get(flatpak_appid(ref), ("", ""))
+        kind = kind or k
+        notes[ref] = why
+    return notes, kind
+
+
+def update_fail_notes():
+    """{Quelle: {Ref: Grund}} aus dem jeweils juengsten gescheiterten Lauf.
+
+    Nur der letzte Versuch zaehlt. Was inzwischen durchlief, steht ohnehin
+    nicht mehr in den offenen Updates und wird nie angezeigt.
+    """
+    out = {}
+    for e in history_read(200, "update-fail"):
+        if isinstance(e.get("items"), dict):
+            out[e.get("src")] = e["items"]
+    return out
+
+
+# Das Flatpak-Projekt baut fuer aeltere Ubuntus selbst weiter. Fest
+# eingetragen, weil es genau diese eine offizielle Quelle gibt. Ob sie fuer
+# die eigene Fassung etwas hat, wird trotzdem gefragt statt angenommen.
+FLATPAK_PPA = "ppa:flatpak/stable"
+FLATPAK_PPA_URI = "https://ppa.launchpadcontent.net/flatpak/stable/ubuntu"
+
+
+def flatpak_ppa_argv():
+    """Quelle eintragen, Listen holen, flatpak anheben.
+
+    Ein pkexec fuer alle drei Schritte. Getrennt fragt polkit dreimal nach dem
+    Passwort, und wer beim zweiten abbricht, hat die Quelle drin und nichts
+    davon. Die Quelle geht als Argument in die Shell, nicht in den Skripttext.
+    """
+    return ["pkexec", "sh", "-c",
+            'add-apt-repository -y "$1" && apt-get update && '
+            'DEBIAN_FRONTEND=noninteractive apt-get -y install '
+            '--only-upgrade flatpak', "sh", FLATPAK_PPA]
+
+
+def flatpak_too_old_fix():
+    """(Erklaerung, Befehl oder None, Beschriftung des Knopfs).
+
+    Erst apt, dann die Quelle des Flatpak-Projekts. Beide werden gefragt,
+    statt einen Weg anzubieten, der auf dieser Fassung nichts liefert.
+    """
+    ver = sh(["flatpak", "--version"], timeout=10).split()
+    text = _("Flatpak {v} ist zu alt für dieses Update.").format(
+        v=ver[-1] if ver else "?")
+    inst, cand, _repo = parse_apt_policy(
+        sh(["apt-cache", "policy", "flatpak"], timeout=30))
+    if deb_newer(cand, inst):
+        return (text + " " + _("Über apt liegt {v} bereit.").format(v=cand),
+                update_cmd("apt", ["flatpak"]), _("Flatpak aktualisieren"))
+    codename = os_release("VERSION_CODENAME")
+    if codename and source_status(FLATPAK_PPA_URI, codename) == "ok":
+        return (text + " "
+                + _("Ubuntu selbst liefert nichts Neueres. Das Flatpak-Projekt "
+                    "baut für {codename} aber eine eigene Paketquelle, und die "
+                    "hat eine neuere Fassung.").format(codename=codename)
+                + "\n\n"
+                + _("Der Knopf trägt {ppa} ein, holt die Paketlisten und hebt "
+                    "flatpak an. Das ist eine Quelle außerhalb von Ubuntu, sie "
+                    "liefert danach auch künftige flatpak-Updates. Wieder los "
+                    "wird man sie mit: sudo add-apt-repository --remove {ppa}"
+                    ).format(ppa=FLATPAK_PPA),
+                flatpak_ppa_argv(), _("Paketquelle eintragen und aktualisieren"))
+    return (text + " " + _("Ubuntu liefert für diese Fassung nichts Neueres, "
+                           "und das Flatpak-Projekt baut hier auch nichts. "
+                           "Neuer wird flatpak erst mit dem nächsten Ubuntu."),
+            None, "")
 
 
 # App-Prüfung. Nimmt eine installierte Anwendung und sieht nach, woran sie
@@ -1149,6 +1396,101 @@ def desktop_apps():
                 e["Path"] = path
                 apps[name] = e
     return apps
+
+
+USER_APPS = os.path.expanduser("~/.local/share/applications")
+
+
+def steam_installed_ids():
+    """AppIDs aller installierten Steam-Titel über alle Bibliotheken."""
+    return {os.path.basename(mf)[len("appmanifest_"):-len(".acf")]
+            for lib in steam_libraries()
+            for mf in glob.glob(os.path.join(lib, "steamapps", "appmanifest_*.acf"))}
+
+
+def dead_launchers(path=USER_APPS, installed=None):
+    """[(Name, Datei, Grund)] der eigenen Startdateien, hinter denen nichts steht.
+
+    Nur das eigene Verzeichnis. Was unter /usr liegt, gehoert einem Paket, da
+    raeumt dpkg auf, und ein Loeschen dort waere beim naechsten Update wieder
+    da. Ausgenommen bleiben ausserdem:
+
+    Hidden, denn genau so blendet man einen Systemeintrag gezielt aus. Die
+    Datei wegzunehmen holt den ausgeblendeten Eintrag zurueck.
+
+    NoDisplay, denn der steht ohnehin nicht im Menue. Meist ist er nur die
+    Zuordnung fuer einen Dateityp und stoert niemanden.
+
+    Startzeilen ueber flatpak oder snap, denn dort sagt der Programmpfad nichts
+    darueber, ob die Anwendung noch da ist.
+    """
+    have = steam_installed_ids() if installed is None else installed
+    out = []
+    for f in sorted(glob.glob(os.path.join(path, "*.desktop"))):
+        text = read(f)
+        if not text:
+            continue
+        e = parse_desktop(text)
+        ex = e.get("Exec", "")
+        if not ex or e.get("Hidden") == "true" or e.get("NoDisplay") == "true":
+            continue
+        name = e.get("Name") or os.path.basename(f)
+        m = STEAM_APPID.search(ex)
+        if m:
+            # Dieselbe Grenze wie in orphan_prefixes: alles jenseits von 2^31
+            # ist eine selbst hinzugefuegte Verknuepfung, die nie ein Manifest
+            # hat. Ohne diese Grenze boete die Seite an, einen funktionierenden
+            # Eintrag zu loeschen. Und ohne eine einzige gefundene Installation
+            # ist die Bibliothek nicht lesbar, dann sagt das Fehlen nichts.
+            if have and m.group(1) not in have \
+                    and m.group(1).isdigit() and 0 < int(m.group(1)) < 2**31:
+                out.append((name, f, _("Steam-Titel {id} ist nicht mehr "
+                                       "installiert").format(id=m.group(1))))
+            continue
+        if "flatpak run" in ex or "snap run" in ex:
+            continue
+        # TryExec ist genau dafuer da: steht dort etwas, das es nicht gibt, soll
+        # der Eintrag laut Spezifikation gar nicht erst angezeigt werden.
+        # Eine Startzeile durch eine Shell ist nicht zu beurteilen: bei
+        # 'sh -c "cd /pfad && ./spiel"' haelt exec_binary das cd fuer das
+        # Programm, und ein funktionierender Eintrag stuende auf der Loeschliste.
+        if not e.get("TryExec") and re.search(r"\b(sh|bash|dash|zsh)\s+-c\b", ex):
+            continue
+        binary = e.get("TryExec") or exec_binary(ex)
+        if not binary or binary.startswith("/snap/"):
+            continue
+        if "/" in binary:
+            if not os.path.exists(binary):
+                out.append((name, f, _("{path} gibt es nicht mehr").format(
+                    path=binary)))
+        elif not shutil.which(binary):
+            out.append((name, f, _("Das Programm {prog} ist nicht installiert"
+                                   ).format(prog=binary)))
+    return out
+
+
+def remove_launchers(paths, base=USER_APPS):
+    """Startdateien loeschen, [] wenn nichts ging.
+
+    Die Liste kommt aus dem eigenen Fund und wird trotzdem geprueft: ein
+    Loeschen, das sich auf die Richtigkeit seines Aufrufers verlaesst, trifft
+    irgendwann das Falsche. Erlaubt ist nur eine .desktop-Datei direkt in base.
+    Bei einem Symlink faellt der Link, nicht sein Ziel.
+    """
+    real = os.path.realpath(base)
+    gone = []
+    for p in paths:
+        if not p.endswith(".desktop") or os.path.realpath(os.path.dirname(p)) != real:
+            print(f"Starter uebersprungen: {p}", file=sys.stderr)
+            continue
+        try:
+            os.remove(p)
+            gone.append(p)
+        except OSError as e:
+            print(f"Starter {p}: {e}", file=sys.stderr)
+    if gone and shutil.which("update-desktop-database"):
+        sh(["update-desktop-database", base], timeout=30)
+    return gone
 
 
 def missing_libs(binary):
@@ -1276,6 +1618,18 @@ def parse_apt_policy(text):
     return (inst.group(1) if inst else "", cand.group(1) if cand else "", from_repo)
 
 
+def deb_newer(cand, inst):
+    """Ist cand als Paketversion wirklich neuer als inst?
+
+    Ueber dpkg statt ueber einen Zeichenkettenvergleich: 1.10 steht ueber 1.9,
+    und 2.0~rc1 unter 2.0. Ungleich heisst nicht neuer. Eine Quelle, die eine
+    aeltere Fassung fuehrt, bot sonst ein Update an, das ein Rueckschritt war.
+    """
+    if not cand or not inst or "(none)" in (cand, inst):
+        return False
+    return sh_rc(["dpkg", "--compare-versions", cand, "gt", inst])[0] == 0
+
+
 def app_dirs(names):
     """[(Pfad, Bytes)] der Ordner, die eine Anwendung im Home anlegt.
 
@@ -1348,10 +1702,187 @@ def steam_libraries():
     return list(out)
 
 
+def steam_libraries_listed():
+    """Alle Bibliotheken aus libraryfolders.vdf, auch die gerade nicht da sind."""
+    root = steam_root()
+    if not root:
+        return []
+    out = [os.path.realpath(root)]
+    for p in re.findall(r'"path"\s+"([^"]+)"',
+                        read(os.path.join(root, "steamapps",
+                                          "libraryfolders.vdf")) or ""):
+        p = os.path.realpath(p.replace("\\\\", "/"))
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def steam_libraries_away():
+    """Bibliotheken, die Steam kennt, die aber gerade nicht erreichbar sind.
+
+    Eine Bibliothek auf einer externen Platte verschwindet beim Aushaengen
+    samt allem darauf: Spielen, Proton-Fassungen und Laufzeitumgebungen. Ohne
+    diese Liste haelt die Seite alles davon fuer deinstalliert und bietet an,
+    zwei Gigabyte neu zu laden, obwohl nur ein Datentraeger fehlt.
+    """
+    return [p for p in steam_libraries_listed()
+            if not os.path.isdir(os.path.join(p, "steamapps"))]
+
+
 def steam_apps():
     """Anzahl installierter Steam-Titel über alle Bibliotheken."""
     return sum(len(glob.glob(os.path.join(lib, "steamapps", "appmanifest_*.acf")))
                for lib in steam_libraries())
+
+
+# Die Oberfläche von Steam ist ein eingebettetes Chromium. Stirbt dessen
+# GPU-Prozess, wird das Fenster schwarz oder die Anwendung startet neu, und
+# nichts davon steht im Journal: Chromium fängt den Absturz selbst ab, startet
+# den Prozess nach und schreibt nur in sein eigenes Log. Damit läuft dieser
+# Fall an coredumpctl und am Xid-Katalog vorbei.
+CEF_CRASH = "GPU process exited unexpectedly"
+# [8842:8842:0808/100139.514847:ERROR:gpu_process_host.cc(1002)] ...
+# Der Stempel trägt nur Monat und Tag, kein Jahr.
+CEF_STAMP = re.compile(r"^\[\d+:\d+:(\d{4})/")
+STEAM_CEF_FLAG = "-cef-disable-gpu-compositing"
+# Ein einzelner Absturz ist ein Ausrutscher. Auffällig wird es, wenn er
+# wiederkommt, und zwar an mehr als einem Tag.
+CEF_CRASH_MIN, CEF_DAYS_MIN = 3, 2
+
+
+def read_tail(path, limit=2 << 20):
+    """Die letzten limit Bytes einer Datei, an der nächsten Zeilengrenze
+    abgeschnitten. Das CEF-Log wächst ungebremst, und ein Scan darf nicht mit
+    der Laufzeit einer Steam-Installation länger werden."""
+    try:
+        with open(path, errors="replace") as f:
+            f.seek(0, os.SEEK_END)
+            start = max(0, f.tell() - limit)
+            f.seek(start)
+            text = f.read()
+    except OSError:
+        return ""
+    # Der erste Treffer nach dem Sprung ist meist eine halbe Zeile.
+    return text.partition("\n")[2] if start else text
+
+
+def steam_cef_log():
+    """Pfad zum Log der Steam-Oberfläche, leer wenn es das nicht gibt."""
+    root = steam_root()
+    if not root:
+        return ""
+    # ~/.steam/steam ist ein Symlink auf die eigentliche Installation.
+    p = os.path.join(os.path.realpath(root), "logs", "cef_log.txt")
+    return p if os.path.exists(p) else ""
+
+
+def count_cef_gpu_crashes(text, jetzt=None, tage=30):
+    """(Abstürze, verschiedene Tage) im übergebenen Logausschnitt.
+
+    Nur die letzten tage Tage. Das Log wächst über Monate, und ohne Fenster
+    stand der Befund noch da, wenn der Treiberfehler längst behoben war. Der
+    Stempel trägt nur Monat und Tag, das Jahr kommt deshalb vom Aufrufer:
+    liegt der Tag hinter dem Stichtag, gehört er ins Vorjahr.
+    """
+    now = datetime.date.today() if jetzt is None else jetzt
+    days, total = set(), 0
+    for line in text.splitlines():
+        if CEF_CRASH not in line:
+            continue
+        m = CEF_STAMP.match(line)
+        if not m:
+            continue
+        try:
+            d = datetime.date(now.year, int(m.group(1)[:2]), int(m.group(1)[2:]))
+        except ValueError:
+            continue
+        if d > now:
+            d = d.replace(year=now.year - 1)
+        if (now - d).days > tage:
+            continue
+        total += 1
+        days.add(m.group(1))
+    return total, len(days)
+
+
+def desktop_with_flag(text, flag=STEAM_CEF_FLAG):
+    """Jede Exec-Zeile, die Steam startet, bekommt das Flag hinter den
+    Programmpfad.
+
+    Auch die der [Desktop Action ...]-Gruppen: wer aus dem Kontextmenü des
+    Symbols die Bibliothek öffnet und Steam läuft gerade nicht, startet es
+    sonst wieder ohne das Flag. Zeilen, die über flatpak oder einen Wrapper
+    gehen, bleiben unangetastet, dort steht das Flag an der falschen Stelle.
+    """
+    out = []
+    for ln in text.splitlines():
+        head, sep, rest = ln.partition("=")
+        prog, _s, args = rest.partition(" ")
+        if (head.strip() == "Exec" and sep and flag not in rest
+                and os.path.basename(prog) == "steam"):
+            ln = f"Exec={prog} {flag}" + (f" {args}" if args else "")
+        out.append(ln)
+    return "\n".join(out) + "\n"
+
+
+# Die Startdatei der Oberflaeche heisst nicht ueberall gleich. Als Flatpak
+# traegt sie die Anwendungskennung, und ohne diesen Namen fand der Fix nichts,
+# meldete aber "steht schon in allen Startdateien".
+STEAM_DESKTOP_NAMES = ("steam.desktop", "com.valvesoftware.Steam.desktop")
+
+
+def steam_desktop_files():
+    """Die Startwege der Oberfläche als (Ziel, Vorlage): der Menüeintrag und,
+    falls eingerichtet, der Autostart.
+
+    Der Autostart wird nur angefasst, wenn es ihn schon gibt. Ihn anzulegen
+    hieße, Steam beim Anmelden zu starten, und danach hat niemand gefragt.
+    """
+    out = []
+    for name in STEAM_DESKTOP_NAMES:
+        menu = os.path.expanduser(f"~/.local/share/applications/{name}")
+        system = next((p for p in (f"/usr/share/applications/{name}",
+                                   os.path.expanduser(
+                                       f"~/.local/share/flatpak/exports/share/"
+                                       f"applications/{name}"),
+                                   f"/var/lib/flatpak/exports/share/"
+                                   f"applications/{name}")
+                       if os.path.exists(p)), "")
+        if os.path.exists(menu) or system:
+            out.append((menu, menu if os.path.exists(menu) else system))
+        auto = os.path.join(AUTOSTART_DIR, name)
+        if os.path.exists(auto):
+            out.append((auto, auto))
+    return out
+
+
+def steam_set_cef_flag():
+    """Setzt das Flag in allen Startwegen. Gibt die geänderten Pfade zurück.
+
+    Der Menüeintrag ist nach einer Neuinstallation ein Symlink auf die Vorlage
+    im Steam-Ordner, und die überschreibt das nächste Steam-Update. Deshalb
+    wird der Link durch eine echte Datei ersetzt statt sein Ziel beschrieben.
+    """
+    done = []
+    for target, source in steam_desktop_files():
+        text = read(source)
+        if not text:
+            continue
+        patched = desktop_with_flag(text)
+        if patched.strip() == text.strip():
+            continue
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if os.path.islink(target):
+            os.unlink(target)
+        with open(target, "w") as f:
+            f.write(patched)
+        done.append(target)
+    return done
+
+
+def steam_cef_flag_set():
+    """True, sobald einer der Startwege das Flag trägt."""
+    return any(STEAM_CEF_FLAG in (read(t) or "") for t, _s in steam_desktop_files())
 
 
 def vdf_value(text, key):
@@ -1469,6 +2000,957 @@ def orphan_prefixes():
     return out
 
 
+# Proton und die Linux-Laufzeitumgebung
+#
+# Jede Proton-Fassung ab 5.13 laeuft in einem Container. Welchen sie braucht,
+# steht in ihrer eigenen toolmanifest.vdf, und der Container ist selbst ein
+# Steam-Titel mit eigener AppID. Fehlt er, startet mit dieser Fassung kein
+# einziges Spiel, und Steam meldet dazu nur, dass das Spiel gleich wieder
+# beendet wurde. Das ist die haeufigste Antwort auf "warum geht das Spiel mit
+# diesem Proton nicht".
+
+RUNTIME_NAMES = {"1070560": "Steam Linux Runtime 1.0 (scout)",
+                 "1391110": "Steam Linux Runtime 2.0 (soldier)",
+                 "1628350": "Steam Linux Runtime 3.0 (sniper)",
+                 "4183110": "Steam Linux Runtime 4.0 (medic)"}
+
+
+def runtime_name(appid):
+    return RUNTIME_NAMES.get(appid, _("Laufzeitumgebung {id}").format(id=appid))
+
+
+def tool_runtime(path):
+    """AppID der Laufzeitumgebung, die diese Fassung braucht, sonst ""."""
+    return vdf_value(read(os.path.join(path, "toolmanifest.vdf")) or "",
+                     "require_tool_appid")
+
+
+def compat_dirs():
+    """{aufgelöster Pfad: Schreibweise} jedes compatibilitytools.d-Ordners.
+
+    Aufgelöst, weil ~/.steam/root, ~/.steam/steam und ~/.local/share/Steam auf
+    denselben Ordner zeigen können, aber nicht müssen.
+    """
+    out = {}
+    for root in STEAM_DIRS:
+        p = os.path.join(os.path.expanduser(root), "compatibilitytools.d")
+        if os.path.isdir(p):
+            out.setdefault(os.path.realpath(p), p)
+    return out
+
+
+def proton_dirs():
+    """[(Name, Ordner)] jeder Proton-Fassung auf diesem Rechner.
+
+    Valves eigene liegen als Titel in steamapps/common, selbst installierte
+    unter compatibilitytools.d. Der Name ist bei den eigenen der interne aus
+    compatibilitytool.vdf, bei Valves der Ordnername: einen internen gibt es
+    dort nicht, den vergibt Steam selbst.
+    """
+    out = list(compat_tools().items())
+    seen = {os.path.realpath(p) for _n, p in out}
+    for lib in steam_libraries():
+        for d in sorted(glob.glob(os.path.join(lib, "steamapps", "common",
+                                               "Proton*"))):
+            if os.path.realpath(d) not in seen and os.path.isfile(
+                    os.path.join(d, "toolmanifest.vdf")):
+                out.append((os.path.basename(d), d))
+    return out
+
+
+def broken_compat_tools(dirs=None):
+    """[(Name, Ordner, Grund)] der eigenen Fassungen, die so nicht laufen.
+
+    Steam nimmt einen unbrauchbaren Ordner kommentarlos aus seiner Liste. Wer
+    ein Spiel darauf eingestellt hatte, merkt davon nur, dass es nicht mehr
+    startet. Der haeufigste Fall ist ein abgebrochenes Entpacken, der zweite
+    eine Verknuepfung auf einen Ordner, den es nicht mehr gibt.
+    """
+    out = []
+    for real in (compat_dirs() if dirs is None else dirs):
+        for d in sorted(glob.glob(os.path.join(real, "*"))):
+            name = os.path.basename(d)
+            if os.path.islink(d) and not os.path.exists(d):
+                out.append((name, d, _("zeigt als Verknüpfung auf {target}, "
+                                       "und den Ordner gibt es nicht mehr"
+                                       ).format(target=os.readlink(d))))
+            elif not os.path.isdir(d):
+                continue
+            elif not os.path.isfile(os.path.join(d, "compatibilitytool.vdf")):
+                out.append((name, d, _("hat keine compatibilitytool.vdf, ohne "
+                                       "die nimmt Steam den Ordner nicht auf")))
+            elif not os.path.isfile(os.path.join(d, "proton")):
+                out.append((name, d, _("hat keine Datei namens proton, das "
+                                       "Entpacken war unvollständig")))
+    return out
+
+
+def runtime_state(appid, installed=None):
+    """"" wenn die Laufzeitumgebung brauchbar ist, sonst "missing" oder "broken".
+
+    Dass ein appmanifest dasteht, heisst nur, dass Steam sie einmal geholt hat.
+    Ob sie sich auch laden laesst, entscheidet die toolmanifest.vdf in ihrem
+    Ordner. Fehlt die, sagt Steam "Failed to load manifest for tool" und
+    danach "unsupported version 0", und jede Proton-Fassung, die auf ihr
+    aufsetzt, bricht mit "Kompatibilitaetswerkzeug fehlgeschlagen" ab. Der
+    Zustand ist von aussen nicht zu sehen: das Manifest meldet StateFlags 4,
+    also vollstaendig installiert.
+    """
+    have = steam_installed_ids() if installed is None else installed
+    if not have:
+        return ""                       # Bibliothek nicht lesbar, nichts sagen
+    if appid not in have:
+        # Fehlt gerade ein Datentraeger, sagt das Fehlen eines Manifests
+        # nichts: die Umgebung kann dort liegen und einfach nicht erreichbar
+        # sein. Ein Angebot, sie neu zu laden, waere dann falsch.
+        return "" if steam_libraries_away() else "missing"
+    g = steam_game(appid)
+    if not g or not os.path.isdir(g["path"]):
+        return "missing"
+    # Zwei Dateien, zwei unabhaengige Ausfallgruende. Erst die toolmanifest.vdf,
+    # an der Steam selbst scheitert. Dann das Programm, das sie nennt: steht es
+    # nicht da, laedt Steam die Umgebung zwar, der Start bricht aber trotzdem
+    # ab. Der Name kommt aus der Datei und wird nicht geraten, denn scout heisst
+    # dort scout-on-soldier-entry-point-v2 und nicht _v2-entry-point.
+    mf = os.path.join(g["path"], "toolmanifest.vdf")
+    try:
+        if os.path.getsize(mf) <= 0:
+            return "broken"
+    except OSError:
+        return "broken"
+    ep = tool_entry_point(g["path"])
+    return "broken" if ep and not os.path.exists(ep) else ""
+
+
+def tool_entry_point(path):
+    """Das Programm, das die toolmanifest.vdf startet, als voller Pfad.
+
+    Leer, wo sich das nicht sicher aufloesen laesst: ein fuehrender
+    Schraegstrich meint den Werkzeugordner, alles andere koennte ein
+    absoluter Pfad oder ein Kommando aus dem Suchpfad sein, und darueber
+    wird nichts behauptet.
+    """
+    cl = vdf_value(read(os.path.join(path, "toolmanifest.vdf")) or "",
+                   "commandline")
+    erst = cl.split()[0] if cl.split() else ""
+    return os.path.join(path, erst.lstrip("/")) if erst.startswith("/") else ""
+
+
+def runtime_problems(tools=None, installed=None):
+    """[(Fassung, Ordner, AppID, Zustand)] je Fassung mit unbrauchbarer Umgebung.
+
+    Zustand ist "missing" oder "broken". Ohne eine einzige gefundene
+    Installation bleibt die Liste leer: dann ist die Bibliothek nicht lesbar,
+    und das Fehlen sagt nichts.
+    """
+    have = steam_installed_ids() if installed is None else installed
+    if not have:
+        return []
+    out = []
+    for name, path in (proton_dirs() if tools is None else tools):
+        need = tool_runtime(path)
+        state = runtime_state(need, have) if need else ""
+        if state:
+            out.append((name, path, need, state))
+    return out
+
+
+# Steam schreibt jeden gescheiterten Start in sein eigenes Log, und zwar mit
+# Grund. Das ist die belastbarste Quelle, die es fuer diese Fehlerklasse gibt:
+# sie sagt nicht, was kaputt sein koennte, sondern was Steam wirklich abbrach.
+COMPAT_LOG = "logs/compat_log.txt"
+# Die eine Zeile, mit der Steam den Start wirklich aufgibt. Sie steht englisch
+# da, auch auf einem deutschen Desktop: Steam uebersetzt sein Log nicht.
+COMPAT_WRAP_FAIL = re.compile(
+    r"^\[([\d-]+ [\d:]+)\] Tool \d+ \"([^\"]+)\" has a dependency on tool "
+    r"(\d+): dependent tool cmdline wrap failed")
+# Erst die naechste Zeile trennt den Abbruch von der blossen Anmeldung eines
+# Werkzeugs, und sie nennt zugleich das Spiel.
+COMPAT_RELEASE = re.compile(r"^\[[\d-]+ [\d:]+\] ReleaseSession: appID (\d+)")
+
+
+def steam_compat_failures(text):
+    """{(Spiel-AppID, Fassung, Umgebungs-AppID): Zeitstempel} der Abbrueche.
+
+    Gezaehlt wird nur, was Steam unmittelbar mit einer Sitzungsfreigabe
+    quittiert. Dieselbe Zeile steht auch nach dem blossen Anmelden eines
+    Werkzeugs, und das ist kein Startversuch: von 22 Zeilen dieses Rechners
+    waren zwei genau das.
+
+    Der Schluessel traegt das Spiel, weil Steam je Klick eine Haupt- und eine
+    Nebensitzung oeffnet und die Zeile dabei zweimal schreibt. So wird aus zwei
+    Zeilen wieder ein Versuch.
+    """
+    out = {}
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        m = COMPAT_WRAP_FAIL.match(line)
+        if not m:
+            continue
+        rel = COMPAT_RELEASE.match(lines[i + 1])
+        if rel:
+            out[(rel.group(1), m.group(2), m.group(3))] = m.group(1)
+    return out
+
+
+def compat_log_failures(root=None, limit=4 << 20):
+    """[(Zeit, Spielname, Fassung, Umgebungs-AppID)], juengste zuerst.
+
+    Nur das Ende der Datei, sie waechst auf viele Megabyte. Vier davon, denn
+    mit einem deckte der gelesene Teil auf diesem Rechner nur anderthalb Tage
+    ab, waehrend der Filter darunter sieben Tage versprach. Was aelter ist,
+    faellt raus, sonst haengt ein laengst behobener Fall fuer immer in der
+    Anzeige.
+    """
+    r = root or steam_root()
+    if not r:
+        return []
+    text = read_tail(os.path.join(os.path.realpath(r), COMPAT_LOG), limit)
+    if not text:
+        return []
+    grenze = time.time() - 7 * 86400
+    out = []
+    for (game, tool, appid), when in steam_compat_failures(text).items():
+        try:
+            t = time.mktime(time.strptime(when, "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            continue
+        if t < grenze:
+            continue
+        g = steam_game(game)
+        out.append((t, (g["name"] if g else "") or game, tool, appid))
+    return sorted(out, reverse=True)
+
+
+def stray_compat_tools():
+    """([(Name, Ordner)], der Ordner, den Steam liest).
+
+    Steam sieht nur den compatibilitytools.d-Ordner unter seiner eigenen
+    Installation. Auf Ubuntu liegt die unter ~/.steam/debian-installation,
+    waehrend Anleitungen und Werkzeuge oft ~/.local/share/Steam nennen. Wer
+    dorthin entpackt, sucht seine Fassung in Steam vergeblich.
+    """
+    root = steam_root()
+    if not root:
+        return [], ""
+    good = os.path.realpath(os.path.join(root, "compatibilitytools.d"))
+    # Was drueben unter demselben internen Namen schon liegt, bringt verschoben
+    # nichts: Steam zeigt eine Fassung je Namen, und das tut es dann bereits.
+    here = {re.search(r'"([^"]+)"',
+                      vdf_block(read(v) or "", "compat_tools") or "")
+            for v in glob.glob(os.path.join(good, "*", "compatibilitytool.vdf"))}
+    here = {m.group(1) for m in here if m}
+    out = []
+    for real, shown in compat_dirs().items():
+        if real == good:
+            continue
+        for v in sorted(glob.glob(os.path.join(real, "*",
+                                               "compatibilitytool.vdf"))):
+            m = re.search(r'"([^"]+)"', vdf_block(read(v) or "", "compat_tools") or "")
+            if m and m.group(1) in here:
+                continue
+            name = os.path.basename(os.path.dirname(v))
+            # umu legt seine Fassungen selbst hierher und holt sie neu, sobald
+            # sie weg sind. Sie zu verschieben kostet einen Download und macht
+            # nebenbei Lutris-Eintraege mit festem Pfad kaputt.
+            if name.startswith("UMU-Proton") or umu_managed():
+                continue
+            out.append((name, os.path.join(shown, name)))
+    return out, good
+
+
+def umu_managed(base=None):
+    """Verwaltet umu diesen Ordner selbst? Dann gehoert er ihm, nicht Steam."""
+    return os.path.exists(os.path.expanduser(
+        base or "~/.local/share/umu/compatibilitytools.d.lock"))
+
+
+def prefix_version(prefix):
+    """Die Proton-Fassung, die diesen Prefix zuletzt angefasst hat.
+
+    Valve schreibt dort seine Buildnummer ('11.0-100'), eigene Fassungen ihren
+    Namen ('GE-Proton11-1'). Vergleichbar ist deshalb nur der zweite Fall.
+    """
+    return (read(os.path.join(prefix, "version")) or "").strip()
+
+
+def runtime_install_argv(appid):
+    """Steam die fehlende Laufzeitumgebung holen lassen. Ohne Steam kein Knopf."""
+    return [shutil.which("steam"), f"steam://install/{appid}"] \
+        if shutil.which("steam") else None
+
+
+def runtime_repair_argv(appid):
+    """Steam die Dateien pruefen und Fehlendes nachladen lassen.
+
+    validate statt loeschen und neu holen: Steam laedt nur nach, was wirklich
+    fehlt, und der Nutzer verliert nichts, falls die Diagnose danebenliegt.
+    """
+    return [shutil.which("steam"), f"steam://validate/{appid}"] \
+        if shutil.which("steam") else None
+
+
+def remove_tool_argv(path):
+    """Eine unbrauchbare Fassung wegräumen.
+
+    Bei einer Verknüpfung fällt nur der Link, sein Ziel gibt es ohnehin nicht
+    mehr. Bei einem halb entpackten Ordner geht rm -rf daran, und das ist hier
+    vertretbar: in einer Proton-Fassung liegen nur Programmdateien. Spielstände
+    stehen im Prefix unter compatdata, den fasst das hier nicht an.
+
+    Der Pfad geht als Argument in die Shell, und die Shell prüft ihn noch
+    einmal selbst: was nicht unter compatibilitytools.d liegt, wird nicht
+    angefasst, egal wer diesen Befehl zusammenbaut.
+    """
+    return ["sh", "-c",
+            'case "$1" in *"/compatibilitytools.d/"*) ;; '
+            '*) echo "Nicht unter compatibilitytools.d, abgebrochen" >&2; '
+            'exit 1 ;; esac; '
+            'if [ -L "$1" ]; then rm -v -- "$1"; else rm -rfv -- "$1"; fi',
+            "sh", path]
+
+
+def move_tools_argv(target, paths):
+    """Fassungen in den Ordner schieben, den Steam wirklich liest.
+
+    mv -n überschreibt nichts: liegt dort schon eine Fassung gleichen Namens,
+    bleibt sie stehen und die andere, wo sie war. Pfade gehen als Argumente in
+    die Shell, nicht in den Skripttext.
+    """
+    return ["sh", "-c",
+            'd="$1"; shift; mkdir -p "$d" || exit 1; rc=0; '
+            'for p in "$@"; do '
+            'if [ -e "$d/${p##*/}" ]; then '
+            'echo "Bleibt liegen, dort gibt es das schon: $p" >&2; rc=1; '
+            'else mv -- "$p" "$d" || rc=1; fi; done; exit $rc',
+            "sh", target, *paths]
+
+
+# Programme, die man ueblicherweise vor %command% haengt. Nur diese werden in
+# einer Kette geprueft: ein Wert wie das 3840 hinter -W ist ebenfalls ein
+# blosses Wort und waere sonst ein erfundenes fehlendes Programm.
+# Steams Platzhalter fuer den Spielstart. Als Text in einem uebersetzbaren
+# Satz haelt gettext das Prozentzeichen fuer eine Formatangabe und bricht den
+# Bau des Katalogs ab, deshalb geht er als Wert hinein.
+STEAM_CMD = "%command%"
+
+
+LAUNCH_WRAPPERS = ("gamemoderun", "mangohud", "gamescope", "strangle",
+                   "prime-run", "umu-run", "obs-gamecapture", "vkbasalt",
+                   "vblank_mode", "primusrun", "optirun")
+
+
+def launch_wrappers(opts):
+    """Die Programme, die vor %command% stehen, in der Reihenfolge des Aufrufs.
+
+    Das erste blosse Wort ist der Wrapper, danach zaehlen nur noch bekannte
+    Namen: dazwischen stehen Werte von Optionen, und die sind keine Programme.
+    Zuweisungen wie SteamDeck=0 sind Umgebung, keine Aufrufe.
+    """
+    vorn = opts.split("%command%")[0] if "%command%" in opts else opts
+    try:
+        toks = shlex.split(vorn)
+    except ValueError:
+        toks = vorn.split()
+    out, erste = [], True
+    for t in toks:
+        if t.startswith("-") or "=" in t or t == "--":
+            continue
+        if erste:
+            out.append(t)
+            erste = False
+        elif os.path.basename(t) in LAUNCH_WRAPPERS:
+            out.append(t)
+    return out
+
+
+def launch_option_problems(games=None):
+    """[(Titel, Problem, Programm)] zu Startoptionen, die den Start verhindern.
+
+    Zwei Faelle, beide haeufig und beide ohne jede Rueckmeldung von Steam: ein
+    Programm vor %command%, das es nicht gibt, und ein Wrapper ohne %command%,
+    der dann als Argument beim Spiel landet statt es zu starten.
+
+    Nur installierte Titel, sonst stehen hier die Karteileichen von Steams
+    Zuordnungstabelle.
+    """
+    out = []
+    for appid in (compat_mappings() if games is None else games):
+        g = steam_game(appid)
+        if not g:
+            continue
+        opts = steam_launch_options(appid)
+        if not opts.strip():
+            continue
+        progs = launch_wrappers(opts)
+        for p in progs:
+            da = os.path.exists(p) if "/" in p else bool(shutil.which(p))
+            if not da:
+                out.append((g["name"] or appid, "missing", p))
+        if progs and "%command%" not in opts \
+                and os.path.basename(progs[0]) in LAUNCH_WRAPPERS:
+            out.append((g["name"] or appid, "nocommand", progs[0]))
+    return sorted(out)
+
+
+def proton_check():
+    """Was zwischen Steam, Proton und der Laufzeitumgebung schiefgehen kann.
+
+    Je Befund ein dict: sev, title, short, long, fix. Getrennt, weil die Seite
+    zuerst die kurze Fassung zeigt und den langen Text erst auf Klick. Jede
+    Aussage kommt aus einer Datei auf der Platte, nichts ist geraten: die
+    geforderte Laufzeitumgebung steht in der toolmanifest.vdf der Fassung,
+    welche Fassung ein Titel benutzt in Steams config.vdf, und was den Prefix
+    gebaut hat in dessen version-Datei.
+    """
+    out = []
+    if not steam_root():
+        return out
+    tools = proton_dirs()
+    have = steam_installed_ids()
+    managers = proton_managers()
+    mgr = managers[0][0] if managers else ""
+
+    for name, path, why in broken_compat_tools():
+        link = os.path.islink(path)
+        long = _("Die Fassung {why}. Steam nimmt sie deshalb gar nicht erst in "
+                 "seine Liste auf, ohne das je zu melden. Wer ein Spiel darauf "
+                 "eingestellt hatte, sieht nur, dass es nicht mehr startet. "
+                 "Der Ordner ist {path}.").format(why=why, path=path)
+        if link:
+            long += _("\n\nDer Knopf entfernt die Verknüpfung. Verloren geht "
+                      "dabei nichts, ihr Ziel gibt es ja nicht mehr. Danach die "
+                      "betroffenen Spiele in Steam unter Eigenschaften, "
+                      "Kompatibilität auf eine vorhandene Fassung stellen.")
+        else:
+            long += _("\n\nDas Entpacken war unvollständig. Der Knopf räumt "
+                      "den Ordner weg, danach die Fassung neu installieren. "
+                      "Spielstände liegen nicht darin, die stehen unter "
+                      "compatdata.")
+            if mgr:
+                long += _(" Neu holen kannst du sie mit {tool}.").format(tool=mgr)
+        out.append({"sev": "crit",
+                    "title": _("{tool} ist unbrauchbar").format(tool=name),
+                    "short": _("Steam zeigt diese Fassung gar nicht erst an."),
+                    "long": long,
+                    "fix": (_("Verknüpfung entfernen") if link
+                            else _("Ordner entfernen"), remove_tool_argv(path))})
+
+    # Nach Laufzeitumgebung gebuendelt: eine kaputte trifft hier sechs von zehn
+    # Fassungen, und sechsmal derselbe Befund waere sechsmal derselbe Knopf.
+    broke = {}
+    for name, _path, appid, state in runtime_problems(tools, have):
+        broke.setdefault((appid, state), []).append(name)
+    for (appid, state), names in sorted(broke.items()):
+        fehlt = state == "missing"
+        argv = (runtime_install_argv if fehlt else runtime_repair_argv)(appid)
+        g = steam_game(appid)
+        out.append({
+            "sev": "crit",
+            "title": (_("{rt} fehlt").format(rt=runtime_name(appid)) if fehlt
+                      else _("{rt} ist beschädigt").format(
+                          rt=runtime_name(appid))),
+            "short": (_("Damit startet keine dieser Fassungen: {names}."
+                        ).format(names=", ".join(sorted(names)))),
+            "long": (
+                _("Jede dieser Fassungen läuft in einem Container, und alle "
+                  "verlangen denselben: {rt}.").format(rt=runtime_name(appid))
+                + (_(" Der ist nicht installiert.") if fehlt else
+                   _(" Steam hat ihn zwar heruntergeladen und führt ihn als "
+                     "vollständig, aber in seinem Ordner fehlt die Datei "
+                     "toolmanifest.vdf. Ohne die kann Steam ihn nicht laden. "
+                     "Im eigenen Log steht dazu \"Failed to load manifest for "
+                     "tool {id}\" und \"unsupported version 0\".").format(
+                         id=appid))
+                + _(" Was du siehst, ist die Meldung "
+                    "\"Kompatibilitätswerkzeug fehlgeschlagen\" beim "
+                    "Spielstart, mit jeder dieser Fassungen und bei jedem "
+                    "Spiel. Die Fassungen selbst sind in Ordnung.")
+                + (_(" Der Knopf lässt Steam die Dateien prüfen und das "
+                     "Fehlende nachladen. Der Ordner ist {path}.").format(
+                         path=g["path"]) if g and not fehlt else
+                   _(" Der Knopf lässt Steam ihn holen, je nach Fassung ein "
+                     "bis zwei Gigabyte."))),
+            "_rt": appid,
+            "fix": ((_("{rt} holen") if fehlt else _("{rt} reparieren")).format(
+                rt=short_runtime(appid)), argv) if argv else None})
+
+    # Was Steam selbst zuletzt abgebrochen hat. Steht schon oben ein Befund zu
+    # derselben Umgebung, ist das nur die Bestaetigung und bleibt draussen.
+    genannt = {a for (a, _s) in broke}
+    # Beleg aus Steams Log an den passenden Befund haengen. Eine Zahl aus dem
+    # echten Protokoll ueberzeugt mehr als jede Erklaerung, und sie sagt dem
+    # Nutzer, seit wann das schon so geht.
+    abbrueche = compat_log_failures()
+    for eintrag in out:
+        appid = eintrag.pop("_rt", "")
+        treffer = [f for f in abbrueche if f[3] == appid]
+        if not treffer:
+            continue
+        eintrag["long"] += _(" In Steams Protokoll stehen dazu {n} "
+                             "gescheiterte Startversuche seit dem {seit}, "
+                             "zuletzt {spiel} am {wann}.").format(
+                                 n=len(treffer),
+                                 seit=time.strftime("%d.%m.", time.localtime(
+                                     treffer[-1][0])),
+                                 spiel=treffer[0][1],
+                                 wann=time.strftime("%d.%m. um %H:%M",
+                                                    time.localtime(treffer[0][0])))
+    for when, game, tool, appid in compat_log_failures()[:3]:
+        if appid in genannt:
+            continue
+        out.append({
+            "sev": "crit",
+            "title": _("{game} ließ sich nicht starten").format(game=game),
+            "short": _("Am {date} mit {tool}, weil {rt} nicht geladen werden "
+                       "konnte.").format(
+                           date=time.strftime("%d.%m.%Y um %H:%M",
+                                              time.localtime(when)),
+                           tool=tool, rt=runtime_name(appid)),
+            "long": _("Das steht so in Steams eigenem Protokoll: \"dependent "
+                      "tool cmdline wrap failed\". Auf dem Bildschirm kommt "
+                      "davon nur \"Kompatibilitätswerkzeug fehlgeschlagen\" "
+                      "an. Die Fassung {tool} selbst ist in Ordnung, es hängt "
+                      "an {rt}. Nachzulesen unter "
+                      "~/.steam/steam/logs/compat_log.txt.").format(
+                          tool=tool, rt=runtime_name(appid)),
+            "fix": (_("{rt} reparieren").format(rt=short_runtime(appid)),
+                    runtime_repair_argv(appid))
+            if runtime_repair_argv(appid) else None})
+
+    weg = steam_libraries_away()
+    if weg:
+        out.append({
+            "sev": "warn",
+            "title": _("1 Steam-Bibliothek ist nicht erreichbar") if len(weg) == 1
+            else _("{n} Steam-Bibliotheken sind nicht erreichbar").format(
+                n=len(weg)),
+            "short": _("Alles darauf sieht für Steam gerade deinstalliert aus: "
+                       "{pfade}.").format(pfade=", ".join(weg)),
+            "long": _("Steam kennt diese Ordner aus seiner libraryfolders.vdf, "
+                      "findet sie aber nicht. Meist hängt eine externe Platte "
+                      "nicht mehr, seltener ist der Einhängepunkt ein anderer "
+                      "geworden. Spiele, Proton-Fassungen und "
+                      "Laufzeitumgebungen, die dort liegen, gelten so lange "
+                      "als nicht installiert, und Steam bietet an, sie neu zu "
+                      "laden. Diese Seite behauptet deshalb nichts über "
+                      "Fehlendes, solange eine Bibliothek fehlt. Platte "
+                      "anstecken oder einhängen, dann ist alles wieder da."),
+            "fix": None})
+
+    stray, good = stray_compat_tools()
+    if stray:
+        out.append({"sev": "warn",
+                    "title": _("{n} Fassung(en) liegen im falschen Ordner"
+                               ).format(n=len(stray)),
+                    "short": _("Steam sieht dort nicht nach: {names}.").format(
+                        names=", ".join(n for n, _p in stray)),
+                    "long": _("Steam liest nur {good}. Alles andere taucht in "
+                              "seiner Liste nie auf. Das passiert, wenn ein "
+                              "Werkzeug oder eine Anleitung ~/.local/share/Steam "
+                              "annimmt, Ubuntu seine Installation aber unter "
+                              "~/.steam/debian-installation führt. Der Knopf "
+                              "verschiebt die Ordner, vorhandene gleichen "
+                              "Namens bleiben unangetastet.").format(good=good),
+                    "fix": (_("In den richtigen Ordner verschieben"),
+                            move_tools_argv(good, [p for _n, p in stray]))})
+
+    known = {n for n, _p in tools}
+    for game, appid, tool in missing_compat_games(known=known):
+        out.append({"sev": "crit",
+                    "title": game,
+                    "short": _("Eingestellt ist {tool}, die es hier nicht gibt."
+                               ).format(tool=tool),
+                    "long": _("Steam nimmt dann kommentarlos irgendeine andere "
+                              "Fassung. Läuft der Titel plötzlich schlechter "
+                              "oder gar nicht mehr, ist das der Grund. In den "
+                              "Eigenschaften des Spiels unter Kompatibilität "
+                              "eine vorhandene Fassung auswählen, oder {tool} "
+                              "wieder installieren.").format(tool=tool)
+                    + (_(" Der Knopf öffnet {mgr}.").format(mgr=mgr) if mgr
+                       else ""),
+                    "fix": (_("{mgr} öffnen").format(mgr=mgr), managers[0][1])
+                    if managers else None})
+
+    for game, art, prog in launch_option_problems():
+        if art == "missing":
+            out.append({
+                "sev": "crit", "title": game,
+                "short": _("In den Startoptionen steht {prog}, und das ist "
+                           "nicht installiert.").format(prog=prog),
+                "long": _("Steam setzt die Startoptionen vor den Spielstart. "
+                          "Steht dort ein Programm, das es nicht gibt, bricht "
+                          "der Start ab, bevor Proton überhaupt drankommt. Zu "
+                          "finden in Steam unter Eigenschaften, Allgemein, "
+                          "Startoptionen. Entweder {prog} installieren oder "
+                          "aus der Zeile nehmen.").format(prog=prog),
+                "fix": None})
+        else:
+            out.append({
+                "sev": "warn", "title": game,
+                # %command% als Platzhalter, nicht woertlich: gettext haelt
+                # das Prozentzeichen sonst fuer eine Formatangabe und weigert
+                # sich, den Katalog zu bauen.
+                "short": _("In den Startoptionen fehlt {cmd} hinter {prog}."
+                           ).format(cmd=STEAM_CMD, prog=prog),
+                "long": _("Ohne {cmd} hängt Steam die Zeile als Argumente an "
+                          "das Spiel an, statt sie davorzusetzen. {prog} "
+                          "startet dann gar nicht, und das Spiel bekommt "
+                          "seinen Namen als Argument. Richtig heißt es "
+                          "'{prog} {cmd}'.").format(cmd=STEAM_CMD, prog=prog),
+                "fix": None})
+
+    for game, tool, built, prefix in prefix_mismatches(tools):
+        # Vorwaerts zieht Proton die Ablage selbst nach, das ist keine Warnung
+        # wert. Bricht es, dann beim Rueckschritt. Nur wo beide Namen aus
+        # demselben Projekt kommen, laesst sich das ueberhaupt vergleichen.
+        pfad = dict(tools).get(tool) or valve_tool_dir(tool, dict(tools))
+        zurueck = proton_older(tool_build(pfad)[0] or tool, built, pfad)
+        out.append({"sev": "warn" if zurueck else "info", "title": game,
+                    "short": (_("Zurück auf {tool}, die Windows-Ablage stammt "
+                                "aber von der neueren {built}.") if zurueck else
+                              _("Eingestellt ist {tool}, die Windows-Ablage "
+                                "stammt noch von {built}.")).format(
+                                    tool=tool, built=built),
+                    "long": prefix_advice(zurueck, tool, built, prefix,
+                                          builds_to_tools(tools)),
+                    "fix": None})
+    return out
+
+
+def tool_build(path):
+    """(Buildname, Zeitstempel) aus der version-Datei einer Fassung.
+
+    Die schreibt der Bauprozess selbst hinein, und sie überlebt jedes
+    Umbenennen des Ordners. Nur dadurch ist ein Ordner namens "Proton-GE
+    Latest" als GE-Proton11-5 erkennbar. Valve schreibt dort eine Buildnummer
+    ohne Datum, dann bleibt der Zeitstempel 0.
+    """
+    f = (read(os.path.join(path, "version")) or "").split()
+    if len(f) >= 2 and f[0].isdigit():
+        return f[1], int(f[0])
+    return (f[0] if f else ""), 0
+
+
+# Woran der Buildname erkennen lässt, aus welchem Projekt eine Fassung kommt.
+# Der längere Name zuerst, sonst schluckt "Proton-GE" das "Proton-GE-Nobara".
+PROTON_PROJECTS = [("GE-Proton", "GloriousEggroll"),
+                   ("Proton-GE", "GloriousEggroll"),
+                   ("UMU-Proton", "umu-launcher"),
+                   ("Proton-CachyOS", "CachyOS"),
+                   ("Proton-tkg", "Proton-tkg"),
+                   ("Proton-EM", "Proton-EM"),
+                   ("Wine-GE", "GloriousEggroll")]
+
+
+def proton_project(build, name=""):
+    """Das Projekt hinter einer Fassung, leer wenn keins passt."""
+    for prefix, project in PROTON_PROJECTS:
+        if (build or name).startswith(prefix):
+            return project
+    return ""
+
+
+# Werkzeuge, die Proton-Fassungen holen, aktualisieren und wieder entfernen.
+# dynotiq baut dafür nichts Eigenes: es sagt, was fehlt, und öffnet das
+# Werkzeug, das es kann.
+PROTON_MANAGERS = [("com.vysp3r.ProtonPlus", "ProtonPlus"),
+                   ("net.davidotek.pupgui2", "ProtonUp-Qt")]
+
+
+def proton_managers():
+    """[(Name, Startbefehl)] der installierten Verwalter, häufigster zuerst."""
+    if not shutil.which("flatpak"):
+        return []
+    have = set(sh(["flatpak", "list", "--columns=application"],
+                  timeout=30).split())
+    return [(label, ["flatpak", "run", app])
+            for app, label in PROTON_MANAGERS if app in have]
+
+
+def short_runtime(appid):
+    """'Runtime 3.0 (sniper)'. Wofür sie da ist, steht einmal oben auf der
+    Seite und muss nicht in jeder Zeile wiederholt werden."""
+    return runtime_name(appid).replace("Steam Linux ", "")
+
+
+def proton_rows(tools=None):
+    """Je Fassung ein dict mit kurzen Feldern für die Anzeige.
+
+    Kurze Felder statt eines langen Satzes: die Seite stellt neun davon
+    untereinander, und eine Tabelle liest sich schneller als Fließtext.
+    """
+    tools = proton_dirs() if tools is None else tools
+    have = steam_installed_ids()
+    out = []
+    for name, path in tools:
+        need = tool_runtime(path)
+        # Dieselbe Pruefung wie im Befund oben. Vorher stand hier nur, ob die
+        # AppID installiert ist, und dann war eine Fassung gruen, waehrend der
+        # Befund darueber sagte, dass mit ihr kein Spiel startet.
+        state = runtime_state(need, have) if need else ""
+        if not need:
+            rt, ok = _("ohne Container"), True
+        elif state == "missing":
+            rt, ok = _("{rt} fehlt").format(rt=short_runtime(need)), False
+        elif state == "broken":
+            rt, ok = _("{rt} beschädigt").format(rt=short_runtime(need)), False
+        else:
+            rt, ok = short_runtime(need), True
+        valve = "compatibilitytools.d" not in path
+        build, when = tool_build(path)
+        facts = []
+        if build and build != name:
+            facts.append(build)
+        if not valve:
+            facts.append(proton_project(build, name) or _("unbekannte Herkunft"))
+        if when:
+            facts.append(time.strftime("%d.%m.%Y", time.localtime(when)))
+        if os.path.islink(path):
+            facts.append(_("Verknüpfung nach {target}").format(
+                target=os.path.realpath(path).replace(
+                    os.path.expanduser("~"), "~")))
+        if valve:
+            facts.append(_("pflegt Steam selbst"))
+        out.append({"name": name, "runtime": rt, "ok": ok, "valve": valve,
+                    "facts": " · ".join(facts),
+                    "path": path.replace(os.path.expanduser("~"), "~")})
+    return out
+
+
+def valve_tool_dir(name, paths):
+    """Der Ordner zu einem von Valves internen Namen, sonst "".
+
+    Steam traegt in die Zuordnung 'proton_11' ein, auf der Platte heisst der
+    Ordner 'Proton 11.0'. Ohne diese Bruecke bleibt jeder Titel auf einer
+    Valve-Fassung ohne Aussage, und das sind die meisten.
+    """
+    rest = name[len("proton_"):] if name.startswith("proton_") else name
+    for wort in ("experimental", "hotfix", "battleye", "easyanticheat"):
+        if rest == wort:
+            return next((p for n, p in paths.items() if wort in n.lower()), "")
+    if not rest.isdigit():
+        return ""
+    # 'Proton 9.0 (Beta)' und 'Proton 10.0' tragen beide die Hauptnummer vorn.
+    for n, p in paths.items():
+        m = re.match(r"Proton (\d+)\.", n)
+        if m and m.group(1) == rest:
+            return p
+    return ""
+
+
+def game_exe_present(path):
+    """Liegt im Spielordner ueberhaupt eine Windows-Programmdatei?
+
+    Valves Hilfstitel wie 'Proton Voice Files' tragen eine Zuordnung, sind aber
+    keine Spiele. Sie haben keine .exe, und ohne die startet dort auch nichts
+    ueber Proton.
+    """
+    if not os.path.isdir(path):
+        return False
+    return bool(glob.glob(os.path.join(path, "*.exe"))
+                or glob.glob(os.path.join(path, "*", "*.exe"))
+                or glob.glob(os.path.join(path, "*", "*", "*.exe")))
+
+
+def is_steam_game(appid, g=None):
+    """Ist dieser Titel ein Spiel, oder ein Werkzeug von Valve?
+
+    Laufzeitumgebungen, Proton selbst und Hilfstitel wie 'Proton Voice Files'
+    tragen ebenfalls Zuordnungen und Prefixe. Ein Spiel erkennt man daran,
+    dass ueberhaupt eine Windows-Programmdatei dort liegt.
+    """
+    g = steam_game(appid) if g is None else g
+    if not g or appid in RUNTIME_NAMES:
+        return False
+    if any(os.path.exists(os.path.join(g["path"], f))
+           for f in ("toolmanifest.vdf", "pressure-vessel")):
+        return False
+    return game_exe_present(g["path"])
+
+
+def proton_game_rows(tools=None):
+    """[(Titel, eingestellte Fassung, Zeile zum Prefix, in Ordnung)].
+
+    Nur Titel, die wirklich installiert sind. Steam raeumt CompatToolMapping
+    beim Deinstallieren nicht auf, sonst stuenden hier ueberwiegend Karteileichen.
+    """
+    paths = dict(proton_dirs() if tools is None else tools)
+    known = set(paths)
+    defekte = {n: (a, s) for n, _p, a, s in runtime_problems(list(paths.items()))}
+    # Valves interne Namen auf dieselben Ordner abbilden, sonst bleibt der
+    # groesste Teil der Titel ohne Aussage.
+    for n in {t for t in compat_mappings().values() if t.startswith("proton_")}:
+        p = valve_tool_dir(n, paths)
+        if p and p in {q for _n, q in paths.items()}:
+            treffer = next((k for k, v in paths.items() if v == p), "")
+            if treffer in defekte:
+                defekte[n] = defekte[treffer]
+    out = []
+    # Ueber die installierten Titel, nicht ueber die Zuordnungstabelle: wer
+    # nichts umstellt, hat dort keinen Eintrag und lief bei der Voreinstellung
+    # mit. Genau die Titel fehlten hier vorher ganz.
+    for appid in sorted(steam_installed_ids()):
+        tool = steam_proton(appid)
+        g = steam_game(appid)
+        if not tool or not is_steam_game(appid, g):
+            continue
+        valve = tool.startswith("proton_")
+        built = prefix_version(g["prefix"])
+        # Der Zustand der Laufzeitumgebung entscheidet mit. Ohne ihn stand ein
+        # Titel gruen da, dessen Fassung ohne Container gar nicht startet.
+        kaputt = defekte.get(tool, "")
+        if not valve and tool not in known:
+            line, ok = _("Diese Fassung gibt es hier nicht"), False
+        elif kaputt:
+            line, ok = (_("{tool} startet nicht, {rt} fehlt") if kaputt[1] ==
+                        "missing" else
+                        _("{tool} startet nicht, {rt} ist beschädigt")).format(
+                            tool=tool, rt=short_runtime(kaputt[0])), False
+        elif built and built not in prefix_names(
+                tool, paths.get(tool) or valve_tool_dir(tool, paths)) \
+                and built != tool_prefix_version(
+                    paths.get(tool) or valve_tool_dir(tool, paths)):
+            line, ok = _("Windows-Ablage stammt von {built}").format(
+                built=built), False
+        elif built:
+            line, ok = _("Windows-Ablage von {built}").format(built=built), True
+        else:
+            line, ok = _("Noch keine Windows-Ablage angelegt"), True
+        out.append((g["name"] or appid, tool, line, ok))
+    return sorted(out, key=lambda r: (r[3], r[0]))
+
+
+def prefix_mismatches(tools=None):
+    """[(Titel, eingestellte Fassung, Fassung des Prefix, Ordner)].
+
+    Nur wo beide Namen vergleichbar sind, also bei selbst installierten
+    Fassungen: Valve schreibt in die version-Datei eine Buildnummer, in die
+    Zuordnung aber 'proton_11'. Die gegeneinander zu halten hiesse, auf jedem
+    Rechner einen Unterschied zu melden, den es nicht gibt.
+    """
+    paths = dict(proton_dirs() if tools is None else tools)
+    out = []
+    for appid in sorted(steam_installed_ids()):
+        tool = steam_proton(appid)
+        if not tool:
+            continue
+        pfad = paths.get(tool) or valve_tool_dir(tool, paths)
+        if not pfad:
+            continue
+        g = steam_game(appid)
+        if not is_steam_game(appid, g):
+            continue
+        built = prefix_version(g["prefix"])
+        # Valve schreibt in beide Dateien dieselbe Nummer. Sind sie gleich,
+        # gibt es nichts zu melden, und die alte Ausnahme fuer Valve faellt
+        # damit weg: genau dort kam der Rueckschritt vor.
+        if built and built != tool_prefix_version(pfad) \
+                and built not in prefix_names(tool, pfad):
+            out.append((g["name"] or appid, tool, built, g["prefix"]))
+    return sorted(out)
+
+
+def tool_prefix_version(path):
+    """Die Fassung, auf die diese Proton-Fassung ihre Prefixe bringt.
+
+    Steht als CURRENT_PREFIX_VERSION im Startskript proton, und zwar bei
+    Valve wie bei GE. Genau damit vergleicht Proton selbst, ob es einen Prefix
+    umbauen muss, und nur ueber diesen Wert lassen sich die beiden Welten
+    gegeneinander halten: 'proton_10' heisst auf der Platte 10.1000-105, und
+    das ist gegen GE-Proton11-1 vergleichbar, der Name allein nicht.
+    """
+    m = re.search(r'CURRENT_PREFIX_VERSION="([^"]+)"',
+                  read(os.path.join(path, "proton")) or "")
+    return m.group(1) if m else ""
+
+
+def proton_major(v):
+    """Die Hauptnummer einer Proton-Fassung, 0 wenn keine drinsteht.
+
+    Die erste Zahl traegt sie in jeder Schreibweise: 10.1000-105, 11.0-100,
+    GE-Proton11-5, UMU-Proton-10.0-4. GE-Proton11 setzt auf Proton 11 auf,
+    deshalb ist die Hauptnummer ueber Projektgrenzen hinweg vergleichbar.
+    """
+    m = re.search(r"\d+", v or "")
+    return int(m.group()) if m else 0
+
+
+def proton_older(tool_build_name, prefix_build, tool_path=""):
+    """Ist der Prefix von einer NEUEREN Fassung als der eingestellten?
+
+    Nur dann bricht etwas: vorwaerts baut Proton die Ablage selbst um, zurueck
+    nicht. Zwei Stufen. Innerhalb desselben Projekts wird die volle Nummer
+    verglichen. Darueber hinaus nur die Hauptnummer, und dafuer kommt die
+    Fassung des Werkzeugs aus seinem eigenen Startskript statt aus seinem
+    Namen. Gleiche Hauptnummer gilt als vertraeglich: das ist die vorsichtige
+    Richtung, sie meldet im Zweifel nichts.
+    """
+    a, b = proton_project(tool_build_name), proton_project(prefix_build)
+    if a and a == b:
+        return nums(prefix_build, 3) > nums(tool_build_name, 3)
+    eigen = tool_prefix_version(tool_path) if tool_path else ""
+    hier = proton_major(eigen or tool_build_name)
+    return bool(hier) and proton_major(prefix_build) > hier
+
+
+def builds_to_tools(tools):
+    """{Buildnummer: Name der Fassung} ueber alle vorhandenen Fassungen.
+
+    In die version-Datei eines Prefix schreibt Proton die Buildnummer, nicht
+    den Namen: '11.0-100' statt 'Proton 11.0'. Wer die gegen die Namen haelt,
+    behauptet, eine installierte Fassung gaebe es nicht mehr.
+    """
+    out = {}
+    # Stabile Fassungen zuerst: Proton 11.0 und Proton - Experimental tragen
+    # dieselbe Buildnummer, und zum Zurueckstellen ist die stabile die bessere.
+    for name, pfad in sorted(tools, key=lambda t: any(
+            w in t[0] for w in ("Experimental", "Hotfix", "Beta", "Latest"))):
+        for wert in (tool_prefix_version(pfad), tool_build(pfad)[0], name):
+            if wert:
+                out.setdefault(wert, name)
+    return out
+
+
+def prefix_advice(zurueck, tool, built, prefix, vorhanden):
+    """Der lange Text zum Prefix-Befund.
+
+    vorhanden ist {Buildnummer: Name}. Der Rat haengt daran, ob es die Fassung,
+    die den Prefix gebaut hat, noch gibt: dann ist Zurueckstellen der einfache
+    Weg, und das Zuruecksetzen mit dem Verlust der Spielstaende bleibt der
+    Notnagel.
+    """
+    if not zurueck:
+        text = _("Nach vorn zieht Proton die Ablage beim nächsten Start selbst "
+                 "nach, zu tun ist nichts. Es steht hier, damit du es weißt, "
+                 "falls sich das Spiel danach anders verhält.")
+    else:
+        text = _("Zurück auf eine ältere Fassung kann Proton die Ablage nicht "
+                 "umbauen. Das Spiel hängt dann im Ladebildschirm oder startet "
+                 "gar nicht.")
+        if built in vorhanden:
+            text += _(" Am einfachsten stellst du den Titel in Steam wieder auf "
+                      "{name}, die ist noch da.").format(name=vorhanden[built])
+        else:
+            text += _(" {built} gibt es hier nicht mehr, zurückstellen geht "
+                      "also nicht. Hilft nur das Zurücksetzen, in Steam unter "
+                      "Eigenschaften, Installierte Dateien, Proton-Dateien "
+                      "löschen. Spielstände, die im Prefix liegen statt in der "
+                      "Cloud, sind danach weg.").format(built=built)
+    return text + _(" Der Ordner ist {prefix}.").format(prefix=prefix)
+
+
+def prefix_names(tool, path):
+    """Beide Namen, unter denen diese Fassung in einer version-Datei stehen kann.
+
+    Protons Startskript schreibt dort seinen Buildnamen, Steam fuehrt sie unter
+    ihrem internen Namen. Bei einer umbenannten Fassung sind das zwei
+    verschiedene Woerter: "Proton-GE Latest" ist der Build GE-Proton11-5. Wer
+    nur den einen vergleicht, meldet einen Unterschied, der nie verschwindet.
+    """
+    return {tool, tool_build(path)[0]} - {""}
+
+
 def env_size(text):
     """Größe aus einer Umgebungsvariablen: '10737418240', '10G', '512MB'."""
     m = re.fullmatch(r"(\d+)\s*([kmgt])?i?b?", (text or "").strip(), re.I)
@@ -1476,24 +2958,76 @@ def env_size(text):
         (m.group(2) or " ").lower()) if m else 0
 
 
+# Wo eine Cache-Grenze dauerhaft hingehoert. environment.d, weil systemd den
+# Wert beim Anmelden an alles weitergibt, was aus der Sitzung startet, Steam
+# eingeschlossen. Je Variable eine eigene Datei: dann ist das Schreiben
+# wiederholbar, die beiden Treiber kommen sich nicht ins Gehege, und ein
+# Loeschen der Datei nimmt genau diese eine Einstellung zurueck.
+ENV_D = os.path.expanduser("~/.config/environment.d")
+# Zehn Gigabyte. NVIDIA rechnet in Byte, Mesa versteht das Kuerzel.
+CACHE_ENV = {"NVIDIA": ("__GL_SHADER_DISK_CACHE_SIZE", str(10 * 2**30)),
+             "Mesa": ("MESA_SHADER_CACHE_MAX_SIZE", "10G")}
+
+
+def env_conf_path(var, base=ENV_D):
+    return os.path.join(base, f"50-dynotiq-{var.strip('_').lower()}.conf")
+
+
+def env_d_value(var, base=ENV_D):
+    """Was in environment.d für diese Variable steht, sonst "".
+
+    systemd liest den Ordner in Namensreihenfolge und die letzte Zuweisung
+    gewinnt. Genau so wird hier gelesen, sonst stünde ein Wert da, den eine
+    spätere Datei längst überschreibt.
+    """
+    val = ""
+    for f in sorted(glob.glob(os.path.join(base, "*.conf"))):
+        for line in (read(f) or "").splitlines():
+            k, sep, v = line.partition("=")
+            if sep and k.strip() == var:
+                val = v.strip().strip("\"'")
+    return val
+
+
+def cache_limit_argv(name, base=ENV_D):
+    """Setzt die Grenze dieses Caches dauerhaft, None fuer Caches ohne Grenze.
+
+    Kein root, alles im eigenen Home. Variable und Wert gehen als Argumente in
+    die Shell, nicht in den Skripttext.
+    """
+    pair = CACHE_ENV.get(name)
+    if not pair:
+        return None
+    return ["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s=%s\\n" "$2" "$3" > "$1"',
+            "sh", env_conf_path(pair[0], base), pair[0], pair[1]]
+
+
 def shader_caches():
     """Die Shader-Caches dieses Rechners.
 
     limit ist die Grenze, ab der der Treiber alte Einträge wegwirft, exact
     sagt, ob sie gesetzt oder nur der Standardwert ist. Bei Steam gibt es
-    keine Grenze, der Cache wächst mit der Spielesammlung."""
+    keine Grenze, der Cache wächst mit der Spielesammlung.
+
+    pending ist eine Grenze, die in environment.d schon eingetragen ist, in
+    dieser Sitzung aber noch nicht gilt. Ohne die stünde nach dem Setzen
+    weiter derselbe Befund da, und niemand wüsste, ob es geklappt hat."""
     out = []
     nv = os.environ.get("__GL_SHADER_DISK_CACHE_PATH") or f"{CACHE_HOME}/nvidia/GLCache"
     if os.path.isdir(nv):
         limit = env_size(os.environ.get("__GL_SHADER_DISK_CACHE_SIZE"))
         out.append({"name": "NVIDIA", "path": nv, "bytes": dir_size(nv, 25),
-                    "limit": limit or GL_CACHE_DEFAULT, "exact": bool(limit)})
+                    "limit": limit or GL_CACHE_DEFAULT, "exact": bool(limit),
+                    "pending": 0 if limit else env_size(
+                        env_d_value("__GL_SHADER_DISK_CACHE_SIZE"))})
     for mesa in (os.environ.get("MESA_SHADER_CACHE_DIR"),
                  f"{CACHE_HOME}/mesa_shader_cache", f"{CACHE_HOME}/mesa_shader_cache_db"):
         if mesa and os.path.isdir(mesa):
             limit = env_size(os.environ.get("MESA_SHADER_CACHE_MAX_SIZE"))
             out.append({"name": "Mesa", "path": mesa, "bytes": dir_size(mesa, 25),
-                        "limit": limit or MESA_CACHE_DEFAULT, "exact": bool(limit)})
+                        "limit": limit or MESA_CACHE_DEFAULT, "exact": bool(limit),
+                        "pending": 0 if limit else env_size(
+                            env_d_value("MESA_SHADER_CACHE_MAX_SIZE"))})
     sc = [p for p in (os.path.join(lib, "steamapps", "shadercache")
                       for lib in steam_libraries()) if os.path.isdir(p)]
     if sc:
@@ -1513,9 +3047,13 @@ def free_bytes(path):
 
 def shader_cache_check(steam=True):
     """Befunde zum Shader-Cache als (sev, Titel, Detail, Fix), wie app_check
-    sie liefert. Fix bleibt None: eine Umgebungsvariable dauerhaft zu setzen
-    heißt, in die Sitzungskonfiguration zu schreiben, das macht die App nicht
-    ungefragt."""
+    sie liefert.
+
+    Nur der volle Cache bekommt einen Knopf, und der schreibt eine Zeile in die
+    Sitzungsumgebung des eigenen Home. Was der Nutzer selbst gesetzt hat, wird
+    dabei nicht angetastet: der Befund erscheint nur, wenn der Cache wirklich
+    an seiner Grenze steht.
+    """
     out = []
     caches = [c for c in shader_caches() if steam or c["name"] != "Steam"]
     if not caches:
@@ -1534,14 +3072,45 @@ def shader_cache_check(steam=True):
     for c in caches:
         size = fmt_bytes(c["bytes"])
         if c["limit"] and c["bytes"] >= c["limit"] * 0.85:
-            out.append(("warn", _("{name}-Shader-Cache ist voll").format(name=c["name"]),
-                        _("{size} von {limit}. Ist die Grenze erreicht, wirft der "
-                          "Treiber alte Einträge weg und übersetzt sie beim "
-                          "nächsten Mal neu. Das sind die Ruckler, die immer an "
-                          "denselben Stellen wiederkommen. Abhilfe: "
-                          "__GL_SHADER_DISK_CACHE_SIZE höher setzen, 10 GB sind "
-                          "für eine große Sammlung realistisch.").format(
-                              size=size, limit=fmt_bytes(c["limit"])), None))
+            var = CACHE_ENV.get(c["name"], ("", ""))[0]
+            if c.get("pending", 0) > c["limit"]:
+                # Der Wert steht schon in der Datei, nur diese Sitzung kennt
+                # ihn noch nicht. Ohne diesen Zweig bliebe derselbe Befund
+                # stehen, und das sähe aus, als hätte der Knopf nichts getan.
+                out.append(("info", _("{name}-Shader-Cache: die neue Grenze "
+                                      "greift ab der nächsten Anmeldung"
+                                      ).format(name=c["name"]),
+                            _("In {path} stehen {new}. Diese Sitzung läuft "
+                              "noch mit {old}, deshalb sitzt der Cache mit "
+                              "{size} weiter an der alten Grenze. Einmal ab- "
+                              "und wieder anmelden, danach ist nichts mehr zu "
+                              "tun. Ob es gewirkt hat, steht dann hier.")
+                            .format(path=env_conf_path(var).replace(
+                                os.path.expanduser("~"), "~"),
+                                new=fmt_bytes(c["pending"]),
+                                old=fmt_bytes(c["limit"]), size=size), None))
+                continue
+            argv = cache_limit_argv(c["name"])
+            detail = _("{size} von {limit}. Ist die Grenze erreicht, wirft der "
+                       "Treiber alte Einträge weg und übersetzt sie beim "
+                       "nächsten Mal neu. Das sind die Ruckler, die immer an "
+                       "denselben Stellen wiederkommen.").format(
+                           size=size, limit=fmt_bytes(c["limit"]))
+            if argv:
+                detail += _(" Der Knopf hebt die Grenze auf 10 GB, das ist für "
+                            "eine große Sammlung realistisch. Er schreibt dazu "
+                            "eine Zeile mit {var} nach {path}. Das gilt für "
+                            "deine Sitzung, nicht für das ganze System, und "
+                            "wirkt ab der nächsten Anmeldung. Rückgängig macht "
+                            "es das Löschen dieser Datei. Platz muss dafür da "
+                            "sein, der Cache darf danach wirklich so groß "
+                            "werden.").format(
+                                var=var,
+                                path=env_conf_path(var).replace(
+                                    os.path.expanduser("~"), "~"))
+            out.append(("warn", _("{name}-Shader-Cache ist voll").format(
+                name=c["name"]), detail,
+                (_("Grenze auf 10 GB setzen"), argv) if argv else None))
         elif c["limit"]:
             out.append(("ok", _("{name}-Shader-Cache").format(name=c["name"]),
                         _("{size} von {limit}, {kind}.").format(
@@ -1826,10 +3395,7 @@ def game_check(steam_total=True):
                       "auf performance und nimmt Hintergrunddienste zurück. "
                       "Danach setzt es alles selbst wieder um. Im Spiel als "
                       "Startbefehl 'gamemoderun %command%' eintragen."),
-                    (_("GameMode installieren"),
-                     [["pkexec", "apt-get", "update"],
-                      ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                       "apt-get", "install", "-y", "gamemode"]])))
+                    (_("GameMode installieren"), pkexec_apt_argv(["gamemode"]))))
     gov = cpu_governor()
     if gov and gov != "performance":
         out.append(("warn", _("CPU-Governor steht auf {gov}").format(gov=gov),
@@ -1977,10 +3543,7 @@ def app_check_program(entry):
                             "Entpacken. Ohne sie bricht der Start mit "
                             "'dlopen(): error loading libfuse.so.2' ab."),
                             (_("libfuse2 installieren"),
-                             [["pkexec", "apt-get", "update"],
-                              ["pkexec", "/usr/bin/env",
-                               "DEBIAN_FRONTEND=noninteractive", "apt-get",
-                               "install", "-y", "libfuse2t64"]])))
+                             pkexec_apt_argv(["libfuse2t64"]))))
     elif kind in ("deb", "lokal") and binary:
         apt_fix = ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
                    "apt-get", "install", "-f", "-y"]
@@ -1992,7 +3555,9 @@ def app_check_program(entry):
                             _("dpkg meldet den Status '{status}'. So bleibt ein "
                               "abgebrochener Installationslauf liegen, das Programm "
                               "ist unvollständig.").format(status=status),
-                            (_("Installation reparieren"), apt_fix)))
+                            (_("Installation reparieren"), apt_fix,
+                             (lambda: apt_would_remove(apt_fix),
+                              _("Pakete")))))
         if kind == "deb" and ident:
             inst, cand, from_repo = parse_apt_policy(
                 sh(["apt-cache", "policy", ident], timeout=30))
@@ -2029,16 +3594,26 @@ def app_check_program(entry):
             if missing:
                 out.append(("crit", _("Fehlende Bibliotheken"),
                             _("Das Programm startet so nicht: ") + ", ".join(missing),
-                            (_("Abhängigkeiten nachziehen"), apt_fix)))
+                            (_("Abhängigkeiten nachziehen"), apt_fix,
+                             (lambda: apt_would_remove(apt_fix),
+                              _("Pakete")))))
             else:
                 out.append(("ok", _("Bibliotheken"), _("alle auflösbar"), None))
         else:
             fix = None
             if kind == "deb" and ident:
+                # --reinstall nimmt nichts weg, spielt aber die
+                # mitgelieferten Konfigurationsdateien zurueck. Wer eine davon
+                # angepasst hat, verliert die Anpassung, und danach zu fragen
+                # ist zu spaet.
+                reinstall = ["pkexec", "/usr/bin/env",
+                             "DEBIAN_FRONTEND=noninteractive", "apt-get",
+                             "install", "--reinstall", "-y", ident]
                 fix = (_("Paket neu installieren"),
-                       [["pkexec", "apt-get", "update"],
-                        ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                         "apt-get", "install", "--reinstall", "-y", ident]])
+                       [["pkexec", "apt-get", "update"], reinstall],
+                       (lambda: apt_would_remove(reinstall)
+                        + dpkg_changed_conffiles(ident),
+                        _("Dateien"), _("Datei")))
             out.append(("crit", _("Programm nicht gefunden"),
                         _("{path} liegt nicht (mehr) dort.").format(path=binary),
                         fix))
@@ -3156,10 +4731,124 @@ def format_summary(summary):
 
 # Befunde
 
+# Zweistufige Bestaetigung fuer alles, was etwas wegnimmt
+#
+# Umgestellt sind: apt-get autoremove --purge (check_filesystems),
+# apt-get install -f (App-Check, beide Stellen), snap remove --revision
+# (check_old_snaps) und journalctl --vacuum-size (check_journal, dort ueber
+# eine eigene Rechnung, weil journalctl keinen Trockenlauf kennt). Noch offen,
+# absichtlich und nicht vergessen:
+#
+# Alle destruktiven Stellen sind umgestellt. Was bleibt, nimmt nichts weg:
+#
+#   flatpak_ppa_argv          traegt eine Fremdquelle ein, reversibel, und der
+#                             Text sagt auch wie.
+#   GameMode, libfuse2,       einzelne Pakete ohne Abhaengigkeitsdruck. Der
+#   ProtonPlus, dynotiq       Trockenlauf waere anwendbar, kostet aber einen
+#                             apt-Lauf je Klick fuer einen Fall, der noch nie
+#                             etwas mitgezogen hat. Bewusst nicht gebaut.
+#
+# Ein Befehl mit -y und DEBIAN_FRONTEND=noninteractive fragt nichts mehr. Die
+# Liste der betroffenen Pakete steht dann zwar im Protokollfenster, aber erst
+# waehrend es passiert, und da ist die Entscheidung schon gefallen. Deshalb
+# laeuft vorher ein Trockenlauf, und was er findet, muss der Nutzer bestaetigen.
+
+def apt_would_remove(argv):
+    """Was dieser apt-Befehl wegnehmen wuerde, ohne ihn auszufuehren.
+
+    Aus der Argumentliste wird der Trockenlauf gebaut: alles ab 'apt-get' ohne
+    -y, dafuer mit -s. So bleibt es derselbe Befehl, und kein zweiter, der
+    vielleicht etwas anderes tut.
+    """
+    if "apt-get" not in argv:
+        return []
+    rest = argv[argv.index("apt-get") + 1:]
+    sim = ["apt-get", "-s", "-o", "Debug::NoLocking=1"] + [
+        a for a in rest if a not in ("-y", "--yes", "--assume-yes")]
+    return parse_apt_removals(sh(sim, timeout=90))
+
+
+def dpkg_changed_conffiles(pkg):
+    """Konfigurationsdateien dieses Pakets, die vom Auslieferungsstand abweichen.
+
+    dpkg fuehrt zu jeder mitgelieferten Konfigurationsdatei ihre Pruefsumme.
+    Weicht die Datei davon ab, hat jemand sie angefasst, und ein
+    --reinstall spielt die Fassung des Pakets darueber. Genau die Dateien
+    gehoeren in die Rueckfrage.
+    """
+    return [_("{path} (von dir geändert)").format(path=p)
+            for p, soll in parse_conffiles(
+                sh(["dpkg-query", "-W", "-f=${Conffiles}\n", pkg], timeout=20))
+            if file_md5(p) not in ("", soll)]
+
+
+def parse_conffiles(text):
+    """[(Pfad, Pruefsumme)] aus der Conffiles-Angabe von dpkg-query.
+
+    Eine Zeile je Datei, Pfad und md5 durch Leerzeichen getrennt, veraltete
+    Eintraege tragen zusaetzlich 'obsolete'. Die bleiben draussen, sie werden
+    beim Installieren ohnehin nicht mehr angefasst.
+    """
+    out = []
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) >= 2 and f[-1] != "obsolete" and f[0].startswith("/"):
+            out.append((f[0], f[1]))
+    return out
+
+
+def file_md5(path):
+    """Pruefsumme einer Datei, leer wenn sie nicht lesbar ist."""
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.md5(fh.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def apt_install_would_remove(pkgs, recommends=False):
+    """Was eine Installation dieser Pakete wegnehmen wuerde.
+
+    pkexec_apt_argv baut sein apt in einen Shell-Skripttext, dort findet
+    apt_would_remove nichts. Deshalb hier aus derselben Paketliste, mit
+    denselben Schaltern, nur simuliert. Eine Installation nimmt meist nichts
+    weg, aber ein Treiberwechsel kann ueber Abhaengigkeiten den alten Treiber
+    mitziehen, und genau das will man vorher wissen.
+    """
+    return parse_apt_removals(sh(
+        ["apt-get", "-s", "-o", "Debug::NoLocking=1", "install"]
+        + (["--install-recommends"] if recommends else []) + ["--", *pkgs],
+        timeout=90))
+
+
+def confirm_removal(items, was=None, eins=None):
+    """(Detailtext, Beschriftung des Knopfs) fuer eine Loeschbestaetigung.
+
+    Getrennt von der Oberflaeche, damit sich die Entscheidung pruefen laesst:
+    ohne Liste gibt es keinen Loeschknopf, mit Liste traegt er die Zahl. Genau
+    diese Zahl ist der Punkt, denn danach fragt der Befehl selbst nichts mehr.
+    """
+    was = was or _("Pakete")
+    eins = eins or _("Paket")
+    if not items:
+        return (_("Der Trockenlauf hat nichts gefunden, das entfernt würde. "
+                  "Der Befehl räumt dann nur auf, was ohnehin niemand mehr "
+                  "braucht."), _("Trotzdem ausführen"))
+    wort = eins if len(items) == 1 else was
+    return (_("Der Trockenlauf sagt, dass dabei {n} {was} entfernt werden:"
+              ).format(n=len(items), was=wort) + "\n\n"
+            + ", ".join(items[:60]) + ("\n…" if len(items) > 60 else "")
+            + "\n\n"
+            + _("Steht dort etwas, das du noch brauchst, brich hier ab und "
+                "installiere es einzeln nach."),
+            (_("Ja, dieses {n} {was} entfernen") if len(items) == 1 else
+             _("Ja, diese {n} {was} entfernen")).format(n=len(items), was=wort))
+
+
 class Finding:
     def __init__(self, sev, title, detail, badge="", badge_ok=False, cmd=None,
                  argv=None, warn=None, report=None, key="", lines=None,
-                 actions=None):
+                 actions=None, preview=None):
         self.sev, self.title, self.detail = sev, title, detail
         self.badge, self.badge_ok, self.cmd = badge, badge_ok, cmd
         # key benennt den Befund dauerhaft, unabhaengig vom Titel: darunter
@@ -3175,6 +4864,11 @@ class Finding:
         # Funktion ohne Argumente, die einen längeren Text liefert. Läuft in
         # einem Thread, darf also ins Netz und auf die Platte.
         self.report = report
+        # (Funktion ohne Argumente, Bezeichnung). Die Funktion liefert die
+        # Namen dessen, was der Befehl wegnehmen wuerde. Wo sie gesetzt ist,
+        # laeuft sie vor dem Ausfuehren und ihr Ergebnis muss bestaetigt
+        # werden. Sie darf auf die Platte, also nie im Zeichenthread rufen.
+        self.preview = preview
 
 
 def parse_driver_branches(text):
@@ -3230,19 +4924,20 @@ def check_gpu_driver(ctx):
     g = ctx.get("gpu")
     if not g or g["vendor"] != "nvidia":
         return None
-    cur = int(g["driver"].split(".")[0])
+    # branch_of statt int(): nvidia-smi liefert bei halb kaputtem Treiber auch
+    # '[N/A]', und ein ValueError hier liess den Check lautlos ausfallen.
+    cur = branch_of(g["driver"])
     pkg, avail = parse_recommended_driver(
         ubuntu_drivers_devices())
-    if not pkg or avail <= cur:
+    if not cur or not pkg or avail <= cur:
         return None
     return Finding("crit",
                    _("GPU-Treiber veraltet - nvidia-driver-{v}").format(v=cur),
                    _("Ubuntu empfiehlt für diese Karte {pkg}.").format(pkg=pkg),
                    _("{v} empfohlen").format(v=avail), True,
-                   f"sudo apt install {pkg}",
-                   argv=[["pkexec", "apt-get", "update"],
-                         ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                          "apt-get", "install", "-y", pkg]],
+                   f"sudo apt install {pkg}", argv=pkexec_apt_argv([pkg]),
+                   preview=(lambda: apt_install_would_remove([pkg]),
+                            _("Pakete"), _("Paket")),
                    warn=_("Der Treiber wird neu gebaut. Bis zum Neustart kann die "
                           "Grafik unvollständig sein, deshalb vorher alles sichern."))
 
@@ -3325,11 +5020,9 @@ def check_driver_mismatch(ctx):
                        + _("Installiert ist Serie {have}, empfohlen für diese "
                            "Karte ist {pkg}.").format(have=have, pkg=pkg),
                        _("{v} empfohlen").format(v=rec), True,
-                       f"sudo apt install {pkg}",
-                       argv=[["pkexec", "apt-get", "update"],
-                             ["pkexec", "/usr/bin/env",
-                              "DEBIAN_FRONTEND=noninteractive",
-                              "apt-get", "install", "-y", pkg]],
+                       f"sudo apt install {pkg}", argv=pkexec_apt_argv([pkg]),
+                       preview=(lambda: apt_install_would_remove([pkg]),
+                                _("Pakete"), _("Paket")),
                        warn=_("Der Treiber wird neu gebaut, danach ist ein "
                               "Neustart nötig."))
     return Finding("crit", _("Grafiktreiber wartet auf einen Neustart"), detail,
@@ -3413,6 +5106,35 @@ def check_compat_tools(ctx):
                for g, _a, t in affected])
 
 
+def check_steam_cef_gpu(ctx):
+    """Abstürze des GPU-Prozesses der Steam-Oberfläche.
+
+    Kein Spielproblem, deshalb steht es hier und nicht bei den Spielen: es
+    trifft das Fenster von Steam selbst, unabhängig davon, ob überhaupt
+    gespielt wird. Die Vorfallseite findet es nicht, weil nichts davon im
+    Journal landet, und der App-Check findet es nicht, weil Chromium den
+    Absturz abfängt und deshalb kein Coredump entsteht.
+    """
+    log = steam_cef_log()
+    if not log or steam_cef_flag_set():
+        return None
+    crashes, days = count_cef_gpu_crashes(read_tail(log))
+    if crashes < CEF_CRASH_MIN or days < CEF_DAYS_MIN:
+        return None
+    return Finding(
+        "warn", _("Steam-Oberfläche stürzt ab"),
+        _("Die Oberfläche von Steam ist ein eingebautes Chromium, und dessen "
+          "GPU-Teil ist hier {n} mal an {d} verschiedenen Tagen abgestürzt. "
+          "Genau das sieht man als schwarzes Fenster, als kurzes Hängen oder "
+          "daran, dass Steam sich von selbst neu startet. Die Grafikkarte ist "
+          "dabei in Ordnung, sonst stünde ein Xid-Fehler in den Vorfällen. "
+          "Steam kann seine Oberfläche ohne diese Beschleunigung zeichnen, das "
+          "kostet bei einem Fenster mit Text und Bildern nichts Spürbares und "
+          "nimmt dem Absturz die Grundlage.").format(n=crashes, d=days),
+        _("{n} Abstürze").format(n=crashes), False, key="steam_cef_gpu",
+        actions=[(_("Startparameter setzen"), "_fix_steam_cef", None)])
+
+
 def check_orphan_prefixes(ctx):
     """Proton-Prefixe von Spielen, die es nicht mehr gibt. Die bleiben beim
     Deinstallieren liegen, und in ihnen steckt eine komplette Windows-Ablage."""
@@ -3492,10 +5214,42 @@ def check_filesystems(ctx):
                        actions=[(_("Speicher öffnen"), "_goto_page", "Speicher")])
     return Finding(sev, title, detail, badge, False,
                    "sudo apt autoremove --purge && sudo apt clean",
-                   argv=["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                         "apt-get", "autoremove", "--purge", "-y"],
-                   warn=_("Entfernt Pakete, die kein anderes Paket mehr braucht. "
-                          "Die Liste steht vor dem Löschen im Protokoll."))
+                   argv=AUTOREMOVE_CMD, warn=autoremove_warning(),
+                   preview=(autoremove_list, _("Pakete")))
+
+
+AUTOREMOVE_CMD = ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+                  "apt-get", "autoremove", "--purge", "-y"]
+
+
+def autoremove_list():
+    """Was `apt autoremove --purge` jetzt wirklich wegnehmen wuerde."""
+    return parse_apt_removals(sh(
+        ["apt-get", "-s", "-o", "Debug::NoLocking=1", "autoremove", "--purge"],
+        timeout=60))
+
+
+def autoremove_warning(pkgs=None):
+    """Der Warntext zum Aufraeumen, mit der echten Liste darin.
+
+    Der Befehl laeuft mit -y, damit im Protokollfenster keine Rueckfrage
+    haengenbleibt, die dort niemand beantworten kann. Dann muss die Liste aber
+    vorher dastehen, in der Rueckfrage, und nicht erst im Ablauf. Vorher stand
+    hier die Zusage, sie stehe "vor dem Löschen im Protokoll", und das war
+    genau nicht der Fall.
+    """
+    pkgs = autoremove_list() if pkgs is None else pkgs
+    if not pkgs:
+        return _("Entfernt Pakete, die kein anderes Paket mehr braucht. Im "
+                 "Moment ist die Liste leer, es würde also nichts entfernt, "
+                 "und der Befehl räumt nur den Paket-Zwischenspeicher.")
+    return (_("Entfernt {n} Paket(e), die kein anderes Paket mehr braucht:"
+              ).format(n=len(pkgs)) + "\n\n"
+            + ", ".join(pkgs[:40]) + ("\n…" if len(pkgs) > 40 else "")
+            + "\n\n"
+            + _("Steht dort etwas, das du noch brauchst, brich ab und "
+                "installiere es einzeln nach. Kernel-Pakete in der Liste sind "
+                "normal, der laufende bleibt immer stehen."))
 
 
 def os_release(key):
@@ -3563,6 +5317,22 @@ def point_version(v):
     return short_version(v) + ".1" if "LTS" in v and short_version(v) else ""
 
 
+RELEASE_PROMPT_FILE = "/etc/update-manager/release-upgrades"
+
+
+def release_prompt(path=RELEASE_PROMPT_FILE):
+    """'lts', 'normal' oder 'never' aus Ubuntus eigener Einstellung.
+
+    Sie entscheidet, was do-release-upgrade ueberhaupt anbietet, und wurde
+    bisher aus dem Versionsstring geraten. Wer 'never' gesetzt hat, will keinen
+    Wechsel angeboten bekommen, und dann hat auch dieser Befund dort nichts zu
+    suchen. Steht nichts oder etwas Unbekanntes drin, gilt Ubuntus Vorgabe.
+    """
+    m = re.search(r"^\s*Prompt\s*=\s*(\w+)", read(path) or "", re.M | re.I)
+    wert = m.group(1).lower() if m else ""
+    return wert if wert in ("lts", "normal", "never") else "lts"
+
+
 def newer_release(current, releases, lts_only=None):
     """Höchstes unterstütztes Release oberhalb der laufenden Version.
 
@@ -3571,7 +5341,11 @@ def newer_release(current, releases, lts_only=None):
     Point-Release, das es fuer Zwischenreleases gar nicht gibt.
     """
     if lts_only is None:
-        lts_only = "LTS" in os_release("VERSION")
+        # Ubuntus eigene Einstellung, nicht der Versionsstring. Und 'lts' auf
+        # einem Zwischenrelease behandelt der Upgrader selbst wie 'normal',
+        # das steht so in der Datei.
+        lts_only = (release_prompt() == "lts"
+                    and "LTS" in os_release("VERSION"))
     cur = version_tuple(current)
     newer = [r for r in releases if r[2] and version_tuple(r[0]) > cur
              and (not lts_only or "LTS" in r[0])]
@@ -3616,13 +5390,23 @@ def release_facts(version, path=DISTRO_INFO):
     return parse_distro_info(read(path) or "").get(short_version(version), {})
 
 
-def point_release_month(release_date, days=POINT_RELEASE_DAYS):
-    """Monat, in dem die .1-Freigabe zu erwarten ist. Leer ohne Releasedatum."""
+def point_release_month(release_date, days=POINT_RELEASE_DAYS, today=None):
+    """Monat, in dem die .1-Freigabe zu erwarten ist. Leer ohne Releasedatum.
+
+    Leer auch, sobald dieser Monat vorbei ist. Ein geschaetzter Monat, der
+    schon hinter uns liegt, beantwortet die Frage nicht mehr, sondern klingt
+    danach, als haette der Nutzer etwas verpasst. Die Saetze drumherum kommen
+    ohne Monat aus und bleiben dann einfach kuerzer.
+    """
     try:
         d = datetime.date.fromisoformat(release_date)
     except (TypeError, ValueError):
         return ""
-    return _(MONTHS[(d + datetime.timedelta(days=days)).month - 1])
+    when = d + datetime.timedelta(days=days)
+    now = datetime.date.today() if today is None else today
+    if (now.year, now.month) > (when.year, when.month):
+        return ""
+    return _(MONTHS[when.month - 1])
 
 
 UBUNTU_HOSTS = ("archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
@@ -3648,17 +5432,24 @@ def parse_apt_source(text):
                 out.append((toks[1], toks[2]))
             elif len(toks) == 2:               # 'deb uri ./' ohne Suite
                 out.append((toks[1], "./"))
-    uris = re.findall(r"^URIs:\s*(.+)$", text, re.M)
-    suites = re.findall(r"^Suites:\s*(.+)$", text, re.M)
-    for uri, suite in zip(uris, suites):
-        for u in uri.split():
-            for s in suite.split():
+    # deb822 absatzweise statt ueber die ganze Datei. Zwei Gruende: 'Enabled:
+    # no' gilt nur fuer seinen Absatz, und wer URIs und Suites getrennt
+    # einsammelt, paart sie bei einem Absatz ohne Suites falsch zusammen.
+    for block in re.split(r"\n\s*\n", text):
+        f = {k.lower(): v for k, v in
+             re.findall(r"^([\w-]+):\s*(.*)$", block, re.M)}
+        if f.get("enabled", "yes").strip().lower() in ("no", "false", "0"):
+            continue
+        for u in f.get("uris", "").split():
+            for s in f.get("suites", "").split():
                 out.append((u, s))
     return out
 
 
-def third_party_sources():
-    """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen."""
+def third_party_sources(all_sources=False):
+    """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen,
+    ausser all_sources: dann zaehlt der Zustand jeder Quelle, auch der von
+    Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen."""
     out = []
     files = (glob.glob("/etc/apt/sources.list.d/*.list")
              + glob.glob("/etc/apt/sources.list.d/*.sources")
@@ -3669,7 +5460,7 @@ def third_party_sources():
             continue
         name = os.path.basename(path).rsplit(".", 1)[0]
         for uri, suite in parse_apt_source(text):
-            if ubuntu_source(uri):
+            if ubuntu_source(uri) and not all_sources:
                 continue
             if (name, uri, suite) not in out:
                 out.append((name, uri, suite))
@@ -3775,6 +5566,186 @@ def sources_text(rows, codename):
     return "\n".join(lines)
 
 
+# Die Zeichen, die apt in einem Listennamen prozent-kodiert, aus URItoFileName
+# in apt-pkg. Der Unterstrich ist der wichtigste davon: ohne ihn findet ein
+# Repo namens node_24.x seine eigene Liste nicht wieder.
+APT_QUOTE = "\\|{}[]<>\"^~_=!@#$%&*"
+
+
+def apt_list_name(uri, suite):
+    """Dateiname, unter dem apt die Liste dieser Quelle ablegt, ohne Endung.
+
+    apt kodiert erst die Sonderzeichen der Adresse und macht danach aus jedem
+    Schraegstrich einen Unterstrich. Ein flaches Repo traegt statt des
+    dists-Teils die Suite so, wie sie in der Quelle steht, also meist '.'.
+
+    Benutzername und Passwort fallen wie bei apt vorher weg. Sonst findet eine
+    Quelle mit Zugangsdaten ihre eigene Liste nie und gilt als tot.
+    """
+    path = re.sub(r"^[a-z][a-z0-9+.-]*://(?:[^/@]*@)?", "", uri).strip("/")
+    quoted = "".join(f"%{ord(ch):02x}" if ch in APT_QUOTE or not 0x20 < ord(ch) < 0x7f
+                     else ch for ch in path)
+    base = quoted.replace("/", "_")
+    if suite in ("", "/"):
+        return base
+    return f"{base}_{suite.strip('/')}" if suite.endswith("/") \
+        else f"{base}_dists_{suite}"
+
+
+def apt_list_present(uri, suite):
+    """Hat apt fuer diese Quelle eine Liste liegen?
+
+    Bewusst nur die Frage nach dem Ob. Der Zeitstempel der Datei kommt vom
+    Server und steht bei einer Suite, die sich nach dem Release nicht mehr
+    aendert, jahrelang still. Als Mass fuer den letzten Abruf taugt er nicht,
+    dafuer gibt es apt_lists_age fuer alle Quellen zusammen.
+    """
+    stem = apt_list_name(uri, suite)
+    return any(os.path.exists(f"{APT_LISTS}/{stem}_{s}")
+               for s in ("InRelease", "Release"))
+
+
+def ubuntu_series():
+    """Alle Ubuntu-Codenamen, die distro-info kennt. Leer ohne das Paket."""
+    return {r["series"] for r in parse_distro_info(read(DISTRO_INFO) or "").values()
+            if r.get("series")}
+
+
+def flatpak_remotes():
+    """[(Name, url, abgeschaltet)] der eingetragenen Flatpak-Quellen."""
+    out = []
+    for line in sh(["flatpak", "remotes", "--columns=name,url,options"],
+                   timeout=20).splitlines():
+        f = line.split("\t")
+        if len(f) >= 2:
+            out.append((f[0], f[1], "disabled" in (f[2] if len(f) > 2 else "")))
+    return out
+
+
+# Wofuer eine Suite steht, in Worten statt in Codenamen. Ein Laie liest
+# 'noble-security' nicht, 'Sicherheitsupdates' schon.
+SUITE_LABEL = {"security": N_("Sicherheitsupdates"),
+               "updates": N_("Aktualisierungen"),
+               "backports": N_("Nachlieferungen")}
+
+
+def source_title(name, uri, suite):
+    """Name einer apt-Quelle so, wie ein Laie sie nennen wuerde.
+
+    Der Dateiname unter sources.list.d traegt den Programmnamen meist schon,
+    ein PPA versteckt ihn zwischen Konto und Codename. Was danach noch nach
+    Technik aussieht, ist der Name, den der Anbieter selbst vergeben hat.
+    """
+    tail = suite.rsplit("-", 1)[-1]
+    extra = _(SUITE_LABEL[tail]) if tail in SUITE_LABEL else ""
+    if ubuntu_source(uri):
+        # Ubuntu Pro liegt auf eigenen Rechnern und liefert laenger Updates
+        # als das normale Archiv. Beides 'Ubuntu' zu nennen verwischt das.
+        base = "Ubuntu Pro" if "esm.ubuntu.com" in uri else "Ubuntu"
+        extra = extra or _("Grundsystem")
+    elif "launchpad" in uri:
+        base = ppa_program(name)
+    else:
+        base = re.sub(r"[-_](stable|release|prod|main)$", "", name)
+    return f"{base} · {extra}" if extra else base
+
+
+def source_origin(uri):
+    """Der Rechner, von dem die Pakete kommen. Ohne Protokoll und Pfad, die
+    Adresse allein sagt einem Laien mehr als die ganze Zeile."""
+    return re.sub(r"^[a-z][a-z0-9+.-]*://", "", uri).split("/")[0]
+
+
+def source_newer_than_lists(uri, secs=None):
+    """Wurde diese Quelle erst nach dem letzten `apt-get update` eingetragen?
+
+    Dann fehlt ihre Liste, ohne dass etwas kaputt ist. Verglichen wird die
+    Datei unter sources.list.d, in der die Adresse steht, gegen den Zeitpunkt
+    des letzten erfolgreichen Abrufs.
+    """
+    if secs is None:
+        secs = apt_lists_age()
+    if secs is None:
+        return False
+    letzter = time.time() - secs
+    for path in (glob.glob("/etc/apt/sources.list.d/*.list")
+                 + glob.glob("/etc/apt/sources.list.d/*.sources")
+                 + ["/etc/apt/sources.list"]):
+        if uri not in (read(path) or ""):
+            continue
+        try:
+            if os.stat(path).st_mtime > letzter:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def package_sources(scan=None, current="", series=None, sources=None):
+    """[(Art, Name, Adresse, Zustand, in Ordnung)] jeder Quelle, aus der auf
+    diesem Rechner Updates kommen.
+
+    Zwei Fragen je apt-Quelle, und beide lassen sich ohne Netz beantworten:
+    liegt eine Liste vor, und passt die Suite ueberhaupt zu diesem Ubuntu.
+    Der zweite Fall ist der haeufigste Grund fuer den ersten, denn ein PPA fuer
+    die Vorgaengerfassung bleibt beim Upgrade einfach stehen.
+
+    scan ist das Ergebnis von updates_scan, daraus kommt der Zustand von snap.
+    """
+    cur = current or os_release("VERSION_CODENAME")
+    known = ubuntu_series() if series is None else series
+    seit = apt_lists_age()
+    rows = []
+    for name, uri, suite in (third_party_sources(True) if sources is None
+                             else sources):
+        base = suite.split("-")[0]
+        if apt_list_present(uri, suite):
+            state, ok = _("Alles in Ordnung"), True
+        elif base in known and base != cur:
+            state, ok = _("Gehört zu Ubuntu {suite}, dieser Rechner läuft "
+                          "{cur}. Von hier kommt nichts mehr.").format(
+                              suite=base, cur=cur), False
+        elif source_newer_than_lists(uri, seit):
+            # Eine Quelle, die erst nach dem letzten Abruf dazukam, hat noch
+            # gar keine Liste. Sie deshalb tot zu nennen war ein Fehlalarm,
+            # und zwar genau in dem Moment, in dem jemand etwas Neues eintraegt.
+            state, ok = _("Neu eingetragen, noch nicht abgeholt. Der Knopf "
+                          "'Paketlisten holen' erledigt das."), True
+        else:
+            state, ok = _("Antwortet nicht, von hier kommen keine Updates"), False
+        rows.append(("apt", source_title(name, uri, suite),
+                     source_origin(uri), state, ok))
+    # Was noch aussteht und beim letzten Versuch gescheitert ist. Erledigte
+    # Fehlschlaege fallen raus, sonst stuende der Vermerk fuer immer da: der
+    # Verlauf vergisst nicht von allein, die Liste der offenen Updates schon.
+    open_refs = {u[0] for u in (scan or {}).get("flatpak", {}).get("items", [])}
+    stuck = {r: w for r, w in update_fail_notes().get("flatpak", {}).items()
+             if r in open_refs}
+    err = (scan or {}).get("flatpak", {}).get("error")
+    remotes = flatpak_remotes()
+    for name, url, off in remotes:
+        if off:
+            state, ok = _("Abgeschaltet, wird nicht gefragt"), False
+        elif err:
+            state, ok = err, False
+        elif stuck and len(remotes) == 1:
+            # Nur bei einer einzigen Quelle ist klar, woher der Fehlschlag kam.
+            state, ok = _("Zuletzt kam von hier nicht alles an: {why}").format(
+                why=sorted(stuck.values())[0]), False
+        else:
+            # Ohne den Scan ist nur bekannt, dass die Quelle eingetragen ist.
+            # Mit ihm hat sie beim Suchen nach Updates wirklich geantwortet.
+            state, ok = (_("Antwortet") if scan else _("Eingetragen")), True
+        rows.append(("flatpak", name, source_origin(url), state, ok))
+    if scan and "snap" in scan:
+        err = scan["snap"].get("error")
+        rows.append(("snap", _("Snap Store"), "snapcraft.io",
+                     err or _("Alles in Ordnung"), not err))
+    # Zwei Zeilen, die dasselbe sagen, sehen nach Fehler aus. Ubuntu Pro traegt
+    # Grundsystem und Programme getrennt ein, von aussen ist das eine Stelle.
+    return list(dict.fromkeys(rows))
+
+
 def local_packages():
     """Selbst installierte .deb-Pakete ohne Quelle im Archiv."""
     out = []
@@ -3804,10 +5775,23 @@ def flatpak_index():
     return index
 
 
+# Namen, unter denen niemand ein Programm wiedererkennt. Ein PPA darf so
+# heissen, der Kontoname sagt dann mehr.
+PPA_GENERIC = {"stable", "ppa", "release", "main", "prod", "testing", "beta",
+               "unstable", "daily", "nightly", "edge", "staging"}
+
+
 def ppa_program(name):
-    """Programmname aus einem PPA-Dateinamen: owner-ubuntu-PROGRAMM-codename."""
-    m = re.match(r"^.+?-ubuntu-(.+)-[a-z]+$", name)
-    return m.group(1) if m else name
+    """Programmname aus einem PPA-Dateinamen: owner-ubuntu-PPANAME-codename.
+
+    Meist heisst das PPA wie das Programm. Wo es nur 'stable' heisst, steht der
+    Programmname vorn: aus flatpak-ubuntu-stable-noble wurde sonst eine Quelle
+    namens 'stable', und damit findet niemand das Programm dazu.
+    """
+    m = re.match(r"^(.+?)-ubuntu-(.+)-[a-z]+$", name)
+    if not m:
+        return name
+    return m.group(1) if m.group(2).lower() in PPA_GENERIC else m.group(2)
 
 
 def upgrade_report(codename="", version=""):
@@ -3909,6 +5893,10 @@ def check_release_upgrade(ctx):
     current = os_release("VERSION_ID")
     if not current:
         return None
+    if release_prompt() == "never":
+        # Der Nutzer hat Ubuntu das Anbieten abgestellt. Es hier trotzdem
+        # vorzuschlagen waere das Gegenteil dessen, wonach er gefragt hat.
+        return None
     state = state_read()
     if 0 <= time.time() - state.get("release_checked", 0) < 24 * 3600:
         offered = state.get("release_offered", "")
@@ -3917,11 +5905,18 @@ def check_release_upgrade(ctx):
     else:
         offered = (parse_release_upgrade(sh(["do-release-upgrade", "-c"], timeout=90))
                    if shutil.which("do-release-upgrade") else "")
-        found = newer_release(current, fetch_releases())
+        liste = fetch_releases()
+        found = newer_release(current, liste)
         exists, codename = (found[0], found[1]) if found else ("", "")
-        state_write({**state_read(), "release_checked": time.time(),
-                     "release_offered": offered, "release_exists": exists,
-                     "release_dist": codename})
+        # Nur ein geglueckter Abruf wird gemerkt. Eine leere Releaseliste heisst
+        # nicht "nichts Neues", sondern "nicht erreichbar", und das einen Tag
+        # lang festzuhalten hiesse, einen Fehlversuch als Ergebnis auszugeben:
+        # ein Rechner, der einmal ohne Netz war, meldete danach 24 Stunden
+        # lang nichts, auch mit Netz. Derselbe Fall wie in sources_cache_write.
+        if liste:
+            state_write({**state_read(), "release_checked": time.time(),
+                         "release_offered": offered, "release_exists": exists,
+                         "release_dist": codename})
 
     def report():
         return upgrade_report(codename, exists or offered)
@@ -4036,9 +6031,9 @@ def check_hwe_kernel(ctx):
                    _("{pkg} bringt den aktuellen Kernel samt Grafikstack. "
                      "Nach der Installation ist ein Neustart nötig.").format(pkg=pkg),
                    "HWE", True, f"sudo apt install --install-recommends {pkg}",
-                   argv=[["pkexec", "apt-get", "update"],
-                         ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                          "apt-get", "install", "-y", "--install-recommends", pkg]],
+                   argv=pkexec_apt_argv([pkg], recommends=True),
+                   preview=(lambda: apt_install_would_remove([pkg], True),
+                            _("Pakete"), _("Paket")),
                    warn=_("Wechselt die Kernel-Serie. Fremde Kernelmodule wie "
                         "VirtualBox oder NVIDIA werden neu gebaut."))
 
@@ -4088,6 +6083,58 @@ def check_bench_drop(ctx):
                    actions=[(_("Nochmal messen"), "_goto_page", "Benchmark")])
 
 
+JOURNAL_KEEP = 500 * 2**20
+JOURNAL_DIRS = ("/var/log/journal/*/*.journal", "/run/log/journal/*/*.journal")
+
+
+def journal_files():
+    """[(Zeit, Groesse, Pfad, archiviert)] aller Journaldateien.
+
+    Archiviert sind die mit '@' im Namen, das sind die rotierten. Die aktiven
+    (system.journal, user-1000.journal) fasst journald beim Aufraeumen nie an,
+    sie muessen deshalb aus jeder Vorschau heraus.
+    """
+    out = []
+    for muster in JOURNAL_DIRS:
+        for p in glob.glob(muster):
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            out.append((st.st_mtime, st.st_size, p, "@" in os.path.basename(p)))
+    return sorted(out)
+
+
+def journal_vacuum_preview(limit=JOURNAL_KEEP, dateien=None):
+    """(Liste der Dateien, freigegebene Byte, Zeitpunkt der Grenze).
+
+    journald raeumt die archivierten Dateien von alt nach neu weg, bis die
+    Summe unter der Grenze liegt. Genau das laesst sich vorher ausrechnen,
+    ohne etwas anzufassen: journalctl selbst kennt keinen Trockenlauf. Der
+    dritte Wert ist der Zeitpunkt, bis zu dem danach nichts mehr da ist.
+    """
+    alle = journal_files() if dateien is None else sorted(dateien)
+    gesamt = sum(s for _t, s, _p, _a in alle)
+    weg, frei, grenze = [], 0, 0.0
+    for t, size, path, archiv in alle:
+        if gesamt - frei <= limit:
+            break
+        if not archiv:
+            continue                   # die aktive Datei bleibt immer stehen
+        weg.append((t, size, path))
+        frei += size
+        grenze = t
+    return weg, frei, grenze
+
+
+def journal_vacuum_items(limit=JOURNAL_KEEP):
+    """Die Dateien als lesbare Zeilen fuer die Bestaetigung."""
+    weg, _frei, _g = journal_vacuum_preview(limit)
+    return [_("Logdatei vom {date}, {size}").format(
+        date=time.strftime("%d.%m.%Y", time.localtime(t)), size=fmt_bytes(s))
+        for t, s, _p in weg]
+
+
 def check_journal(ctx):
     m = re.search(r"take up ([\d.]+)([KMG]) ", sh(["journalctl", "--disk-usage"]))
     if not m:
@@ -4095,11 +6142,20 @@ def check_journal(ctx):
     gb = float(m.group(1)) * {"K": 1 / 2**20, "M": 1 / 1024, "G": 1}[m.group(2)]
     if gb < 2:
         return None
+    _weg, frei, grenze = journal_vacuum_preview()
     return Finding("warn", _("Systemjournal belegt {gb:.1f} GB").format(gb=gb),
-                   _("Alte Logs lassen sich gefahrlos auf 500 MB eindampfen."),
-                   _("{gb:.1f} GB frei").format(gb=gb - 0.5), True,
+                   _("Alte Logs lassen sich auf 500 MB eindampfen.")
+                   + (_(" Danach reicht das Journal nur noch bis zum {date} "
+                        "zurück, davor ist nichts mehr nachzulesen.").format(
+                            date=time.strftime("%d.%m.%Y",
+                                               time.localtime(grenze)))
+                      if grenze else ""),
+                   _("{gb:.1f} GB frei").format(
+                       gb=frei / 2**30 if frei else gb - 0.5), True,
                    "sudo journalctl --vacuum-size=500M",
-                   argv=["pkexec", "journalctl", "--vacuum-size=500M"])
+                   argv=["pkexec", "journalctl", "--vacuum-size=500M"],
+                   preview=(journal_vacuum_items, _("Logdateien"),
+                            _("Logdatei")))
 
 
 def snap_remove_argv(pairs):
@@ -4157,6 +6213,8 @@ def check_old_snaps(ctx):
                    argv=snap_remove_argv([(n, r) for _s, n, r in sizes]),
                    warn=_("Auf diese Versionen lässt sich danach nicht mehr "
                           "zurückrollen."),
+                   preview=(lambda: [f"{n} Rev {r}" for _s, n, r in sizes],
+                            _("Snap-Revisionen"), _("Snap-Revision")),
                    key="old_snaps",
                    lines=[("package-x-generic-symbolic", "dim",
                            _("{name}, Revision {rev}, {size}").format(
@@ -4185,6 +6243,61 @@ def check_autostart(ctx):
                    _("{n} Einträge").format(n=len(user)), False, key="autostart",
                    lines=[("system-run-symbolic", "dim", e["name"]) for e in user],
                    actions=[(_("Autostart öffnen"), "_goto_page", "Autostart")])
+
+
+def check_proton(ctx):
+    """Proton-Fassungen, mit denen kein Spiel startet.
+
+    Der eigentliche Bericht steht auf der Proton-Seite, hier zählt nur, dass
+    es überhaupt auffällt: Steam meldet keinen dieser Fälle, es startet das
+    Spiel einfach nicht.
+    """
+    bad = [f for f in proton_check() if f["sev"] == "crit"]
+    if not bad:
+        return None
+    # Gezaehlt werden die betroffenen Fassungen, nicht die Befunde. Seit eine
+    # kaputte Laufzeitumgebung alle ihre Fassungen zu einem Befund buendelt,
+    # stand hier "1 Fassung", waehrend sechs nicht starteten.
+    n = len({name for name, _p, _a, _s in runtime_problems()}
+            | {g for g, _a, _t in missing_compat_games()}
+            | {name for name, _p, _w in broken_compat_tools()}) or len(bad)
+    return Finding("warn",
+                   _("1 Proton-Fassung startet kein Spiel") if n == 1
+                   else _("{n} Proton-Fassungen starten kein Spiel").format(n=n),
+                   _("Steam sagt dazu nichts, es beendet das Spiel gleich "
+                     "wieder. Woran es liegt und was hilft, steht auf der "
+                     "Proton-Seite."),
+                   _("Spiele"), False, key="proton",
+                   lines=[("applications-games-symbolic", "crit",
+                           f["title"] + ": " + f["short"])
+                          for f in bad[:8]],
+                   actions=[(_("Proton öffnen"), "_goto_page", "Proton")])
+
+
+def check_dead_launchers(ctx):
+    """Menüeinträge, hinter denen kein Programm mehr steht.
+
+    Steam legt für jeden Titel eine Startdatei im Home an und lässt sie beim
+    Deinstallieren liegen, AppImages hinterlassen dasselbe. Übrig bleibt ein
+    Eintrag im Menü, der beim Anklicken nichts tut, und über die Jahre werden
+    daraus dutzende.
+    """
+    dead = dead_launchers()
+    if not dead:
+        return None
+    return Finding("info",
+                   _("1 Menüeintrag zeigt ins Leere") if len(dead) == 1 else
+                   _("{n} Menüeinträge zeigen ins Leere").format(n=len(dead)),
+                   _("Zu diesen Einträgen gibt es kein Programm mehr. Sie stehen "
+                     "in deinem Home-Verzeichnis, nicht im System, und lassen "
+                     "sich gefahrlos entfernen. Installiert wird dadurch nichts "
+                     "deinstalliert, die Programme sind ohnehin schon weg."),
+                   _("{n} Einträge").format(n=len(dead)), False,
+                   key="dead_launchers",
+                   lines=[("application-x-executable-symbolic", "dim",
+                           _("{name}: {why}").format(name=n, why=w))
+                          for n, _p, w in dead[:10]],
+                   actions=[(_("Einträge entfernen"), "_remove_launchers", None)])
 
 
 def check_swap(ctx):
@@ -4230,13 +6343,27 @@ def check_incidents(ctx):
 
 
 def parse_journal_top(text):
-    """'   1234 progname' je Zeile, wie es uniq -c liefert."""
+    """'   1234 irgendwas' je Zeile, wie es uniq -c liefert. Der Rest bleibt
+    ungeteilt, sonst zerfaellt eine Meldung in ihre Woerter."""
     out = []
     for line in text.splitlines():
-        f = line.split()
+        f = line.strip().split(None, 1)
         if len(f) == 2 and f[0].isdigit():
             out.append((int(f[0]), f[1]))
     return out
+
+
+def journal_unit_top(unit):
+    """Die haeufigsten Meldungen einer Unit aus den letzten fuenf Minuten.
+
+    Auf 60 Zeichen gekuerzt: PIDs und Pfade weiter hinten zerlegen dieselbe
+    Meldung sonst in lauter Einzelfaelle. Der Name geht als Argument in die
+    Shell, nicht in den Skripttext.
+    """
+    return parse_journal_top(sh(
+        ["bash", "-c", 'journalctl --since -5min --no-pager -o cat -u "$1" '
+         '| cut -c1-60 | sort | uniq -c | sort -rn | head -5', "sh", unit],
+        timeout=30))
 
 
 def check_journal_rate(ctx):
@@ -4251,8 +6378,8 @@ def check_journal_rate(ctx):
     rate = count / 5
     if rate < 400:
         return None
-    # Kein Beheben-Knopf: was hier hilft, haengt am Verursacher. Der steht
-    # deshalb im Befund statt in einem Befehl, der ihn nur nochmal sucht.
+    # Kein Beheben-Knopf: was hier hilft, haengt am Verursacher. Statt eines
+    # Befehls, der ihn nur nochmal sucht, zeigt der Knopf, was er schreibt.
     # Die Unit statt _COMM: bei einem Python-Dienst steht dort "python3", und
     # damit kann niemand etwas anfangen.
     top = parse_journal_top(
@@ -4270,7 +6397,9 @@ def check_journal_rate(ctx):
                    f"{rate:.0f}/min", False, key="journal_rate",
                    lines=[("utilities-terminal-symbolic", "dim",
                            _("{prog}: {n} Zeilen in fünf Minuten").format(
-                               prog=p, n=c)) for c, p in top])
+                               prog=p, n=c)) for c, p in top],
+                   actions=[(_("Nachsehen, was da steht"), "_journal_who",
+                             top[0][1])] if top else None)
 
 
 def check_updates(ctx):
@@ -4317,15 +6446,13 @@ def check_self_update(ctx):
                        f"sudo tee {REPO_SOURCES} > /dev/null\n"
                        "sudo apt update && sudo apt install --reinstall dynotiq",
                        key="self_update_source")
-    if not cand or cand == inst:
+    if not deb_newer(cand, inst):
         return None
     return Finding("info", _("dynotiq {v} ist verfügbar").format(v=cand),
                    _("Installiert ist {v}. Das Update kommt aus der Paketquelle "
                      "und läuft wie jedes andere Paket über apt.").format(v=inst),
                    cand, True, "sudo apt update && sudo apt install dynotiq",
-                   argv=[["pkexec", "apt-get", "update"],
-                         ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
-                          "apt-get", "install", "-y", "dynotiq"]],
+                   argv=pkexec_apt_argv(["dynotiq"]),
                    warn=_("Dieses Fenster läuft bis zum Schließen mit der alten "
                           "Fassung weiter."))
 
@@ -4333,10 +6460,11 @@ def check_self_update(ctx):
 CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_driver,
           check_cpu_temp,
           check_filesystems, check_gpu_throttle, check_governor, check_journal,
-          check_old_snaps, check_autostart, check_swap, check_updates,
+          check_old_snaps, check_autostart, check_dead_launchers, check_swap,
+          check_proton, check_updates,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
           check_bench_drop, check_shader_cache, check_compat_tools,
-          check_orphan_prefixes, check_self_update]
+          check_orphan_prefixes, check_steam_cef_gpu, check_self_update]
 
 # info kostet keine Punkte: es ist eine Mitteilung, kein Mangel.
 WEIGHT = {"crit": 12, "warn": 4, "info": 0}
@@ -5371,8 +7499,8 @@ def build_css():
 NAV_GROUPS = [
     (_("DIAGNOSE"), [N_("Übersicht"), N_("Probleme"), N_("Vorfälle"),
                      N_("Treiber")]),
-    (_("SYSTEM"), [N_("Updates"), N_("App-Check"), N_("Autostart"),
-                   N_("Live-Monitor"), N_("Speicher")]),
+    (_("SYSTEM"), [N_("Updates"), N_("App-Check"), N_("Proton"),
+                   N_("Autostart"), N_("Live-Monitor"), N_("Speicher")]),
     (_("DATEN"), [N_("Prüfstand"), N_("Benchmark"), N_("Verlauf"),
                   N_("Einstellungen")]),
 ]
@@ -6015,8 +8143,10 @@ class App(Gtk.Application):
         self.apply_css()
 
         Gtk.Window.set_default_icon_name("dynotiq")
+        # 860 statt 800: die Seitenleiste gibt die Mindesthöhe vor, und bei 800
+        # blieb kein Platz mehr für den Rechnerblock unter der Navigation.
         self.win = Gtk.ApplicationWindow(application=self, default_width=1180,
-                                         default_height=800, title="dynotiq",
+                                         default_height=860, title="dynotiq",
                                          icon_name="dynotiq")
         hb = Gtk.HeaderBar(show_title_buttons=True)
         t = box(True, 10)
@@ -6224,12 +8354,19 @@ class App(Gtk.Application):
                        "rig-sub"))
         s.append(rig)
         self.work(self._rig_worker, None, total)
-        # Fest 208 px: das hexpand der Nav-Labels schlägt sonst nach oben durch
-        # und die Sidebar wandert je nach Inhalt der rechten Seite.
-        frame = Gtk.ScrolledWindow(child=s, hexpand=False, width_request=SIDEBAR_WIDTH,
-                                   hscrollbar_policy=Gtk.PolicyType.NEVER)
-        frame.set_size_request(SIDEBAR_WIDTH, -1)
-        return frame
+        # Fest 208 px breit: das hexpand der Nav-Labels schlägt sonst nach oben
+        # durch und die Sidebar wandert je nach Inhalt der rechten Seite. Ein
+        # ausdrückliches hexpand hält das auf, dafür braucht es kein
+        # ScrolledWindow.
+        #
+        # Und bewusst keins: darin durfte die Leiste kleiner werden als ihr
+        # Inhalt, und dann war oben die Wortmarke und unten der Rechnerblock
+        # abgeschnitten. So gibt die Leiste dem Fenster ihre Mindesthöhe vor
+        # und steht immer vollständig da, egal wie lang die Namen der Hardware
+        # sind oder wie viele Seiten dazukommen.
+        s.set_hexpand(False)
+        s.set_size_request(SIDEBAR_WIDTH, -1)
+        return s
 
     def _maybe_intro(self):
         """Beim ersten Start das Willkommen, nach einem Update die Neuerungen.
@@ -6323,6 +8460,51 @@ class App(Gtk.Application):
         """Befund, der nichts zu beheben hat, aber eine Seite, die es kann."""
         self._nav_clicked(self.nav_buttons[page], page)
 
+    def _journal_who(self, _b, _f, unit):
+        self.work(self._journal_who_read, None, unit)
+
+    def _journal_who_read(self, unit):
+        top = journal_unit_top(unit)
+        body = "\n".join(_("{n}x  {msg}").format(n=c, msg=m) for c, m in top) \
+            or _("Im Moment nichts, der Dienst ist inzwischen still.")
+        GLib.idle_add(
+            self._alert, unit,
+            body + "\n\n"
+            + _("Ganze Zeilen: journalctl -u {unit} -n 100").format(unit=unit)
+            + "\n"
+            + _("Wiederholt sich dieselbe Meldung, liegt es an dem Dienst, "
+                "nicht am Journal. Ob er hier gebraucht wird, zeigt die Seite "
+                "Autostart, bevor er abgeschaltet wird."))
+
+    def _fix_steam_cef(self, _b, _f, _arg):
+        targets = [t for t, _s in steam_desktop_files()]
+        self._confirm(
+            _("Steam ohne GPU-Beschleunigung der Oberfläche starten?"),
+            _("Die Startdateien von Steam bekommen den Parameter {flag}. "
+              "Betroffen sind: {files}. Auf die Spiele hat das keinen Einfluss, "
+              "nur auf das Fenster von Steam. Wirksam wird es, sobald Steam das "
+              "nächste Mal startet, also einmal beenden und neu öffnen. "
+              "Rückgängig: die Datei im eigenen Ordner löschen, dann gilt "
+              "wieder die von Steam mitgelieferte.").format(
+                  flag=STEAM_CEF_FLAG,
+                  files=", ".join(os.path.basename(t) for t in targets)),
+            [_("Abbrechen"), _("Setzen")], self._steam_cef_done)
+
+    def _steam_cef_done(self):
+        try:
+            done = steam_set_cef_flag()
+        except OSError as e:
+            self._alert(_("Startparameter nicht gesetzt"), str(e))
+            return
+        if not done:
+            self._alert(_("Nichts zu ändern"),
+                        _("Der Parameter steht schon in allen Startdateien."))
+            return
+        self._alert(_("Startparameter gesetzt"),
+                    _("Geändert: {files}. Steam einmal beenden und neu "
+                      "starten, vorher greift es nicht.").format(
+                          files=", ".join(done)))
+
     def _build(self, name):
         if name in self.built:
             return
@@ -6331,6 +8513,7 @@ class App(Gtk.Application):
                    "Vorfälle": self._page_incidents,
                    "Treiber": self._page_drivers, "Updates": self._page_updates,
                    "App-Check": self._page_appcheck,
+                   "Proton": self._page_proton,
                    "Autostart": self._page_autostart,
                    "Live-Monitor": self._page_monitor, "Speicher": self._page_storage,
                    "Prüfstand": self._page_dyno,
@@ -6639,7 +8822,28 @@ class App(Gtk.Application):
         if choice == 1:
             Gdk.Display.get_default().get_clipboard().set(f.cmd)
         elif choice == 2 and f.argv:
+            if f.preview:
+                # Erst nachsehen, was wegkaeme. Der Trockenlauf ruft apt, das
+                # gehoert nicht in den Zeichenthread.
+                fn, was = f.preview[0], f.preview[1]
+                eins = f.preview[2] if len(f.preview) > 2 else None
+                self.work(lambda: GLib.idle_add(
+                    self._confirm_removal, f, fn(), was, eins), None)
+                return
             self._run_log(f.title, f.argv, self._after_fix)
+
+    def _confirm_removal(self, f, items, was, eins=None):
+        """Zweite Rückfrage mit der Liste aus dem Trockenlauf.
+
+        Erst hier fällt die Entscheidung. Der Befehl selbst läuft mit -y und
+        fragt danach nichts mehr, deshalb muss alles, was er wegnimmt, vorher
+        dagestanden haben.
+        """
+        detail, label = confirm_removal(items, was, eins)
+        self._confirm(f.title, detail, [_("Abbrechen"), label],
+                      lambda: self._run_log(f.title, f.argv, self._after_fix),
+                      default=0)
+        return False
 
     def _after_fix(self):
         """Nach einem Eingriff stimmen die alten Zahlen nicht mehr."""
@@ -6652,6 +8856,53 @@ class App(Gtk.Application):
         shown = getattr(self, "dyno_result", None)
         if isinstance(shown, dict):
             self._fill_dyno_advice(shown)
+
+    def _remove_launchers(self, _b, _f, _arg):
+        """Tote Menüeinträge entfernen, aber erst nach Vorlage der Liste.
+
+        Frisch gesucht statt aus dem Befund übernommen: zwischen Scan und Klick
+        kann etwas installiert worden sein, und dann stünde hier eine Datei zum
+        Löschen, hinter der wieder ein Programm steht.
+        """
+        # Im Hintergrund: das Suchen liest alle Steam-Bibliotheken, und eine
+        # haengende Einhaengung wuerde sonst das Fenster einfrieren.
+        self.work(lambda: GLib.idle_add(self._launchers_ask, dead_launchers()),
+                  None)
+
+    def _launchers_ask(self, dead):
+        if not dead:
+            self._alert(_("Nichts zu entfernen"),
+                        _("Zu jedem Menüeintrag gibt es wieder ein Programm."))
+            return False
+        listing = "\n".join(f"  {n}\n    {w}" for n, _p, w in dead[:15])
+        if len(dead) > 15:
+            listing += _("\n  … und {n} weitere").format(n=len(dead) - 15)
+        self._confirm(
+            _("1 Menüeintrag entfernen?") if len(dead) == 1 else
+            _("{n} Menüeinträge entfernen?").format(n=len(dead)),
+            listing + _("\n\nGelöscht werden nur diese Startdateien unter "
+                        "~/.local/share/applications. An den Programmen ändert "
+                        "sich nichts, sie sind ohnehin nicht mehr da. Nichts "
+                        "unter /usr wird angefasst."),
+            [_("Abbrechen"), _("Entfernen")],
+            lambda: self.work(lambda: GLib.idle_add(
+                self._launchers_gone,
+                remove_launchers([p for _n, p, _w in dead]), len(dead)), None),
+            default=1)
+        return False
+
+    def _launchers_gone(self, gone, wanted):
+        """Laeuft ueber idle_add, gibt deshalb False zurueck."""
+        if len(gone) < wanted:
+            self._alert(_("{n} von {total} entfernt").format(
+                n=len(gone), total=wanted),
+                _("Der Rest ließ sich nicht löschen. Meist fehlt das "
+                  "Schreibrecht auf die Datei."))
+        else:
+            self._alert(_("{n} Einträge entfernt").format(n=len(gone)),
+                        _("Das Menü zeigt sie beim nächsten Aufbau nicht mehr."))
+        self.rescan()
+        return False
 
     # Ubuntu-Release
 
@@ -6953,19 +9204,26 @@ class App(Gtk.Application):
         self.work(self._updates_worker, self.upd_sub)
 
     def _updates_worker(self):
-        GLib.idle_add(self._updates_done, updates_scan(self.cfg.get("firmware", True)))
+        data = updates_scan(self.cfg.get("firmware", True))
+        GLib.idle_add(self._updates_done, data, package_sources(data))
 
     def _apt_update(self, _b):
         self._run_log(_("Paketlisten holen"), APT_UPDATE_CMD,
                       lambda: self._updates_reload())
 
-    def _updates_done(self, data):
+    def _updates_done(self, data, sources=()):
         clear(self.upd_box)
         self.upd_checks = {}
-        self.upd_fresh = {u[0] for v in data.values() for u in v["items"] if not u[2]}
-        parts = [f"{len(v['items'])} {UPDATE_SOURCES[k]}"
+        # Mit der Quelle im Schluessel: ein Snap und ein Paket duerfen gleich
+        # heissen, und dann entschied vorher das Snap ueber die apt-Zeile.
+        self.upd_fresh = {(k, u[0]) for k, v in data.items()
+                          for u in v["items"] if not u[2]}
+        parts = [f"{len(v['items'])} {source_label(k, len(v['items']))}"
                  for k, v in data.items() if v["items"]]
-        broken = [UPDATE_SOURCES[k] for k, v in data.items() if v["error"]]
+        phased = data.get("apt", {}).get("phased", [])
+        if phased:
+            parts.append(_("{n} zurückgehalten").format(n=len(phased)))
+        broken = [source_label(k) for k, v in data.items() if v["error"]]
         if broken:
             parts.append(_("ungeprüft: ") + ", ".join(broken))
         text = " · ".join(parts) if parts else _("alles aktuell")
@@ -6976,7 +9234,7 @@ class App(Gtk.Application):
             if res["error"]:
                 c = box()
                 c.add_css_class("card")
-                c.append(card_head(UPDATE_SOURCES[src], _("nicht geprüft")))
+                c.append(card_head(source_label(src), _("nicht geprüft")))
                 body = lbl(_("{err}. Ob hier Updates anstehen, ist unbekannt."
                              ).format(err=res["error"]),
                            "lede", wrap=True, chars=80)
@@ -6985,7 +9243,8 @@ class App(Gtk.Application):
                 body.set_margin_bottom(16)
                 c.append(body)
                 self.upd_box.append(c)
-        if not any(v["items"] or v.get("removals") for v in data.values()):
+        if not any(v["items"] or v.get("removals") or v.get("phased")
+                   for v in data.values()):
             if not broken:
                 c = box()
                 c.add_css_class("card")
@@ -6997,13 +9256,17 @@ class App(Gtk.Application):
                 body.set_margin_bottom(16)
                 c.append(body)
                 self.upd_box.append(c)
+            self._sources_card(sources)
             return False
 
+        failed = update_fail_notes()
         for src, res in data.items():
             ups = res["items"]
             gone = res.get("removals", [])
-            if not ups and not gone:
+            held = res.get("phased", [])
+            if not ups and not gone and not held:
                 continue
+            notes = failed.get(src, {})
             c = box()
             c.add_css_class("card")
             allbox = None
@@ -7018,10 +9281,10 @@ class App(Gtk.Application):
                 right.append(lbl(f"{len(ups)} · {fmt_bytes(total)}" if total
                                  else str(len(ups)), "sub"))
                 right.append(btn)
-                head = card_head(UPDATE_SOURCES[src], right)
+                head = card_head(source_label(src), right)
                 head.prepend(allbox)
             else:
-                head = card_head(UPDATE_SOURCES[src])
+                head = card_head(source_label(src))
             c.append(head)
             checks = []
             for uid, name, old, new, size in ups:
@@ -7046,12 +9309,32 @@ class App(Gtk.Application):
                 txt = box(spacing=2, hexpand=True)
                 txt.append(lbl(name, "row-title", wrap=True, chars=50))
                 txt.append(lbl(f"{old} → {new}" if old else new, "mono-dim"))
+                if notes.get(uid):
+                    txt.append(lbl(_("Scheiterte zuletzt: {why}").format(
+                        why=notes[uid]), "row-detail", wrap=True, chars=60))
                 r.append(txt)
                 if size:
                     s = lbl(fmt_bytes(size), "mono-dim")
                     s.set_valign(Gtk.Align.CENTER)
                     r.append(s)
                 c.append(sep_row(r))
+            if src == "apt" and ups:
+                w = box()
+                w.append(sep())
+                t = box(spacing=3, margin_top=11, margin_bottom=13,
+                        margin_start=18, margin_end=18)
+                t.append(lbl(_("Deine Konfigurationsdateien bleiben, wie sie "
+                               "sind"), "row-title"))
+                t.append(lbl(_("Bringt ein Paket eine neue Fassung einer Datei "
+                               "unter /etc mit, die du selbst geändert hast, "
+                               "behält dynotiq deine. Nachfragen kann es "
+                               "nicht: im Protokollfenster ließe sich eine "
+                               "Rückfrage von dpkg gar nicht beantworten. Die "
+                               "neue Fassung landet daneben als .dpkg-dist, "
+                               "und apt nennt sie am Ende des Laufs."),
+                             "row-detail", wrap=True, chars=80))
+                w.append(t)
+                c.append(w)
             if gone:
                 w = box()
                 w.append(sep())
@@ -7066,11 +9349,90 @@ class App(Gtk.Application):
                              "mono-dim", wrap=True, chars=80))
                 w.append(t)
                 c.append(w)
+            if held:
+                w = box()
+                w.append(sep())
+                t = box(spacing=3, margin_top=11, margin_bottom=13,
+                        margin_start=18, margin_end=18)
+                t.append(lbl(_("{n} Pakete hält Ubuntu noch zurück").format(
+                    n=len(held)), "row-title"))
+                t.append(lbl(_("Ubuntu gibt neue Fassungen nicht auf einen "
+                               "Schlag frei, sondern nach und nach an immer "
+                               "mehr Rechner. Bis dieser dran ist, sind sie "
+                               "hier nicht anwählbar. Das dauert meist wenige "
+                               "Tage und passiert von allein, zu tun ist "
+                               "nichts. Sicherheitsupdates nimmt Ubuntu davon "
+                               "aus, die kommen sofort."),
+                             "row-detail", wrap=True, chars=80))
+                t.append(lbl(", ".join(held[:12]) + ("…" if len(held) > 12 else ""),
+                             "mono-dim", wrap=True, chars=80))
+                w.append(t)
+                c.append(w)
             if allbox:
                 allbox.connect("toggled", self._updates_toggle_all, checks)
             self.upd_checks[src] = checks
             self.upd_box.append(c)
+        self._sources_card(sources)
         return False
+
+    SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
+
+    def _sources_card(self, rows):
+        """Woher die Updates kommen und ob jede Quelle noch etwas liefert.
+
+        Zugeklappt, solange nichts fehlt: die Liste ist lang und die Antwort
+        passt in eine Zeile. Stimmt etwas nicht, steht sie offen.
+        """
+        if not rows:
+            return
+        bad = [r for r in rows if not r[4]]
+        c = box()
+        c.add_css_class("card")
+        right = lbl(_("{n} von {total} antworten nicht").format(
+            n=len(bad), total=len(rows)) if bad
+            else _("alle {n} in Ordnung").format(n=len(rows)), "sub")
+        right.set_valign(Gtk.Align.CENTER)
+        c.append(card_head(_("Woher die Updates kommen"), right))
+        intro = lbl(_("Jedes Programm auf diesem Rechner holt seine "
+                      "Aktualisierungen von einer festen Stelle im Netz. "
+                      "Antwortet eine davon nicht mehr, bleiben die Updates "
+                      "genau dieses Programms aus, ohne dass es auffällt.")
+                    if bad else
+                    _("Jedes Programm holt seine Aktualisierungen von einer "
+                      "festen Stelle im Netz. Hier antworten alle."),
+                    "lede", wrap=True, chars=76)
+        intro.set_margin_start(18)
+        intro.set_margin_end(18)
+        intro.set_margin_top(2)
+        c.append(intro)
+        exp = Gtk.Expander(margin_start=18, margin_end=18, margin_bottom=14,
+                           margin_top=10)
+        exp.set_label_widget(lbl(_("Die einzelnen Stellen ansehen"), "row-detail"))
+        exp.set_expanded(bool(bad))
+        inner = box(spacing=0)
+        # Was nicht antwortet, zuerst. Danach nach Art und Name, damit die
+        # Liste bei jedem Aufbau gleich aussieht.
+        for art, name, origin, state, ok in sorted(rows,
+                                                   key=lambda r: (r[4], r[0], r[1])):
+            row = box(True, 11, margin_top=8, margin_bottom=8)
+            dot = Gtk.Box(valign=Gtk.Align.CENTER)
+            dot.add_css_class("bullet-ok" if ok else "bullet-crit")
+            row.append(dot)
+            txt = box(spacing=2, hexpand=True)
+            txt.append(lbl(name, "row-title", wrap=True, chars=44))
+            txt.append(lbl(origin, "mono-dim", wrap=True, chars=54))
+            if not ok:
+                txt.append(lbl(state, "row-detail", wrap=True, chars=54))
+            row.append(txt)
+            # Ohne Farbe: den Zustand sagt schon der Punkt links, das Kuerzel
+            # sagt nur, um welche Art von Quelle es geht.
+            pill = lbl(self.SOURCE_KIND.get(art, art), "pill")
+            pill.set_valign(Gtk.Align.CENTER)
+            row.append(pill)
+            inner.append(sep_row(row))
+        exp.set_child(inner)
+        c.append(exp)
+        self.upd_box.append(c)
 
     def _updates_toggle_all(self, allbox, checks):
         for cb, _uid in checks:
@@ -7089,25 +9451,40 @@ class App(Gtk.Application):
             return
         self.upd_running = True
         btn.set_sensitive(False)
-        fresh = bool(set(ids) & getattr(self, "upd_fresh", set()))
+        fresh = needs_fresh(src, ids, getattr(self, "upd_fresh", set()))
         steps = cmd_steps(update_cmd(src, ids, fresh))
         if self.cfg["snapshot"] and shutil.which("timeshift"):
             # Erst sichern, dann installieren. Scheitert der Snapshot, bricht die
             # Kette ab und es wird nichts angefasst.
             steps = [SNAPSHOT_CMD] + steps
 
+        log = []
+
         def done():
             self.upd_running = False
             btn.set_sensitive(True)
-            self.work(self._updates_verify, self.upd_sub, src, ids)
+            self.work(self._updates_verify, self.upd_sub, src, ids,
+                      "\n".join(log))
 
-        self._run_log(f"{UPDATE_SOURCES[src]} aktualisieren", steps, done,
-                      count=len(ids))
+        self._run_log(_("{src} aktualisieren").format(
+            src=source_label(src, len(ids))), steps, done,
+                      count=len(ids), sink=log)
 
-    def _updates_verify(self, src, ids):
+    def _updates_verify(self, src, ids, log=""):
         """Nach dem Lauf nachsehen, was wirklich weg ist. Der Sammel-Exitcode
         sagt nicht, welches Paket gescheitert ist."""
         data = updates_scan(self.cfg.get("firmware", True))
+        err = data.get(src, {}).get("error")
+        if err:
+            # Ohne den zweiten Scan ist unbekannt, was durchlief. Die leere
+            # Liste als Erfolg zu lesen war der Fehler: dann meldete die Seite
+            # jedes Paket als eingespielt, gerade wenn apt gar nicht antwortete.
+            GLib.idle_add(self._updates_done, data, package_sources(data))
+            GLib.idle_add(self._alert, _("Nicht nachprüfbar"),
+                          _("Der Lauf ist beendet, aber {err}. Ob die Updates "
+                            "wirklich angekommen sind, sagt erst das nächste "
+                            "Einlesen.").format(err=err))
+            return
         left = {u[0] for u in data.get(src, {}).get("items", [])} & set(ids)
         done = sorted(set(ids) - left)
         if done:
@@ -7115,16 +9492,39 @@ class App(Gtk.Application):
             # laesst, ob eine Messung vor oder nach einem Eingriff entstand.
             history_append({"t": time.time(), "kind": "update", "src": src,
                             "n": len(done), "items": done[:20]})
-        GLib.idle_add(self._updates_done, data)
+        GLib.idle_add(self._updates_done, data, package_sources(data))
         if left:
-            GLib.idle_add(self._alert,
-                          _("{n} von {total} nicht aktualisiert").format(
-                              n=len(left), total=len(ids)),
-                          _("Diese Einträge stehen weiterhin an:\n\n")
-                          + "\n".join(sorted(left)[:15])
-                          + ("\n…" if len(left) > 15 else ""))
+            notes, kind = update_failures(src, sorted(left), log)
+            known = {r: w for r, w in notes.items() if w}
+            if known:
+                # Damit die Seite beim naechsten Mal schon vor dem Anhaken
+                # sagen kann, woran es zuletzt lag.
+                history_append({"t": time.time(), "kind": "update-fail",
+                                "src": src, "items": known})
+            # Den Rat hier holen, nicht im Dialog: er fragt flatpak und apt,
+            # und das gehoert nicht in den Zeichenthread.
+            note, cmd, label = (flatpak_too_old_fix() if kind == "too_old"
+                                else ("", None, ""))
+            GLib.idle_add(self._updates_failed, len(ids), notes, note, cmd, label)
 
-    def _run_log(self, title, cmd, done=None, count=0):
+    def _updates_failed(self, total, notes, note, cmd, label):
+        """Was der Lauf ueber die einzelnen Eintraege gesagt hat, statt nur
+        ihrer Namen. Den Knopf gibt es nur zu einem Grund, den wir kennen."""
+        lines = [f"{r}\n    {w}" if w else r for r, w in notes.items()]
+        title = _("{n} von {total} nicht aktualisiert").format(
+            n=len(lines), total=total)
+        detail = (_("Diese Einträge stehen weiterhin an:\n\n")
+                  + "\n".join(lines[:15]) + ("\n…" if len(lines) > 15 else ""))
+        if note:
+            detail += "\n\n" + note
+        if cmd:
+            self._confirm(title, detail, [_("Schließen"), label],
+                          lambda: self._run_log(label, cmd), default=1)
+        else:
+            self._alert(title, detail)
+        return False
+
+    def _run_log(self, title, cmd, done=None, count=0, sink=None):
         """Führt cmd aus und zeigt die Ausgabe live. Kein Shell, cmd ist eine
         Liste von Argumenten oder eine Liste solcher Listen."""
         win = Gtk.Window(title=title, transient_for=self.win, modal=True,
@@ -7155,13 +9555,23 @@ class App(Gtk.Application):
 
         seen = set()
         run = {"start": time.monotonic(), "last": time.monotonic(), "done": False,
-               "step": ""}
+               "step": "", "pct": 0.0}
 
         def append(line):
+            run["last"] = time.monotonic()
+            m = PROGRESS_PCT.match(line)
+            if m:
+                # Hundert solche Zeilen verdecken die eine, auf die es ankommt.
+                # Der Wert gehoert in den Balken, nicht in den Text.
+                run["pct"] = float(m.group(1).replace(",", "."))
+                return False
+            if line.startswith("$ "):
+                run["pct"] = 0.0     # neuer Schritt, der alte Stand gilt nicht
+            if sink is not None:
+                sink.append(line)
             buf.insert(buf.get_end_iter(), line + "\n")
             view.scroll_to_mark(buf.get_insert(), 0, False, 0, 1)
             buf.place_cursor(buf.get_end_iter())
-            run["last"] = time.monotonic()
             name = progress_name(line)
             if name:
                 seen.add(name)
@@ -7178,7 +9588,12 @@ class App(Gtk.Application):
             secs = int(time.monotonic() - run["start"])
             idle = int(time.monotonic() - run["last"])
             parts = [mmss(secs)]
-            if count:
+            if run["pct"] and not seen:
+                # flatpak zaehlt in Prozent statt in Paketen. Ohne das stuende
+                # der Balken den ganzen Lauf ueber auf null.
+                parts.append("{:.0f} %".format(run["pct"]))
+                bar.set_fraction(run["pct"] / 100)
+            elif count:
                 parts.append(_("{done} von {total}").format(
                     done=len(seen), total=count))
             elif run["step"]:
@@ -7935,23 +10350,223 @@ class App(Gtk.Application):
             t.append(lbl(detail, "row-detail", wrap=True, chars=78))
             r.append(t)
             if fix:
-                label, argv = fix
+                label, argv = fix[0], fix[1]
                 b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
                 b.add_css_class("btn-fix")
-                b.connect("clicked", self._appcheck_fix, title, label, argv)
+                b.connect("clicked", self._appcheck_fix, title, label, argv,
+                          None, fix[2] if len(fix) > 2 else None)
                 r.append(b)
             c.append(sep_row(r))
         self.app_box.append(c)
         return False
 
-    def _appcheck_fix(self, _b, title, label, argv):
+    def _appcheck_fix(self, _b, title, label, argv, after=None, preview=None):
+        """Rückfrage mit dem Befehl im Klartext, dann ausführen.
+
+        after sagt, welche Seite sich danach neu einliest. Ohne das lief nach
+        einem Knopf der Proton-Seite die Prüfung der App-Check-Seite an, und
+        die kennt dort gar keine ausgewählte Anwendung.
+
+        preview ist (Funktion, Bezeichnung) für Befehle, die etwas wegnehmen.
+        Dann kommt vor dem Ausführen eine zweite Rückfrage mit der Liste aus
+        dem Trockenlauf.
+        """
         steps = cmd_steps(argv)
+        lauf = (lambda: self.work(lambda: GLib.idle_add(
+            self._confirm_appcheck_removal, title, argv, after,
+            preview[0](), preview[1]), None)) if preview else (
+                lambda: self._run_log(title, argv, after or self._appcheck_run))
         self._confirm(_("{action}?").format(action=label),
                       _("{title}\n\nAusgeführt wird:\n").format(title=title)
                       + "\n".join("  " + " ".join(s) for s in steps),
-                      [_("Abbrechen"), label],
-                      lambda: self._run_log(title, argv, self._appcheck_run),
-                      default=1)
+                      [_("Abbrechen"), label], lauf, default=1)
+
+    def _confirm_appcheck_removal(self, title, argv, after, items, was):
+        detail, label = confirm_removal(items, was)
+        self._confirm(title, detail, [_("Abbrechen"), label],
+                      lambda: self._run_log(title, argv,
+                                            after or self._appcheck_run),
+                      default=0)
+        return False
+
+    # Proton
+
+    def _page_proton(self):
+        p = box(spacing=16)
+        rel = Gtk.Button(label=_("Neu einlesen"))
+        rel.add_css_class("btn-accent")
+        rel.connect("clicked", lambda *_: self._proton_reload())
+        head, self.pro_sub = self._head(
+            _("Proton"), _("wird gelesen …"), rel)
+        p.append(head)
+        self.pro_box = box(spacing=16)
+        p.append(self.pro_box)
+        self._proton_reload()
+        return self._scroll(p)
+
+    def _proton_reload(self):
+        self.pro_sub.set_text(_("wird gelesen …"))
+        self.work(self._proton_worker, self.pro_sub)
+
+    def _proton_worker(self):
+        """Alles am Stück im Hintergrund: die Ordner liegen oft auf einer
+        zweiten Platte, und die muss erst anlaufen."""
+        GLib.idle_add(self._proton_done, proton_check(), proton_rows(),
+                      proton_game_rows(), proton_managers())
+
+    def _proton_done(self, results, versions, games, managers=()):
+        clear(self.pro_box)
+        bad = [r for r in results if r["sev"] in ("crit", "warn")]
+        eigen = [v for v in versions if not v["valve"]]
+        self.pro_sub.set_text(
+            _("{n} Fassungen · alles in Ordnung").format(n=len(versions))
+            if not bad else
+            _("{n} Fassungen · {b} zu klären").format(n=len(versions),
+                                                     b=len(bad)))
+
+        # Zuerst das Ergebnis, dann die Bestandsliste, dann die Erklärung.
+        # Wer die Seite öffnet, will wissen ob etwas klemmt, nicht was Proton ist.
+        c = box()
+        c.add_css_class("card")
+        c.append(card_head(
+            _("Was zu klären ist"),
+            lbl(_("{n} Punkt(e)").format(n=len(bad)) if bad
+                else _("nichts"), "sub")))
+        if not results:
+            c.append(self._pro_note(_("Kein Steam gefunden. Diese Seite prüft "
+                                      "Proton, und das gehört zu Steam.")))
+        elif not bad:
+            c.append(self._pro_note(
+                _("Jede Fassung hat die Laufzeitumgebung, die sie verlangt, "
+                  "und kein Titel zeigt auf eine Fassung, die es nicht gibt.")))
+        for r in results:
+            row = box(True, 14, margin_top=12, margin_bottom=12,
+                      margin_start=18, margin_end=18)
+            dot = Gtk.Box(valign=Gtk.Align.CENTER)
+            dot.add_css_class({"crit": "bullet-crit",
+                               "warn": "bullet-warn"}.get(r["sev"], "bullet-ok"))
+            row.append(dot)
+            txt = box(spacing=3, hexpand=True)
+            txt.append(lbl(r["title"], "row-title", wrap=True, chars=56))
+            txt.append(lbl(r["short"], "row-detail", wrap=True, chars=72))
+            exp = Gtk.Expander(margin_top=4)
+            exp.set_label_widget(lbl(_("Warum, und was es bewirkt"), "row-detail"))
+            exp.set_child(lbl(r["long"], "row-detail", wrap=True, chars=76))
+            txt.append(exp)
+            row.append(txt)
+            if r["fix"]:
+                label, argv = r["fix"]
+                b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
+                b.add_css_class("btn-fix")
+                b.connect("clicked", self._appcheck_fix, r["title"], label, argv,
+                          self._proton_reload)
+                row.append(b)
+            c.append(sep_row(row))
+        self.pro_box.append(c)
+
+        for title, rows, note in (
+                (_("Selbst installierte Fassungen"), eigen,
+                 _("Von Hand oder über ein Werkzeug wie ProtonPlus "
+                   "eingespielt. Updates kommen nicht über Steam.")),
+                (_("Fassungen von Valve"),
+                 [v for v in versions if v["valve"]],
+                 _("Lädt und aktualisiert Steam selbst."))):
+            if not rows:
+                continue
+            v = box()
+            v.add_css_class("card")
+            v.append(card_head(title, lbl(str(len(rows)), "sub")))
+            v.append(self._pro_note(note, small=True))
+            for r in rows:
+                line = box(True, 12, margin_top=9, margin_bottom=9,
+                           margin_start=18, margin_end=18)
+                dot = Gtk.Box(valign=Gtk.Align.CENTER)
+                dot.add_css_class("bullet-ok" if r["ok"] else "bullet-crit")
+                line.append(dot)
+                txt = box(spacing=2, hexpand=True)
+                txt.append(lbl(r["name"], "row-title"))
+                if r["facts"]:
+                    txt.append(lbl(r["facts"], "row-detail", wrap=True, chars=68))
+                txt.append(lbl(r["path"], "mono-dim", wrap=True, chars=76))
+                line.append(txt)
+                pill = lbl(r["runtime"], "pill")
+                pill.set_valign(Gtk.Align.CENTER)
+                line.append(pill)
+                v.append(sep_row(line))
+            self.pro_box.append(v)
+
+        m = box()
+        m.add_css_class("card")
+        m.append(card_head(_("Fassungen holen und entfernen")))
+        m.append(self._pro_note(
+            _("Eigene Fassungen wie GE-Proton verwaltet ein eigenes Werkzeug. "
+              "dynotiq baut dafür nichts Zweites: es sagt, was fehlt oder "
+              "klemmt, und öffnet das Werkzeug, das es kann.") if managers else
+            _("Eigene Fassungen wie GE-Proton bringt ein Werkzeug wie "
+              "ProtonPlus auf den Rechner, hält sie aktuell und räumt alte "
+              "wieder weg. Hier ist keins davon installiert.")))
+        row = box(True, 10, margin_start=18, margin_end=18, margin_top=10,
+                  margin_bottom=16, halign=Gtk.Align.START)
+        for label, argv in managers or [
+                ("ProtonPlus", ["flatpak", "install", "-y", "--user", "flathub",
+                                "com.vysp3r.ProtonPlus"])]:
+            b = Gtk.Button(label=(_("{tool} öffnen") if managers
+                                  else _("{tool} installieren")).format(tool=label))
+            b.add_css_class("btn-fix" if managers else "btn-ghost")
+            b.connect("clicked", self._appcheck_fix, _("Fassungen verwalten"),
+                      b.get_label(), argv, self._proton_reload)
+            row.append(b)
+        m.append(row)
+        self.pro_box.append(m)
+
+        if games:
+            g = box()
+            g.add_css_class("card")
+            g.append(card_head(_("Welcher Titel benutzt was"),
+                               lbl(_("{n} Titel").format(n=len(games)), "sub")))
+            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_bottom=14,
+                               margin_top=8)
+            exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
+            exp.set_expanded(any(not ok for _n, _t, _b, ok in games))
+            inner = box(spacing=0)
+            for name, tool, built, ok in games:
+                r = box(True, 11, margin_top=8, margin_bottom=8)
+                dot = Gtk.Box(valign=Gtk.Align.CENTER)
+                dot.add_css_class("bullet-ok" if ok else "bullet-crit")
+                r.append(dot)
+                txt = box(spacing=2, hexpand=True)
+                txt.append(lbl(name, "row-title", wrap=True, chars=46))
+                txt.append(lbl(built, "row-detail", wrap=True, chars=54))
+                r.append(txt)
+                pill = lbl(tool, "pill")
+                pill.set_valign(Gtk.Align.CENTER)
+                r.append(pill)
+                inner.append(sep_row(r))
+            exp.set_child(inner)
+            g.append(exp)
+            self.pro_box.append(g)
+
+        e = box()
+        e.add_css_class("card")
+        e.append(card_head(_("Wozu das alles gut ist")))
+        e.append(self._pro_note(
+            _("Windows-Spiele laufen unter Linux nicht direkt. Proton "
+              "übersetzt sie. Weil jede Fassung andere Bibliotheken braucht, "
+              "läuft sie selbst in einem abgeschlossenen Container, den Steam "
+              "getrennt herunterlädt. Fehlt der Container oder ist die Fassung "
+              "unvollständig entpackt, startet das Spiel nicht, und Steam sagt "
+              "dazu nichts weiter als dass es gleich wieder beendet wurde. "
+              "Diese Seite sieht in den Dateien nach, woran es liegt.")))
+        self.pro_box.append(e)
+        return False
+
+    def _pro_note(self, text, small=False):
+        t = lbl(text, "row-detail" if small else "lede", wrap=True, chars=88)
+        t.set_margin_start(18)
+        t.set_margin_end(18)
+        t.set_margin_bottom(4 if small else 16)
+        t.set_margin_top(2)
+        return t
 
     # Autostart
 
@@ -8461,9 +11076,20 @@ class App(Gtk.Application):
                 shown = e.get("items", [])[:4]
                 more = max(0, e.get("n", 0) - len(shown))
                 txt = _("{src} aktualisiert · {names}").format(
-                    src=UPDATE_SOURCES.get(e.get("src", ""), e.get("src", "")),
+                    src=source_label(e.get("src", ""), e.get("n", 0)),
                     names=", ".join(shown) + (f" +{more}" if more else ""))
                 pill = lbl(str(e.get("n", 0)), "pill")
+            elif kind == "update-fail":
+                # Ohne eigenen Zweig fiel dieser Eintrag in den Benchmark-Fall
+                # und stand als Messung mit lauter Nullen im Verlauf.
+                items = e.get("items", {})
+                names = list(items) if isinstance(items, dict) else []
+                txt = _("{src}: {n} Eintrag/Einträge nicht aktualisiert · {names}"
+                        ).format(src=source_label(e.get("src", "")),
+                                 n=len(names),
+                                 names=", ".join(n.split("/")[0] for n in names[:4]))
+                pill = lbl(str(len(names)), "pill")
+                pill.add_css_class("crit")
             elif kind == "run":
                 # Ein Pruefstandslauf hat keine cpun/ram/disk. Ohne eigenen Zweig
                 # stand hier eine Zeile Benchmark mit lauter Nullen.
@@ -9121,7 +11747,43 @@ def selftest():
         "Remv libfoo [1.0]\nInst bar [1] (2 x [amd64])\nRemv libbaz [2.0]\n") \
         == ["libbaz", "libfoo"]
     assert parse_apt_removals("Inst bar [1] (2 x [amd64])\n") == []
+    # Was apt wegen der schrittweisen Ausrollung zurueckhaelt, steht in keiner
+    # Inst-Zeile. Ohne diesen Block meldet die Seite "alles aktuell", waehrend
+    # `apt list --upgradable` neun Zeilen zeigt.
+    phased = ("Calculating upgrade...\n"
+              "The following upgrades have been deferred due to phasing:\n"
+              "  krb5-locales libgssapi-krb5-2 libgssapi-krb5-2:i386\n"
+              "  libkrb5-3\n"
+              "0 upgraded, 0 newly installed, 0 to remove and 4 not upgraded.\n")
+    assert parse_apt_phased(phased) == ["krb5-locales", "libgssapi-krb5-2",
+                                        "libgssapi-krb5-2:i386", "libkrb5-3"]
+    # Der Block endet an der ersten Zeile ohne Einzug, nicht am Dateiende
+    assert parse_apt_phased("Inst bar [1] (2 x [amd64])\n") == []
+    # "apt-get endete mit Code 100" sagt einem Laien nichts, und der haeufigste
+    # Grund ist im Alltag immer derselbe: die Paketverwaltung ist belegt.
+    belegt = tool_error("apt-get", 100,
+                        "E: Could not get lock /var/lib/dpkg/lock-frontend")
+    assert belegt == _(TOOL_ERRORS[0][1]) and "100" not in belegt
+    assert tool_error("apt-get", 100, "W: GPG error: NO_PUBKEY ABC") \
+        == _(TOOL_ERRORS[1][1])
+    assert tool_error("apt-get", 100, "E: Failed to fetch https://x") \
+        == _(TOOL_ERRORS[2][1])
+    assert tool_error("apt-get", 100, "E: No space left on device") \
+        == _(TOOL_ERRORS[4][1])
+    # Was nicht woertlich bekannt ist, bleibt beim Exitcode. Eine erfundene
+    # Ursache waere schlimmer als eine nackte Zahl.
+    unbekannt = tool_error("apt-get", 100, "E: irgendwas anderes")
+    assert "100" in unbekannt and "apt-get" in unbekannt
+    assert "100" in tool_error("apt-get", 100, "")
+    # Und die Grossschreibung darf keine Rolle spielen, apt mischt sie
+    assert tool_error("apt-get", 100, "E: COULD NOT GET LOCK") == belegt
     assert fmt_lists_age(None) == "" and fmt_lists_age(60)
+    # Ungleich heisst nicht neuer. Eine Quelle mit einer aelteren Fassung darf
+    # kein Update anbieten, das in Wahrheit ein Rueckschritt ist.
+    assert deb_newer("1.10", "1.9") and not deb_newer("1.9", "1.10")
+    assert not deb_newer("2.0~rc1", "2.0") and deb_newer("2.0", "2.0~rc1")
+    assert not deb_newer("0.3", "0.3") and not deb_newer("", "0.3")
+    assert not deb_newer("0.4", "(none)")
     assert "2" in fmt_lists_age(2 * 86400) and "5" in fmt_lists_age(5 * 3600)
 
     # Ein Update zwischen zwei Messungen: die Aussage braucht beide Seiten,
@@ -9306,6 +11968,82 @@ def selftest():
     assert update_cmd("apt", ["a"])[:3] == ["pkexec", "/usr/bin/env",
                                             "DEBIAN_FRONTEND=noninteractive"]
     assert update_cmd("snap", ["a"])[-3:] == ["refresh", "--", "a"]
+    # Gescheiterte Flatpaks: der Grund kommt uebersetzt, der Rahmen nicht
+    assert parse_flatpak_fails(
+        "Updating…\n"
+        "Error: Failed to update com.vysp3r.ProtonPlus: com.vysp3r.ProtonPlus"
+        " benötigt eine neuere Flatpak-Version\n"
+        "Error: Failed to update app/com.foo.Bar/x86_64/stable: Kein Platz\n") == {
+            "com.vysp3r.ProtonPlus": ("com.vysp3r.ProtonPlus benötigt eine "
+                                      "neuere Flatpak-Version", "too_old"),
+            "com.foo.Bar": ("Kein Platz", "")}
+    assert parse_flatpak_fails("nichts davon\n") == {}
+    # Die Liste nennt Refs, der Fehler nur die Kennung
+    assert update_failures(
+        "flatpak", ["com.vysp3r.ProtonPlus/x86_64/stable", "org.fd.GL/x86_64/24.08"],
+        "Error: Failed to update com.vysp3r.ProtonPlus: needs a later "
+        "flatpak version\n") == (
+            {"com.vysp3r.ProtonPlus/x86_64/stable": "needs a later flatpak version",
+             "org.fd.GL/x86_64/24.08": ""}, "too_old")
+    # Unbekannter Grund und andere Quellen bleiben beim blossen Namen
+    assert update_failures("apt", ["firefox"], "E: irgendwas") == ({"firefox": ""}, "")
+    # Listennamen von apt. Alle drei Formen kommen auf einem normalen Ubuntu
+    # nebeneinander vor, und jede falsch geratene meldet eine heile Quelle tot.
+    assert apt_list_name("http://de.archive.ubuntu.com/ubuntu/", "noble") \
+        == "de.archive.ubuntu.com_ubuntu_dists_noble"
+    assert apt_list_name("https://downloads.naps2.com", "./") \
+        == "downloads.naps2.com_."
+    # apt kodiert den Unterstrich, sonst zeigt node_24.x auf eine fremde Datei
+    assert apt_list_name("https://deb.nodesource.com/node_24.x", "nodistro") \
+        == "deb.nodesource.com_node%5f24.x_dists_nodistro"
+    # Zugangsdaten fallen weg wie bei apt, sonst gilt eine private Quelle als tot
+    assert apt_list_name("https://user:pw@repo.example/ubuntu", "noble") \
+        == "repo.example_ubuntu_dists_noble"
+    # Eine Startzeile durch eine Shell laesst sich nicht beurteilen. Sie darf
+    # deshalb nie auf der Loeschliste stehen.
+    with tempfile.TemporaryDirectory() as apps:
+        with open(os.path.join(apps, "shell.desktop"), "w") as fh:
+            fh.write('[Desktop Entry]\nType=Application\nName=Shell\n'
+                     'Exec=sh -c "cd /gibt/es/nicht && ./spiel"\n')
+        assert dead_launchers(apps, installed={"620"}) == []
+    # Steam heisst als Flatpak anders. Ohne den Namen fand der Fix nichts,
+    # meldete aber "steht schon in allen Startdateien".
+    assert "com.valvesoftware.Steam.desktop" in STEAM_DESKTOP_NAMES
+    # Was drueben schon liegt, darf nicht still liegenbleiben: der Lauf muss
+    # scheitern, sonst meldet er Erfolg und der Befund steht danach wieder da.
+    with tempfile.TemporaryDirectory() as td:
+        quelle, ziel = os.path.join(td, "q"), os.path.join(td, "z")
+        os.makedirs(os.path.join(quelle, "GE-X"))
+        os.makedirs(os.path.join(ziel, "GE-X"))
+        assert subprocess.run(
+            move_tools_argv(ziel, [os.path.join(quelle, "GE-X")]),
+            capture_output=True).returncode == 1
+        assert os.path.isdir(os.path.join(quelle, "GE-X"))
+        os.makedirs(os.path.join(quelle, "GE-Y"))
+        assert subprocess.run(
+            move_tools_argv(ziel, [os.path.join(quelle, "GE-Y")]),
+            capture_output=True).returncode == 0
+        assert os.path.isdir(os.path.join(ziel, "GE-Y"))
+
+    # Eine Quelle fuer die Vorgaengerfassung bleibt beim Upgrade stehen und
+    # liefert nichts mehr. Der Grund muss dabeistehen, sonst raet der Nutzer.
+    alt = package_sources(current="noble", series={"jammy", "noble"},
+                          sources=[("lutris-team-ubuntu-lutris-jammy",
+                                    "https://ppa.launchpadcontent.net/a/b/ubuntu",
+                                    "jammy")])[0]
+    assert alt[1] == "lutris" and not alt[4] and "jammy" in alt[3]
+    # Ubuntus eigene Quellen heissen im Klartext nach dem, was sie liefern
+    assert source_title("ubuntu", "http://security.ubuntu.com/ubuntu/",
+                        "noble-security") == "Ubuntu · " + _("Sicherheitsupdates")
+    assert source_title("vscode", "https://packages.microsoft.com/repos/code",
+                        "stable") == "vscode"
+    assert source_origin("https://packages.microsoft.com/repos/code") \
+        == "packages.microsoft.com"
+    # Fortschrittszeilen gehoeren in den Balken, nicht ins Fenster
+    assert PROGRESS_PCT.match("93.02% complete (00:00:01 remaining)").group(1) \
+        == "93.02"
+    assert PROGRESS_PCT.match("  7,5 % fertig").group(1) == "7,5"
+    assert not PROGRESS_PCT.match("Error: Failed to update x: 100% kaputt")
     assert cmd_steps(["a", "b"]) == [["a", "b"]]
     assert cmd_steps([["a"], ["b", "c"]]) == [["a"], ["b", "c"]]
     # Fortschritt kommt aus den Ausgabezeilen, nicht aus geraten Prozenten
@@ -9325,6 +12063,76 @@ def selftest():
     assert f.cmd is None and f.argv is None, (f.cmd, f.argv)
     root = {"mounts": [{"target": "/", "total": 100, "used": 95, "free": 5,
                         "src": "/dev/sda2", "fs": "ext4"}]}
+    # Der Befehl laeuft mit -y. Dann muss die Liste in der Rueckfrage stehen,
+    # nicht erst im Ablauf: vorher sagte der Text zu, sie stehe "vor dem
+    # Loeschen im Protokoll", und das stimmte nicht.
+    assert "libfoo1" in autoremove_warning(["libfoo1", "libbar2"])
+    assert "2" in autoremove_warning(["libfoo1", "libbar2"])
+    assert autoremove_warning([]) and "libfoo" not in autoremove_warning([])
+    # --reinstall spielt die mitgelieferten Konfigurationsdateien zurueck. Wer
+    # eine davon angepasst hat, verliert die Anpassung, und danach zu fragen
+    # ist zu spaet. dpkg fuehrt zu jeder ihre Pruefsumme, daran ist es zu sehen.
+    assert parse_conffiles(
+        " /etc/crontab abc123\n"
+        " /etc/alt.conf def456 obsolete\n"      # veraltet, wird nie angefasst
+        " kaputte Zeile\n"
+        " /etc/x.conf 999\n") == [("/etc/crontab", "abc123"),
+                                  ("/etc/x.conf", "999")]
+    assert parse_conffiles("") == []
+    with tempfile.NamedTemporaryFile("w", delete=False) as fh:
+        fh.write("hallo\n")
+        conf = fh.name
+    try:
+        echt = file_md5(conf)
+        assert len(echt) == 32
+        # Gleiche Pruefsumme heisst unveraendert, jede andere heisst angefasst
+        assert file_md5(conf) == echt
+        assert file_md5("/gibt/es/nicht") == ""
+    finally:
+        os.unlink(conf)
+
+    # journalctl kennt keinen Trockenlauf, also wird er nachgerechnet:
+    # journald raeumt die archivierten Dateien von alt nach neu weg, bis die
+    # Summe unter der Grenze liegt, und die aktive faellt es nie an.
+    # (Zeit, Groesse, Pfad, archiviert)
+    jf = [(100.0, 300, "/var/log/journal/x/system@a.journal", True),
+          (200.0, 300, "/var/log/journal/x/system@b.journal", True),
+          (300.0, 300, "/var/log/journal/x/system@c.journal", True),
+          (400.0, 300, "/var/log/journal/x/system.journal", False)]
+    weg, frei, grenze = journal_vacuum_preview(limit=700, dateien=jf)
+    assert [p for _t, _s, p in weg] == ["/var/log/journal/x/system@a.journal",
+                                        "/var/log/journal/x/system@b.journal"], weg
+    assert frei == 600 and grenze == 200.0, (frei, grenze)
+    # Passt schon alles unter die Grenze, faellt nichts weg
+    assert journal_vacuum_preview(limit=5000, dateien=jf)[0] == []
+    # Die aktive Datei bleibt stehen, auch wenn es danach zu gross bleibt
+    weg2, _f, _g = journal_vacuum_preview(limit=100, dateien=jf)
+    assert all("@" in os.path.basename(p) for _t, _s, p in weg2), weg2
+    assert len(weg2) == 3
+
+    # Zweistufige Bestaetigung: der Befehl laeuft mit -y und fragt danach
+    # nichts mehr, also muss vorher dastehen, was er wegnimmt.
+    det, btn = confirm_removal(["libfoo1", "libbar2"])
+    assert "libfoo1" in det and "libbar2" in det
+    # Gegen den vollstaendigen _()-Aufruf, nie gegen deutschen Text: unter
+    # LANGUAGE=en steht dort etwas anderes und der Test faellt grundlos.
+    assert btn == _("Ja, diese {n} {was} entfernen").format(
+        n=2, was=_("Pakete")), btn
+    # Einzahl, sonst steht dort "diese 1 Pakete"
+    assert confirm_removal(["x"], _("Snap-Revisionen"), _("Snap-Revision"))[1] \
+        == _("Ja, dieses {n} {was} entfernen").format(
+            n=1, was=_("Snap-Revision"))
+    # Ohne Fund kein Loeschknopf, sondern ein neutraler
+    leer_det, leer_btn = confirm_removal([])
+    assert leer_btn == _("Trotzdem ausführen") and leer_det != det
+    # Der Trockenlauf entsteht aus demselben Befehl, nur ohne -y und mit -s
+    sim = apt_would_remove(["pkexec", "/usr/bin/env", "X=1", "apt-get",
+                            "install", "-f", "-y"])
+    assert isinstance(sim, list)
+    assert apt_would_remove(["pkexec", "snap", "remove", "x"]) == []
+    # Und der Befund traegt seine Vorschau, sonst laeuft er ungefragt durch
+    f = check_filesystems(root)
+    assert f and f.preview and callable(f.preview[0]), f
     assert "autoremove" in check_filesystems(root).cmd
     # Release-Upgrade nur melden, wenn do-release-upgrade wirklich eins nennt
     assert parse_release_upgrade("New release '26.04.1 LTS' available.\n"
@@ -9391,9 +12199,88 @@ def selftest():
     assert parse_distro_info("") == {} and parse_distro_info("version\n") == {}
     # 23. April plus rund dreieinhalb Monate landet im August, ohne dass der
     # Monat irgendwo im Quelltext steht
-    assert point_release_month("2026-04-23") == _(MONTHS[7])
-    assert point_release_month("2024-04-25") == _(MONTHS[7])
-    assert point_release_month("") == "" and point_release_month(None) == ""
+    # Ein gescheiterter Abruf darf nicht als Ergebnis gemerkt werden. Sonst
+    # meldet ein Rechner, der einmal ohne Netz war, danach 24 Stunden lang
+    # nichts, auch mit Netz. Derselbe Fall wie in sources_cache_write.
+    alt_state, alt_fetch, alt_sh = STATE_FILE, fetch_releases, sh
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            globals()["STATE_FILE"] = os.path.join(td, "state.json")
+            globals()["sh"] = lambda a, timeout=15: (
+                "" if a and a[0] == "do-release-upgrade" else alt_sh(a, timeout))
+            globals()["fetch_releases"] = lambda *a, **k: []
+            assert check_release_upgrade({}) is None
+            assert not state_read().get("release_checked"), state_read()
+            # Mit Antwort wird gemerkt, sonst liefe der Abruf bei jedem Scan
+            globals()["fetch_releases"] = lambda *a, **k: [
+                ("99.04 LTS", "zzz", True)]
+            f = check_release_upgrade({})
+            assert f and state_read().get("release_checked"), (f, state_read())
+        finally:
+            globals()["STATE_FILE"] = alt_state
+            globals()["fetch_releases"] = alt_fetch
+            globals()["sh"] = alt_sh
+
+    # Was Ubuntu anbietet, steht in seiner eigenen Einstellung und wurde
+    # bisher aus dem Versionsstring geraten. Wer 'never' gesetzt hat, will
+    # keinen Wechsel vorgeschlagen bekommen.
+    with tempfile.TemporaryDirectory() as td:
+        def prompt(inhalt):
+            p = os.path.join(td, "release-upgrades")
+            with open(p, "w") as fh:
+                fh.write(inhalt)
+            return release_prompt(p)
+
+        assert prompt("Prompt=never") == "never"
+        assert prompt("Prompt=normal") == "normal"
+        assert prompt("  prompt = LTS ") == "lts"
+        # Auskommentiertes zaehlt nicht, sonst gewinnt der Beispieltext im Kopf
+        # der Datei ueber die echte Einstellung
+        assert prompt("# Prompt=never\nPrompt=lts") == "lts"
+        # Ohne Angabe und bei Unsinn gilt Ubuntus Vorgabe
+        assert prompt("") == "lts" and prompt("Prompt=quatsch") == "lts"
+    assert release_prompt("/gibt/es/nicht") == "lts"
+
+    # In die version-Datei eines Prefix schreibt Proton die Buildnummer, nicht
+    # den Namen. Wer die gegen Namen haelt, behauptet, eine installierte
+    # Fassung gaebe es nicht mehr.
+    with tempfile.TemporaryDirectory() as td:
+        def fassung(name, build):
+            p = os.path.join(td, name)
+            os.makedirs(p, exist_ok=True)
+            with open(os.path.join(p, "proton"), "w") as fh:
+                fh.write(f'CURRENT_PREFIX_VERSION="{build}"\n')
+            return (name, p)
+
+        werkzeuge = [fassung("Proton - Experimental", "11.0-100"),
+                     fassung("Proton 11.0", "11.0-100"),
+                     fassung("GE-Proton11-5", "GE-Proton11-5")]
+        karte = builds_to_tools(werkzeuge)
+        assert karte["11.0-100"] == "Proton 11.0", karte
+        assert karte["GE-Proton11-5"] == "GE-Proton11-5"
+        # Der Rat haengt daran, ob es die Fassung noch gibt
+        # Gegen die vollstaendigen _()-Aufrufe vergleichen, nie gegen deutsche
+        # Woerter: unter LANGUAGE=en steht dort etwas anderes.
+        zurueck_da = _(" Am einfachsten stellst du den Titel in Steam wieder "
+                       "auf {name}, die ist noch da.").format(name="Proton 11.0")
+        da = prefix_advice(True, "proton_10", "11.0-100", "/p", karte)
+        assert zurueck_da in da, da
+        weg = prefix_advice(True, "proton_10", "GE-Proton11-1", "/p", karte)
+        assert zurueck_da not in weg and "GE-Proton11-1" in weg, weg
+        # Vorwaerts ist kein Problem und liest sich auch nicht so
+        vor = prefix_advice(False, "proton_11", "10.1000-105", "/p", karte)
+        assert vor != da and vor != weg and zurueck_da not in vor
+
+    juni = datetime.date(2026, 6, 1)
+    assert point_release_month("2026-04-23", today=juni) == _(MONTHS[7])
+    assert point_release_month("2024-04-25", today=datetime.date(2024, 5, 1)) \
+        == _(MONTHS[7])
+    # Im geschaetzten Monat selbst steht er noch da, danach nicht mehr: ein
+    # Monat in der Vergangenheit klingt, als haette man etwas verpasst
+    assert point_release_month("2026-04-23", today=datetime.date(2026, 8, 31))
+    assert point_release_month("2026-04-23", today=datetime.date(2026, 9, 1)) == ""
+    assert point_release_month("", today=juni) == "" \
+        and point_release_month(None, today=juni) == ""
     assert release_facts("26.04", path="/gibt/es/nicht") == {}
 
     # Eine von Hand verbogene config.json darf keinen Timer mit Text oder einem
@@ -9465,6 +12352,20 @@ def selftest():
             ("https://b.example/ubuntu", "noble-updates")]
     assert parse_apt_source("Types: deb\nURIs: https://x/y\nSuites: noble\n"
                             "# Signed-By: /x.gpg\n") == [("https://x/y", "noble")]
+    # Eine abgeschaltete Quelle liefert nichts und fehlt deshalb auch nicht.
+    # Ohne das meldete die Seite sie als "antwortet nicht", also als Schaden.
+    assert parse_apt_source(
+        "Types: deb\nURIs: https://an.example/r\nSuites: noble\n"
+        "\n"
+        "Enabled: no\nTypes: deb\nURIs: https://aus.example/r\nSuites: noble\n") \
+        == [("https://an.example/r", "noble")]
+    # Absatzweise auswerten, sonst paart ein Absatz ohne Suites die naechsten
+    # Suites an die falsche Adresse
+    assert parse_apt_source(
+        "Types: deb\nURIs: https://ohne.example/r\n"
+        "\n"
+        "Types: deb\nURIs: https://mit.example/r\nSuites: noble\n") \
+        == [("https://mit.example/r", "noble")]
     assert parse_apt_source("") == []
     # Ubuntus eigene Quellen samt Landes-Mirror fallen raus, der Rest bleibt
     assert ubuntu_source("http://de.archive.ubuntu.com/ubuntu")
@@ -9497,6 +12398,9 @@ def selftest():
     assert ppa_program("tomtomtom-ubuntu-woeusb-noble") == "woeusb"
     assert ppa_program("heyarje-ubuntu-makemkv-beta-noble") == "makemkv-beta"
     assert ppa_program("tailscale") == "tailscale"
+    # Heisst das PPA nur 'stable', steht der Programmname vorn
+    assert ppa_program("flatpak-ubuntu-stable-noble") == "flatpak"
+    assert ppa_program("obsproject-ubuntu-obs-studio-noble") == "obs-studio"
     # Basislinie aus den eigenen Laeufen, ein Ausreisser darf sie nicht kippen
     runs = [{"disk": 3000}, {"disk": 3100}, {"disk": 2900}, {"disk": 3050},
             {"disk": 1800}]
@@ -9613,9 +12517,13 @@ def selftest():
     stalled = [{"t": 0.0, "psi_cpu": 1_000_000, "wait": 0, "majflt": 100},
                {"t": 10.0, "psi_cpu": 3_000_000, "wait": 5_000_000_000,
                 "majflt": 200}]
-    sh = stall_shares(stalled)
-    assert sh["psi_cpu_share"] == 20.0 and sh["wait_share"] == 50.0, sh
-    assert sh["majflt"] == 100 and sh["majflt_rate"] == 10.0, sh
+    # Nicht "sh": der Name verdeckt sonst die Modulfunktion sh() im ganzen
+    # Funktionskoerper, und der naechste, der hier ein sh(...) schreibt, bekommt
+    # einen UnboundLocalError weit oben statt einer Fehlermeldung an der Stelle.
+    anteile = stall_shares(stalled)
+    assert anteile["psi_cpu_share"] == 20.0 \
+        and anteile["wait_share"] == 50.0, anteile
+    assert anteile["majflt"] == 100 and anteile["majflt_rate"] == 10.0, anteile
     # Das Spiel wird erst nach ein paar Takten erkannt, seine Zaehler fehlen
     # am Anfang. Gerechnet wird dann ueber die Punkte, die sie tragen.
     late = [{"t": 0.0}, {"t": 10.0, "wait": 0}, {"t": 20.0, "wait": 1_000_000_000}]
@@ -9706,6 +12614,8 @@ def selftest():
     assert check_missing_driver({"devices": [dict(dev, modules=[])]}).sev == "crit"
     # uniq -c liefert '   42 foo', Zeilen ohne Zahl gehoeren nicht dazu.
     assert parse_journal_top("   42 foo\n  7 bar\nkaputt\n") == [(42, "foo"), (7, "bar")]
+    # Meldungen haben Leerzeichen, nur die Zahl davor wird abgetrennt
+    assert parse_journal_top("  9 watchdog: mount ok\n") == [(9, "watchdog: mount ok")]
     # Der HWE-Kandidat muss wirklich neuer sein als der laufende Kernel.
     assert kernel_version_tuple("7.0.0-28-generic") == (7, 0, 0, 28)
     assert kernel_version_tuple("7.0.0-28.28~24.04.1") == (7, 0, 0, 28)
@@ -9719,10 +12629,293 @@ def selftest():
     # Fehlt du, kommt gar nichts zurueck. Das ist derselbe leere Fall wie ein
     # unlesbarer Pfad und trifft jede Bauumgebung ohne coreutils.
     assert not got or (list(got) == [here] and got[here] > 0), got
+    # Kein lokaler Name im Selftest darf eine Modulfunktion verdecken. Ein
+    # 'sh = ...' machte sh() im ganzen Koerper unerreichbar, und der Fehler
+    # erscheint dann weit oben statt an der Stelle, die ihn verursacht.
+    # Mit dem eingebauten open, nicht mit read(): der Waechter darf von keiner
+    # Modulfunktion abhaengen, sonst faellt er ueber genau das, was er sucht.
+    with open(__file__, encoding="utf-8") as fh:
+        quelle = fh.read()
+    koerper = quelle[quelle.index("def selftest():"):]
+    koerper = koerper[:koerper.index("\ndef ", 10)]
+    verdeckt = {m for m in re.findall(r"^    (\w+) *=[^=]", koerper, re.M)
+                if callable(globals().get(m))}
+    assert not verdeckt, sorted(verdeckt)
+
     # Jedes Sprungziel eines Befunds muss in der Navigation stehen, sonst laeuft
     # der Knopf beim Klick in einen KeyError.
     targets = set(re.findall(r'"_goto_page",\s*\n?\s*"([^"]+)"', read(__file__) or ""))
     assert not targets - set(NAV), targets - set(NAV)
+    # Und jede Schaltfläche eines Befunds muss eine Methode der App treffen,
+    # sonst faellt der Klick in einen AttributeError statt etwas zu tun.
+    methods = set(re.findall(r'_\("[^"]*"\),\s*\n?\s*"(_[a-z_]+)"',
+                             read(__file__) or ""))
+    assert methods and all(hasattr(App, m) for m in methods), \
+        sorted(m for m in methods if not hasattr(App, m))
+
+    # Tote Menüeinträge: erkannt wird nur, was wirklich ins Leere zeigt, und
+    # ausgeblendete Einträge bleiben liegen. Hidden blendet einen Systemeintrag
+    # aus, dessen Loeschen holte ihn zurueck.
+    with tempfile.TemporaryDirectory() as apps:
+        def desk(fn, body):
+            with open(os.path.join(apps, fn), "w") as fh:
+                fh.write("[Desktop Entry]\nType=Application\n" + body)
+
+        desk("lebt.desktop", "Name=Lebt\nExec=/bin/sh\n")
+        desk("tot.desktop", "Name=Tot\nExec=/gibt/es/nicht/prog %U\n")
+        desk("kein-pfad.desktop", "Name=Fehlt\nExec=gibtesnichtprogramm12345\n")
+        desk("versteckt.desktop", "Name=V\nExec=/gibt/es/nicht\nHidden=true\n")
+        desk("ohne.desktop", "Name=O\nExec=/gibt/es/nicht\nNoDisplay=true\n")
+        desk("steam-da.desktop", "Name=Da\nExec=steam steam://rungameid/620\n")
+        desk("steam-weg.desktop", "Name=Weg\nExec=steam steam://rungameid/999\n")
+        desk("flat.desktop", "Name=F\nExec=flatpak run --branch=x org.a.B\n")
+        desk("tryexec.desktop", "Name=T\nTryExec=/gibt/es/nicht\nExec=/bin/sh\n")
+        # Selbst hinzugefuegte Verknuepfungen tragen Nummern jenseits von 2^31
+        # und haben nie ein Manifest. Ohne die Grenze boete die Seite an, einen
+        # funktionierenden Eintrag zu loeschen.
+        desk("steam-eigen.desktop",
+             "Name=Eigen\nExec=steam steam://rungameid/12594059520314\n")
+        found = {n for n, _p, _w in dead_launchers(apps, installed={"620"})}
+        assert found == {"Tot", "Fehlt", "Weg", "T"}, found
+        # Ohne eine einzige gefundene Installation ist die Bibliothek nicht
+        # lesbar. Dann sagt das Fehlen eines Titels nichts.
+        assert "Weg" not in {n for n, _p, _w in dead_launchers(apps, installed=set())}
+        # Geloescht wird nur in diesem Verzeichnis und nur .desktop
+        fremd = os.path.join(apps, "unter", "tief.desktop")
+        os.makedirs(os.path.dirname(fremd))
+        open(fremd, "w").close()
+        keep = os.path.join(apps, "lebt.desktop")
+        assert remove_launchers([fremd, keep + ".bak"], apps) == []
+        assert os.path.exists(fremd) and os.path.exists(keep)
+        tot = os.path.join(apps, "tot.desktop")
+        assert remove_launchers([tot], apps) == [tot] and not os.path.exists(tot)
+
+    # Der Werbeanhang faellt weg, das Modell bleibt stehen
+    assert short_cpu("AMD Ryzen 7 5800X 8-Core Processor") == "AMD Ryzen 7 5800X"
+    assert short_cpu("Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz") \
+        == "Intel Core i7-9750H"
+    assert short_cpu("Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz") \
+        == "Intel Xeon E5-2680 v4"
+    # Bleibt nach dem Kuerzen nichts uebrig, steht lieber der Rohtext da
+    assert short_cpu("Processor") == "Processor" and short_cpu("") == "CPU"
+    assert short_cpu("ARM Cortex-A72") == "ARM Cortex-A72"
+
+    # Die Cache-Grenze schreibt nur ins eigene Home und traegt den Wert als
+    # Argument, nicht im Skripttext
+    argv = cache_limit_argv("NVIDIA", "/tmp/envd")
+    assert argv[0] == "sh" and argv[3] == "sh" and "10737418240" not in argv[2]
+    assert argv[4] == "/tmp/envd/50-dynotiq-gl_shader_disk_cache_size.conf"
+    assert cache_limit_argv("Steam") is None
+    assert env_size(CACHE_ENV["Mesa"][1]) == 10 * 2**30
+    # Der eingetragene Wert muss auch wieder gefunden werden, sonst steht nach
+    # dem Setzen derselbe Befund da und niemand weiß, ob es geklappt hat.
+    with tempfile.TemporaryDirectory() as envd:
+        assert env_d_value("__GL_SHADER_DISK_CACHE_SIZE", envd) == ""
+        assert subprocess.run(cache_limit_argv("NVIDIA", envd)).returncode == 0
+        assert env_size(env_d_value("__GL_SHADER_DISK_CACHE_SIZE",
+                                    envd)) == 10 * 2**30
+        # Zweimal setzen darf die Datei nicht verdoppeln
+        subprocess.run(cache_limit_argv("NVIDIA", envd))
+        assert len([l for l in read(env_conf_path(
+            "__GL_SHADER_DISK_CACHE_SIZE", envd)).splitlines() if l.strip()]) == 1
+        # systemd liest in Namensreihenfolge, die letzte Zuweisung gewinnt
+        with open(os.path.join(envd, "99-spaeter.conf"), "w") as fh:
+            fh.write('__GL_SHADER_DISK_CACHE_SIZE="2G"\n')
+        assert env_size(env_d_value("__GL_SHADER_DISK_CACHE_SIZE",
+                                    envd)) == 2 * 2**30
+
+    # Proton: die geforderte Laufzeitumgebung steht in der toolmanifest.vdf,
+    # und ohne sie startet mit dieser Fassung kein Spiel
+    with tempfile.TemporaryDirectory() as td:
+        tool = os.path.join(td, "GE-Proton99-9")
+        os.makedirs(tool)
+        with open(os.path.join(tool, "toolmanifest.vdf"), "w") as fh:
+            fh.write('"manifest"\n{\n  "require_tool_appid"  "1628350"\n}\n')
+        assert tool_runtime(tool) == "1628350"
+        assert tool_runtime(td) == ""
+        assert runtime_problems([("GE-Proton99-9", tool)], {"620"}) == [
+            ("GE-Proton99-9", tool, "1628350", "missing")]
+        # Ohne eine einzige Installation sagt das Fehlen nichts
+        assert runtime_problems([("GE-Proton99-9", tool)], set()) == []
+        # Unbrauchbar ist: kein vdf, keine Datei proton, oder ein toter Link
+        assert [n for n, _p, _w in broken_compat_tools([td])] == ["GE-Proton99-9"]
+        with open(os.path.join(tool, "compatibilitytool.vdf"), "w") as fh:
+            fh.write('"compatibilitytools"\n{\n"compat_tools"\n{\n'
+                     '"GE-Proton99-9" // Internal name\n{\n}\n}\n}\n')
+        assert [w for _n, _p, w in broken_compat_tools([td])] and "proton" in \
+            broken_compat_tools([td])[0][2]
+        open(os.path.join(tool, "proton"), "w").close()
+        assert broken_compat_tools([td]) == []
+        os.symlink(os.path.join(td, "gibt-es-nicht"), os.path.join(td, "GE-Tot"))
+        assert [n for n, _p, _w in broken_compat_tools([td])] == ["GE-Tot"]
+    # Ein appmanifest beweist nur, dass Steam die Umgebung einmal geholt hat.
+    # Ob sie sich laden laesst, entscheidet ihre toolmanifest.vdf. Genau daran
+    # ist der Fall vom 15.08.2026 vorbeigelaufen: Runtime 4.0 galt als
+    # installiert, im Ordner fehlte die Datei, und sechs Proton-Fassungen
+    # brachen mit "Kompatibilitaetswerkzeug fehlgeschlagen" ab.
+    log = ('[2026-08-15 17:44:57] Failed to load manifest for tool 4183110!\n'
+           '[2026-08-15 17:45:42] Tool 0 "GE-Proton11-5-x86_64" has a '
+           'dependency on tool 4183110.\n'
+           '[2026-08-15 17:45:42] Tool 4183110 "Steam Linux Runtime 4.0" '
+           'unsupported version 0.\n'
+           '[2026-08-15 17:45:42] Tool 0 "GE-Proton11-5-x86_64" has a '
+           'dependency on tool 4183110: dependent tool cmdline wrap failed\n'
+           '[2026-08-15 17:45:42] ReleaseSession: appID 1363080 session '
+           '70f6c33bad389b96 released, 1 left\n'
+           '[2026-08-15 17:45:43] Tool 0 "Proton-GE Latest" has a dependency '
+           'on tool 4183110: dependent tool cmdline wrap failed\n'
+           '[2026-08-15 17:45:43] ReleaseSession: appID 1363080 session '
+           'ee72eb73f3d0f290 released, 0 left\n')
+    fails = steam_compat_failures(log)
+    assert fails == {
+        ("1363080", "GE-Proton11-5-x86_64", "4183110"): "2026-08-15 17:45:42",
+        ("1363080", "Proton-GE Latest", "4183110"): "2026-08-15 17:45:43"}, fails
+    # Ein erfolgreicher Lauf schreibt die Zeile nicht, dann gibt es nichts
+    assert steam_compat_failures(
+        '[2026-08-15 17:44:57] Tool 0 "GE-Proton11-5-x86_64" has a dependency '
+        'on tool 4183110.\n') == {}
+    # Dieselbe Zeile steht auch nach dem blossen Anmelden eines Werkzeugs. Das
+    # ist kein Startversuch: erst die Sitzungsfreigabe danach macht einen
+    # daraus. Von 22 Zeilen dieses Rechners waren zwei genau das.
+    assert steam_compat_failures(
+        '[2026-08-11 09:56:36] Tool 0 "Proton 11.0" has a dependency on tool '
+        '4183110: dependent tool cmdline wrap failed\n'
+        '[2026-08-11 09:56:36] Registering tool steamlinuxruntime_sniper, '
+        'AppID 1628350\n') == {}
+    assert runtime_repair_argv("4183110") is None or \
+        runtime_repair_argv("4183110")[1] == "steam://validate/4183110"
+    # Die Quelle gehoert in den Schluessel, sonst ist die Schnittmenge immer
+    # leer und der Schalter --only-upgrade bleibt faelschlich stehen.
+    assert needs_fresh("apt", ["linux-image-x"], {("apt", "linux-image-x")})
+    assert not needs_fresh("apt", ["firefox"], {("snap", "firefox")})
+    assert not needs_fresh("apt", ["a"], set())
+    # Nur der Rueckschritt bricht. Vorwaerts baut Proton die Ablage selbst um,
+    # und zwei Fassungen aus verschiedenen Projekten sind gar nicht vergleichbar.
+    assert proton_older("GE-Proton10-34", "GE-Proton11-5")
+    assert not proton_older("GE-Proton11-5", "GE-Proton10-34")
+    assert not proton_older("GE-Proton11-5", "GE-Proton11-5")
+    assert not proton_older("GE-Proton11-5", "UMU-Proton-10.0-4")
+    # Ueber Projektgrenzen zaehlt die Hauptnummer, denn GE-Proton11 setzt auf
+    # Proton 11 auf. Ein Prefix von GE-Proton11-5 unter eingestelltem Proton 10
+    # ist ein Rueckschritt, und genau der kam auf diesem Rechner zweimal vor.
+    assert proton_older("Proton 10.0", "GE-Proton11-5")
+    assert not proton_older("Proton 11.0", "GE-Proton10-34")
+    # Gleiche Hauptnummer gilt als vertraeglich, das ist die vorsichtige
+    # Richtung: im Zweifel lieber nichts melden.
+    assert not proton_older("Proton 11.0", "GE-Proton11-1")
+    assert proton_major("10.1000-105") == 10 and proton_major("11.0-100") == 11
+    assert proton_major("GE-Proton11-5") == 11
+    assert proton_major("UMU-Proton-10.0-4") == 10 and proton_major("") == 0
+    # Ohne Hauptnummer auf der einen Seite wird nichts behauptet
+    assert not proton_older("irgendwas", "GE-Proton11-5")
+    with tempfile.TemporaryDirectory() as td:
+        assert tool_prefix_version(td) == ""
+        with open(os.path.join(td, "proton"), "w") as fh:
+            fh.write('#!/usr/bin/env python3\nCURRENT_PREFIX_VERSION="10.1000-105"\n')
+        assert tool_prefix_version(td) == "10.1000-105"
+        # Und darueber wird die Valve-Fassung vergleichbar: ihr Name sagt
+        # nichts, ihr Startskript schon.
+        assert proton_older("proton_10", "GE-Proton11-1", td)
+        assert not proton_older("proton_10", "9.0-203", td)
+    # Startoptionen: das erste blosse Wort ist der Wrapper, danach zaehlen nur
+    # bekannte Namen. Sonst wird aus dem 3840 hinter -W ein fehlendes Programm.
+    assert launch_wrappers("gamemoderun %command%") == ["gamemoderun"]
+    assert launch_wrappers("gamemoderun mangohud %command%") == \
+        ["gamemoderun", "mangohud"]
+    assert launch_wrappers(
+        "SteamDeck=0 gamescope --hdr-enabled -W 3840 -H 2160 -- %command%") \
+        == ["gamescope"]
+    assert launch_wrappers("-novid -windowed") == []
+    assert launch_wrappers("") == []
+    assert launch_wrappers("/opt/x/wrap %command% -dx11") == ["/opt/x/wrap"]
+    # Steam traegt 'proton_11' ein, auf der Platte heisst es 'Proton 11.0'
+    valve = {"Proton 11.0": "/a/11", "Proton 10.0": "/a/10",
+             "Proton - Experimental": "/a/exp", "Proton Hotfix": "/a/hf",
+             "Proton 9.0 (Beta)": "/a/9"}
+    assert valve_tool_dir("proton_11", valve) == "/a/11"
+    assert valve_tool_dir("proton_9", valve) == "/a/9"
+    assert valve_tool_dir("proton_experimental", valve) == "/a/exp"
+    assert valve_tool_dir("proton_hotfix", valve) == "/a/hf"
+    assert valve_tool_dir("proton_99", valve) == ""
+    assert valve_tool_dir("GE-Proton11-5", valve) == ""
+    # Ein Titel ohne Windows-Programmdatei ist kein Spiel, sondern ein
+    # Hilfspaket von Valve, und gehoert nicht in die Spielliste
+    with tempfile.TemporaryDirectory() as td:
+        assert not game_exe_present(td)
+        os.makedirs(os.path.join(td, "Binaries", "Win64"))
+        open(os.path.join(td, "Binaries", "Win64", "spiel.exe"), "w").close()
+        assert game_exe_present(td)
+        assert not game_exe_present(os.path.join(td, "gibt-es-nicht"))
+    # Fehlt ein Datentraeger, darf nichts als "nicht installiert" gelten.
+    # Sonst bietet die Seite an, zwei Gigabyte neu zu laden, weil eine externe
+    # Platte nicht steckt.
+    assert runtime_state("1628350", {"1628350"}) in ("", "broken")
+    assert runtime_state("9999999", set()) == ""
+    # Zwei Ausfallgruende, zwei Dateien. Der Name des Einstiegspunkts kommt aus
+    # der toolmanifest.vdf und wird nicht geraten: scout heisst dort
+    # scout-on-soldier-entry-point-v2, soldier und sniper _v2-entry-point.
+    with tempfile.TemporaryDirectory() as rt:
+        with open(os.path.join(rt, "toolmanifest.vdf"), "w") as fh:
+            fh.write('"manifest"\n{\n  "commandline" "/_v2-entry-point '
+                     '--verb=%verb% --"\n}\n')
+        assert tool_entry_point(rt) == os.path.join(rt, "_v2-entry-point")
+        # Ohne fuehrenden Schraegstrich koennte es ein Kommando aus dem
+        # Suchpfad sein. Darueber wird nichts behauptet.
+        with open(os.path.join(rt, "toolmanifest.vdf"), "w") as fh:
+            fh.write('"manifest"\n{\n  "commandline" "run --"\n}\n')
+        assert tool_entry_point(rt) == ""
+        with open(os.path.join(rt, "toolmanifest.vdf"), "w") as fh:
+            fh.write('"manifest"\n{\n}\n')
+        assert tool_entry_point(rt) == ""
+    assert tool_entry_point("/gibt/es/nicht") == ""
+    assert runtime_name("1628350").startswith("Steam Linux Runtime 3")
+    assert "4711" in runtime_name("4711")
+    # Verschieben und Installieren tragen die veränderlichen Teile als
+    # Argument, nicht im Skripttext
+    mv = move_tools_argv("/ziel", ["/a/GE-Proton1", "/b/GE-Proton2"])
+    assert mv[:2] == ["sh", "-c"] and mv[3] == "sh" and "GE-Proton1" not in mv[2]
+    assert mv[4] == "/ziel" and mv[5:] == ["/a/GE-Proton1", "/b/GE-Proton2"]
+
+    # Die version-Datei ueberlebt jedes Umbenennen des Ordners. Nur ueber sie
+    # ist "Proton-GE Latest" als GE-Proton11-5 erkennbar.
+    with tempfile.TemporaryDirectory() as td:
+        tool = os.path.join(td, "compatibilitytools.d", "Proton-GE Latest")
+        os.makedirs(tool)
+        with open(os.path.join(tool, "version"), "w") as fh:
+            fh.write("1786437966 GE-Proton11-5\n")
+        assert tool_build(tool) == ("GE-Proton11-5", 1786437966)
+    assert tool_build("/gibt/es/nicht") == ("", 0)
+    assert proton_project("UMU-Proton-10.0-4") == "umu-launcher"
+    assert proton_project("", "GE-Proton11-5") == "GloriousEggroll"
+    assert proton_project("Proton 10.0") == ""
+
+    # Das Loeschen prueft seinen eigenen Pfad noch einmal in der Shell: was
+    # nicht unter compatibilitytools.d liegt, wird nicht angefasst.
+    with tempfile.TemporaryDirectory() as td:
+        heikel = os.path.join(td, "wichtig")
+        os.makedirs(heikel)
+        assert subprocess.run(remove_tool_argv(heikel),
+                              capture_output=True).returncode == 1
+        assert os.path.isdir(heikel)
+        weg = os.path.join(td, "compatibilitytools.d", "GE-Kaputt")
+        os.makedirs(weg)
+        assert subprocess.run(remove_tool_argv(weg),
+                              capture_output=True).returncode == 0
+        assert not os.path.exists(weg)
+        # Bei einer Verknuepfung faellt nur der Link, nie sein Ziel
+        ziel = os.path.join(td, "ziel")
+        os.makedirs(ziel)
+        link = os.path.join(td, "compatibilitytools.d", "GE-Link")
+        os.symlink(ziel, link)
+        assert subprocess.run(remove_tool_argv(link),
+                              capture_output=True).returncode == 0
+        assert not os.path.exists(link) and os.path.isdir(ziel)
+    # Und jede Methode, die ein Knopf ruft, muss es auf der App geben. Ein
+    # Vertipper darin faellt sonst erst beim Klick auf.
+    methods = set(re.findall(r'actions=\[\(_\([^)]*\),\s*\n?\s*"([^"]+)"',
+                             read(__file__) or ""))
+    assert methods and all(hasattr(App, m) for m in methods), \
+        [m for m in methods if not hasattr(App, m)]
     # Steams eigene Vorlage und die Nicht-Steam-Verknuepfungen bleiben aussen
     # vor: die erste gehoert dorthin, die zweiten haben nie ein Manifest.
     assert all(a.isdigit() and 0 < int(a) < 2**31 for a, _p in orphan_prefixes())
@@ -9849,14 +13042,33 @@ def selftest():
     assert progress_name("") is None
     # Leere lspci-Ausgabe darf den Treiber-Scan nicht sprengen
     assert parse_lspci("") == [] and parse_lspci("\n\n") == []
-    # Ausführbare Fixes dürfen nur feste Argumentlisten sein, nie ein Shell-String
+    # Ausführbare Fixes dürfen nur feste Argumentlisten sein. Wo eine Shell
+    # nötig ist, steht ihr Skript wörtlich im Quelltext und alles Veränderliche
+    # geht als Argument dahinter, nie in den Skripttext.
+    def check_argv(step):
+        assert step[0] == "pkexec", step
+        assert all(isinstance(a, str) for a in step), step
+        rest = step
+        if step[1:3] == ["sh", "-c"]:
+            # Skript, $0, dann die Argumente. Im Skript darf kein Name stehen.
+            assert step[4] == "sh" and '"$' in step[3], step
+            rest = step[5:]
+        assert all("&&" not in a and ";" not in a and "$" not in a
+                   for a in rest), step
+
     for chk in (check_journal, check_filesystems, check_gpu_driver):
         f = chk({"gpu": {"vendor": "nvidia", "driver": "1.0"}})
         if f and f.argv:
             for step in cmd_steps(f.argv):
-                assert step[0] == "pkexec", step
-                assert all(isinstance(a, str) and "&&" not in a and ";" not in a
-                           for a in step), step
+                check_argv(step)
+    for step in cmd_steps(pkexec_apt_argv(["nvidia-driver-580"])):
+        check_argv(step)
+    assert "nvidia-driver-580" not in pkexec_apt_argv(["nvidia-driver-580"])[3]
+    assert "--install-recommends" in pkexec_apt_argv(["x"], recommends=True)[3]
+    for step in cmd_steps(snap_remove_argv([("firefox", "1234")])):
+        check_argv(step)
+    for step in cmd_steps(flatpak_ppa_argv()):
+        check_argv(step)
     # Units über einer Minute oder Stunde sind genau die, die man sehen will
     assert parse_blame("11h 26min 16.414s snapd.service\n"
                        "1min 5.432s snapd.seeded.service\n"
@@ -9902,6 +13114,84 @@ def selftest():
     finally:
         globals()["AUTOSTART_DIR"] = real_auto
         shutil.rmtree(tmp_auto, ignore_errors=True)
+
+    # Der Absturz des GPU-Prozesses steht nur in Steams eigenem Log. Die Tage
+    # zaehlen mit, damit ein einzelner schlechter Nachmittag nicht als
+    # Dauerproblem durchgeht. Die Zeile ueber den Neustart danach traegt das
+    # Wort crash und darf trotzdem nicht mitzaehlen.
+    cef = ("[8842:8842:0807/212956.213767:ERROR:gpu_process_host.cc(1002)] "
+           "GPU process exited unexpectedly: exit_code=8704\n"
+           "[8842:8842:0808/100139.514847:ERROR:gpu_process_host.cc(1002)] "
+           "GPU process exited unexpectedly: exit_code=8704\n"
+           "[8842:8842:0808/100149.096840:ERROR:gpu_process_host.cc(1002)] "
+           "GPU process exited unexpectedly: exit_code=8704\n"
+           "[8842:8842:0808/100150.411815:WARNING:gpu_process_host.cc(1024)] "
+           "Reinitialized the GPU process after a crash\n")
+    heute = datetime.date(2026, 8, 15)
+    assert count_cef_gpu_crashes(cef, heute) == (3, 2), \
+        count_cef_gpu_crashes(cef, heute)
+    assert count_cef_gpu_crashes("", heute) == (0, 0)
+    # Das Log waechst ueber Monate. Ohne Fenster stand der Befund noch da, als
+    # der Treiberfehler laengst behoben war.
+    assert count_cef_gpu_crashes(cef, datetime.date(2026, 11, 1)) == (0, 0)
+    # Der Stempel traegt kein Jahr. Ein Tag hinter dem Stichtag gehoert ins
+    # Vorjahr, sonst faellt der Jahreswechsel aus dem Fenster.
+    silvester = ("[1:1:1228/010203.4:ERROR:gpu_process_host.cc(1002)] "
+                 "GPU process exited unexpectedly: exit_code=8704\n")
+    assert count_cef_gpu_crashes(silvester, datetime.date(2027, 1, 5)) == (1, 1)
+
+    with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as f:
+        f.write("erste\nzweite\ndritte\n")
+        tail_path = f.name
+    try:
+        assert read_tail(tail_path) == "erste\nzweite\ndritte\n"
+        # Mitten in einer Zeile angesetzt faengt die Ausgabe erst bei der
+        # naechsten an, sonst zaehlt ein halber Zeitstempel als Treffer.
+        assert read_tail(tail_path, 12) == "dritte\n"
+        assert read_tail("/gibt-es-nicht-12345") == ""
+    finally:
+        os.unlink(tail_path)
+
+    # Das Flag gehoert in jede Exec-Zeile, auch in die der Aktionsgruppen: wer
+    # aus dem Kontextmenue die Bibliothek oeffnet, startet Steam sonst wieder
+    # ohne. Zweimal angewendet darf es trotzdem nur einmal dastehen.
+    dsk = desktop_with_flag("[Desktop Entry]\nExec=/usr/games/steam %U\n"
+                            "Name=Steam\n[Desktop Action Library]\n"
+                            "Exec=/usr/games/steam steam://open/games\n")
+    assert dsk.count(STEAM_CEF_FLAG) == 2, dsk
+    assert f"Exec=/usr/games/steam {STEAM_CEF_FLAG} %U" in dsk, dsk
+    assert desktop_with_flag(dsk) == dsk
+    # Ueber flatpak gestartet stuende das Flag zwischen flatpak und run und
+    # damit an der falschen Stelle. Solche Zeilen bleiben, wie sie sind.
+    flat = "Exec=/usr/bin/flatpak run com.valvesoftware.Steam\n"
+    assert desktop_with_flag(flat) == flat
+
+    # Nach einer Neuinstallation ist der Menueeintrag ein Symlink auf Steams
+    # eigene Vorlage. Wer die beschreibt, verliert die Aenderung beim naechsten
+    # Steam-Update und fasst fremde Dateien an.
+    real_home, real_auto2 = os.environ.get("HOME", ""), AUTOSTART_DIR
+    tmp_home = tempfile.mkdtemp()
+    try:
+        os.environ["HOME"] = tmp_home
+        globals()["AUTOSTART_DIR"] = os.path.join(tmp_home, "autostart")
+        apps = os.path.join(tmp_home, ".local", "share", "applications")
+        os.makedirs(apps)
+        vorlage = os.path.join(tmp_home, "vorlage.desktop")
+        with open(vorlage, "w") as f:
+            f.write("[Desktop Entry]\nExec=/usr/games/steam %U\n")
+        menu = os.path.join(apps, "steam.desktop")
+        os.symlink(vorlage, menu)
+        assert steam_set_cef_flag() == [menu]
+        assert not os.path.islink(menu)
+        assert STEAM_CEF_FLAG in (read(menu) or "")
+        assert STEAM_CEF_FLAG not in (read(vorlage) or ""), read(vorlage)
+        # Steht es schon da, wird nichts mehr geschrieben und der Befund
+        # bleibt aus.
+        assert steam_set_cef_flag() == [] and steam_cef_flag_set()
+    finally:
+        os.environ["HOME"] = real_home
+        globals()["AUTOSTART_DIR"] = real_auto2
+        shutil.rmtree(tmp_home, ignore_errors=True)
 
     # Alte MangoHud-Mitschriften wegraeumen, sonst waechst DATA_DIR um rund
     # 25 MB je Spielstunde
@@ -10037,7 +13327,43 @@ def selftest():
     assert any(p["pid"] == os.getpid() for p in processes())
     assert all(m["total"] > 0 for m in mounts())
     assert bench_ram(0.05) > 0 and bench_cpu(1, 0.05) > 0
-    print("selftest ok")
+    # Kein _() hier: das ist Entwicklerausgabe, kein Text der Oberflaeche, und
+    # gehoert deshalb nicht in den Katalog.
+    print("selftest ok" + (f" (LANGUAGE={os.environ['LANGUAGE']})"
+                           if os.environ.get(SELFTEST_PASS) else ""),
+          flush=True)
+    selftest_other_language()
+
+
+SELFTEST_PASS = "DYNOTIQ_SELFTEST_LANG"
+
+
+def selftest_other_language():
+    """Denselben Lauf noch einmal mit dem anderen Katalog.
+
+    Eine Zusicherung, die gegen deutschen Text vergleicht, faellt nur unter
+    LANGUAGE=en auf, und umgekehrt. Die CI faehrt deshalb beide Sprachen, wer
+    den Selftest aber von Hand startet, bekam nur eine. Als eigener Prozess,
+    weil gettext seinen Katalog nur einmal je Lauf einhaengt.
+
+    Ohne gebauten Katalog wird nichts behauptet: in einem frischen Klon gibt es
+    locale/ noch nicht, und ein Fehlschlag daran waere keiner.
+    """
+    if os.environ.get(SELFTEST_PASS):
+        return
+    andere = "en" if os.environ.get("LANGUAGE", "").split(":")[0] != "en" else "de"
+    mo = next((p for p in (os.path.join(d, andere, "LC_MESSAGES", "dynotiq.mo")
+                           for d in LOCALE_DIRS) if os.path.exists(p)), "")
+    if not mo:
+        print(f"zweiter Lauf uebersprungen, kein Katalog fuer {andere}",
+              flush=True)
+        return
+    print(f"zweiter Lauf mit LANGUAGE={andere} …", flush=True)
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), "--selftest"],
+                       env={**os.environ, "LANGUAGE": andere,
+                            SELFTEST_PASS: andere})
+    if r.returncode:
+        raise SystemExit(f"selftest mit LANGUAGE={andere} fehlgeschlagen")
 
 
 if __name__ == "__main__":

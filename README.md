@@ -11,9 +11,10 @@ One GTK4 application that finds what slows a machine down, explains every
 finding in plain language and offers the matching fix.
 Nothing runs without asking first.
 
-[**Download v0.3 Beta**](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.3-beta)
+[**Download the latest release**](https://github.com/simonlinuxcraft/dynotiq/releases/latest)
 
 [![selftest](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml/badge.svg)](https://github.com/simonlinuxcraft/dynotiq/actions/workflows/selftest.yml)
+[![licence: GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue.svg)](LICENSE)
 
 </div>
 
@@ -74,7 +75,7 @@ From the apt repository, which also keeps it updated:
     sudo apt install dynotiq
 
 Or download the `.deb` from the
-[v0.3 Beta release](https://github.com/simonlinuxcraft/dynotiq/releases/tag/v0.3-beta)
+[latest release](https://github.com/simonlinuxcraft/dynotiq/releases/latest)
 and install it directly. The package carries the repository and its key, so
 updates arrive through apt either way. GitHub replaces the tilde in the version
 with a dot in the attachment name, the package itself is unaffected:
@@ -147,19 +148,30 @@ Catalogues live in `po/`, `build-deb.sh` compiles them into the package.
 | `dynotiq --selftest` | run the built-in checks |
 | `dynotiq --version` | print the version and exit |
 
+## Contributing
+
+Pull requests are welcome. A few things make them easy to merge:
+
+- **Open an issue first** for anything larger than a fix. It saves you from
+  building something that does not fit, and it saves me from turning it down
+  after the fact.
+- **The selftest has to pass.** `python3 dynotiq.py --selftest` runs the whole
+  suite in a few seconds, and CI runs it on every push. Logic that can break
+  brings its own assertion along.
+- **Match the surrounding code.** One file, plain GTK4, no new dependencies
+  without a reason. Comments explain why, not what.
+- **User-visible strings are translatable.** Wrap them in `_()`, then run
+  `./update-po.sh` and fill in the English catalogue.
+
+Bug reports and ideas are just as welcome as code. If you send a patch, you
+send it under the same licence as the rest of the project.
+
 ## Licence
 
-Copyright (c) 2026 Simon Gettkandt (simonlinuxcraft). All rights reserved.
+Copyright (C) 2026 Simon Gettkandt (simonlinuxcraft)
 
-**This is proprietary software, not open source.** The source is here to be
-read, and reading it grants no permission to use it. Copying, modifying,
-redistributing, sublicensing or using this code for any purpose, commercial or
-not, needs written consent from the copyright holder. The full terms are in
-[LICENSE](LICENSE), enquiries go to <simonlinuxcraft@pm.me>.
+dynotiq is free software under the **GNU General Public License, version 3 or
+later**. You may use, study, share and modify it, and the same freedoms travel
+with every copy you pass on. The full text is in [LICENSE](LICENSE).
 
-Version 0.1 was released under GPL-3.0-or-later. That release stays under those
-terms; everything from 0.2 onwards is covered by the licence above.
-
-Pull requests are not accepted. Bug reports and feature ideas are welcome as
-issues, but any code posted in an issue is taken as offered for use in this
-project without conditions.
+It comes with no warranty, to the extent permitted by law.

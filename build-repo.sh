@@ -81,7 +81,7 @@ sudo apt update
 sudo apt install dynotiq</pre>
 <p>Updates then arrive through <code>apt upgrade</code> like any other package.</p>
 <p><a href="https://github.com/simonlinuxcraft/dynotiq">Source on GitHub</a>.
-Proprietary software, all rights reserved. See the LICENSE file.</p>
+Free software under the GNU General Public License v3 or later.</p>
 HTML
 
 echo "Fertig: $OUT"

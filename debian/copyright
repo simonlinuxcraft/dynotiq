@@ -4,18 +4,21 @@ Source: https://github.com/simonlinuxcraft/dynotiq
 
 Files: *
 Copyright: 2026 Simon Gettkandt (simonlinuxcraft)
-License: proprietary
+License: GPL-3+
 
-License: proprietary
- All rights reserved. This software is not open source. No permission is
- granted to copy, modify, distribute, sublicense or use it for any purpose,
- commercial or non-commercial, without prior written consent from the
- copyright holder.
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify it
+ under the terms of the GNU General Public License as published by the Free
+ Software Foundation, either version 3 of the License, or (at your option)
+ any later version.
  .
- Reading the source does not constitute permission to use it.
+ This program is distributed in the hope that it will be useful, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ more details.
  .
- For licensing enquiries: simonlinuxcraft@pm.me
+ You should have received a copy of the GNU General Public License along
+ with this program. If not, see <https://www.gnu.org/licenses/>.
  .
- These terms apply from version 0.2 onwards. Version 0.1 was released under
- the GNU General Public License version 3; the rights granted there remain in
- force for that version.
+ On Debian systems the complete text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.
