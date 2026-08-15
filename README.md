@@ -80,7 +80,7 @@ and install it directly. The package carries the repository and its key, so
 updates arrive through apt either way. GitHub replaces the tilde in the version
 with a dot in the attachment name, the package itself is unaffected:
 
-    sudo dpkg -i dynotiq_0.3.beta_all.deb
+    sudo dpkg -i dynotiq_0.2.beta1_all.deb
 
 Build the package yourself:
 
@@ -109,6 +109,10 @@ to the same number, then:
 
     ./build-repo.sh      # builds the .deb, indexes and signs the repository
     ./publish-repo.sh    # pushes build/repo to the gh-pages branch
+
+The `dpkg -i` line under Install names the file attached to the release, so it
+is bumped once that release exists, not before. Bumped earlier it points at a
+download nobody can fetch.
 
 `build-repo.sh` never publishes, that stays a separate step. It needs
 `dpkg-dev`, `apt-utils` and `gettext`, plus the GPG key the repository is
