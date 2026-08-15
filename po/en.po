@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dynotiq 0.3~beta\n"
 "Report-Msgid-Bugs-To: https://github.com/simonlinuxcraft/dynotiq/issues\n"
-"POT-Creation-Date: 2026-08-15 20:31+0200\n"
-"PO-Revision-Date: 2026-08-15 20:31+0200\n"
+"POT-Creation-Date: 2026-08-15 20:36+0200\n"
+"PO-Revision-Date: 2026-08-15 20:36+0200\n"
 "Last-Translator: simonlinuxcraft\n"
 "Language-Team: English\n"
 "Language: en\n"
@@ -43,18 +43,18 @@ msgstr "Snap"
 msgid "Flatpak"
 msgstr "Flatpak"
 
-#: dynotiq.py:944 dynotiq.py:945 dynotiq.py:12129 dynotiq.py:12130
+#: dynotiq.py:944 dynotiq.py:945 dynotiq.py:12243 dynotiq.py:12244
 #, python-brace-format
 msgid "Rev {rev}"
 msgstr "Rev {rev}"
 
-#: dynotiq.py:968 dynotiq.py:970 dynotiq.py:12141 dynotiq.py:12142
-#: dynotiq.py:12145
+#: dynotiq.py:968 dynotiq.py:970 dynotiq.py:12255 dynotiq.py:12256
+#: dynotiq.py:12259
 #, python-brace-format
 msgid "Build {id}"
 msgstr "Build {id}"
 
-#: dynotiq.py:969 dynotiq.py:12144
+#: dynotiq.py:969 dynotiq.py:12258
 msgid "neu"
 msgstr "new"
 
@@ -192,7 +192,7 @@ msgid "Das Programm {prog} ist nicht installiert"
 msgstr "The program {prog} is not installed"
 
 #: dynotiq.py:1570 dynotiq.py:4950 dynotiq.py:5058 dynotiq.py:5143
-#: dynotiq.py:6154
+#: dynotiq.py:6160
 msgid "Paket"
 msgstr "Package"
 
@@ -204,7 +204,7 @@ msgstr "installed by hand"
 msgid "Steam-Titel"
 msgstr "Steam title"
 
-#: dynotiq.py:1577 dynotiq.py:13259
+#: dynotiq.py:1577 dynotiq.py:13373
 msgid "Mikrofon"
 msgstr "Microphone"
 
@@ -228,7 +228,7 @@ msgstr "Camera"
 msgid "Video und Fotos gehen nicht."
 msgstr "Video and photos will not work."
 
-#: dynotiq.py:1581 dynotiq.py:13260
+#: dynotiq.py:1581 dynotiq.py:13374
 msgid "USB-Sticks und externe Laufwerke"
 msgstr "USB sticks and external drives"
 
@@ -450,7 +450,7 @@ msgstr "Direct input devices"
 msgid "Nötig für manche Tastatur- und Controllerfunktionen."
 msgstr "Needed for some keyboard and controller features."
 
-#: dynotiq.py:1634 dynotiq.py:13264
+#: dynotiq.py:1634 dynotiq.py:13378
 msgid "Was genau dahinter steckt, sagt die Beschreibung des Snaps."
 msgstr "What exactly this covers is in the snap's own description."
 
@@ -880,7 +880,7 @@ msgstr ""
 "Going back to an older version, Proton cannot convert the folder. The game "
 "then hangs at the loading screen or does not start at all."
 
-#: dynotiq.py:3050 dynotiq.py:12461
+#: dynotiq.py:3050 dynotiq.py:12575
 #, python-brace-format
 msgid ""
 " Am einfachsten stellst du den Titel in Steam wieder auf {name}, die ist "
@@ -1471,7 +1471,7 @@ msgid "Installation reparieren"
 msgstr "Repair installation"
 
 #: dynotiq.py:3678 dynotiq.py:3717 dynotiq.py:4949 dynotiq.py:5058
-#: dynotiq.py:5143 dynotiq.py:5336 dynotiq.py:6154 dynotiq.py:12317
+#: dynotiq.py:5143 dynotiq.py:5336 dynotiq.py:6160 dynotiq.py:12431
 msgid "Pakete"
 msgstr "packages"
 
@@ -1679,7 +1679,7 @@ msgstr "View report"
 msgid "{n} Fehlermeldungen im Journal"
 msgstr "{n} error messages in the journal"
 
-#: dynotiq.py:3816 dynotiq.py:11719
+#: dynotiq.py:3816 dynotiq.py:11725
 msgid "Alle anzeigen"
 msgstr "Show all"
 
@@ -1760,7 +1760,7 @@ msgstr "Remove launcher"
 msgid "App-Check: {app}"
 msgstr "App Check: {app}"
 
-#: dynotiq.py:3903 dynotiq.py:8738
+#: dynotiq.py:3903 dynotiq.py:8744
 msgid "Systemcheck"
 msgstr "System Check"
 
@@ -1774,7 +1774,7 @@ msgstr ""
 "full filesystems, a journal running wild. Every finding explains itself and "
 "comes with the matching command."
 
-#: dynotiq.py:3906 dynotiq.py:7682 dynotiq.py:9167
+#: dynotiq.py:3906 dynotiq.py:7688 dynotiq.py:9173
 msgid "Vorfälle"
 msgstr "Incidents"
 
@@ -1786,7 +1786,7 @@ msgstr ""
 "Reads the journal for audio dropouts, GPU driver errors and killed "
 "processes, and notes how warm the machine was at that moment."
 
-#: dynotiq.py:3908 dynotiq.py:7684 dynotiq.py:9376 dynotiq.py:11409
+#: dynotiq.py:3908 dynotiq.py:7690 dynotiq.py:9382 dynotiq.py:11415
 msgid "Updates"
 msgstr "Updates"
 
@@ -1798,7 +1798,7 @@ msgstr ""
 "apt, Snap, Flatpak and firmware in one place, with sizes and a log. "
 "Optionally with a Timeshift snapshot beforehand."
 
-#: dynotiq.py:3910 dynotiq.py:7684 dynotiq.py:10387
+#: dynotiq.py:3910 dynotiq.py:7690 dynotiq.py:10393
 msgid "App-Check"
 msgstr "App Check"
 
@@ -1811,7 +1811,7 @@ msgstr ""
 "Takes an installed application apart: missing libraries, cut off sandbox "
 "permissions, crashes. Where there is a fix, a button sits next to it."
 
-#: dynotiq.py:3913 dynotiq.py:7686 dynotiq.py:9911
+#: dynotiq.py:3913 dynotiq.py:7692 dynotiq.py:9917
 msgid "Prüfstand"
 msgstr "Dyno"
 
@@ -1826,7 +1826,7 @@ msgstr ""
 "free core, for memory or for the disk."
 
 #: dynotiq.py:3916 dynotiq.py:5177 dynotiq.py:5221 dynotiq.py:5278
-#: dynotiq.py:6388
+#: dynotiq.py:6394
 msgid "Spiele"
 msgstr "Games"
 
@@ -2033,7 +2033,7 @@ msgstr ""
 msgid "GPU-Last"
 msgstr "GPU load"
 
-#: dynotiq.py:4182 dynotiq.py:9960
+#: dynotiq.py:4182 dynotiq.py:9966
 msgid "GPU-Takt"
 msgstr "GPU clock"
 
@@ -2061,7 +2061,7 @@ msgstr "CPU clock"
 msgid "CPU-Temperatur"
 msgstr "CPU temperature"
 
-#: dynotiq.py:4188 dynotiq.py:6845 dynotiq.py:10844
+#: dynotiq.py:4188 dynotiq.py:6851 dynotiq.py:10850
 msgid "Arbeitsspeicher"
 msgstr "Memory"
 
@@ -2081,7 +2081,7 @@ msgstr ""
 "Start the recording and play a round. Afterwards this says what limits your "
 "frame rate."
 
-#: dynotiq.py:4567 dynotiq.py:12689
+#: dynotiq.py:4567 dynotiq.py:12803
 msgid "KEINE LAST"
 msgstr "NO LOAD"
 
@@ -2097,7 +2097,7 @@ msgstr ""
 "Not a single sample showed meaningful load. Start the game before the "
 "recording and let it run while you play."
 
-#: dynotiq.py:4580 dynotiq.py:12638
+#: dynotiq.py:4580 dynotiq.py:12752
 msgid "HITZE"
 msgstr "HEAT"
 
@@ -2116,7 +2116,7 @@ msgstr ""
 "% of the load samples, first {t} after the load phase began. For as long as "
 "it throttles, it delivers less than it could."
 
-#: dynotiq.py:4588 dynotiq.py:12648 dynotiq.py:12685
+#: dynotiq.py:4588 dynotiq.py:12762 dynotiq.py:12799
 msgid "POWERLIMIT"
 msgstr "POWER LIMIT"
 
@@ -2153,7 +2153,7 @@ msgstr ""
 "The game spent {pct} % of the time waiting for a free core. Measured on the "
 "game process itself, this is not inferred from the system load."
 
-#: dynotiq.py:4603 dynotiq.py:12676 dynotiq.py:12681
+#: dynotiq.py:4603 dynotiq.py:12790 dynotiq.py:12795
 msgid "CPU-LIMIT"
 msgstr "CPU LIMIT"
 
@@ -2193,7 +2193,7 @@ msgstr ""
 "throttling report and the card did not get warmer either. It may well be "
 "that there was simply less to compute towards the end."
 
-#: dynotiq.py:4618 dynotiq.py:12732
+#: dynotiq.py:4618 dynotiq.py:12846
 msgid "NACHLADEN"
 msgstr "PAGING"
 
@@ -2234,7 +2234,7 @@ msgstr ""
 msgid "Über {t} min Last kein Drosseln, kein Takteinbruch."
 msgstr "Over {t} min of load no throttling and no drop in clock."
 
-#: dynotiq.py:4631 dynotiq.py:4635 dynotiq.py:12695 dynotiq.py:12735
+#: dynotiq.py:4631 dynotiq.py:4635 dynotiq.py:12809 dynotiq.py:12849
 msgid "SAUBER"
 msgstr "CLEAN"
 
@@ -2254,7 +2254,7 @@ msgstr ""
 msgid " Was die Bildrate begrenzt, liegt dann nicht an Hitze oder Kühlung."
 msgstr " Whatever limits the frame rate is then not heat or cooling."
 
-#: dynotiq.py:4649 dynotiq.py:10695
+#: dynotiq.py:4649 dynotiq.py:10701
 #, python-brace-format
 msgid "{tool} öffnen"
 msgstr "Open {tool}"
@@ -2267,7 +2267,7 @@ msgstr "Switch to performance"
 msgid "Zur Problemseite"
 msgstr "Go to problems"
 
-#: dynotiq.py:4687 dynotiq.py:12644 dynotiq.py:12706
+#: dynotiq.py:4687 dynotiq.py:12758 dynotiq.py:12820
 msgid "Kühlung der Grafikkarte angehen"
 msgstr "Deal with the graphics card cooling"
 
@@ -2281,7 +2281,7 @@ msgstr ""
 "LACT, on NVIDIA only with Coolbits and only after signing in again), add "
 "case fans. Every degree keeps the clock up longer."
 
-#: dynotiq.py:4693 dynotiq.py:12645
+#: dynotiq.py:4693 dynotiq.py:12759
 msgid "Undervolting prüfen"
 msgstr "Look into undervolting"
 
@@ -2297,7 +2297,7 @@ msgstr ""
 "the same job: 10 to 15 % less costs barely any frame rate and drops the "
 "temperature noticeably."
 
-#: dynotiq.py:4704 dynotiq.py:12663
+#: dynotiq.py:4704 dynotiq.py:12777
 msgid "Powerlimit steht schon höher"
 msgstr "Power limit is already higher"
 
@@ -2338,7 +2338,7 @@ msgstr ""
 "gave what the manufacturer allows it to. From here on, only lower settings "
 "in the game buy more frames."
 
-#: dynotiq.py:4725 dynotiq.py:12652 dynotiq.py:12664 dynotiq.py:12670
+#: dynotiq.py:4725 dynotiq.py:12766 dynotiq.py:12778 dynotiq.py:12784
 msgid "Powerlimit ist der Deckel"
 msgstr "The power limit is the ceiling"
 
@@ -2357,7 +2357,7 @@ msgstr ""
 "game the frame rate breaks down after a few minutes. Check case airflow and "
 "dust."
 
-#: dynotiq.py:4734 dynotiq.py:12677
+#: dynotiq.py:4734 dynotiq.py:12791
 msgid "Ein Kern lief dauerhaft voll"
 msgstr "One core ran flat out throughout"
 
@@ -2392,7 +2392,7 @@ msgstr ""
 "computing. That is measured on the game itself. Closing whatever computes in "
 "the background buys frames here directly."
 
-#: dynotiq.py:4747 dynotiq.py:4774 dynotiq.py:6437
+#: dynotiq.py:4747 dynotiq.py:4774 dynotiq.py:6443
 msgid "Speicherfresser zeigen"
 msgstr "Show memory hogs"
 
@@ -2480,7 +2480,7 @@ msgstr ""
 "Peak at {v:.0f} °C. From about 75 °C the NVMe throttles and load times go "
 "up. A heatsink or airflow over the M.2 slot is usually enough."
 
-#: dynotiq.py:4789 dynotiq.py:12665
+#: dynotiq.py:4789 dynotiq.py:12779
 msgid "Governor steht schon auf performance"
 msgstr "Governor is already on performance"
 
@@ -2493,7 +2493,7 @@ msgstr ""
 "During the run it was still on {gov}. Record once more, then this says what "
 "it did."
 
-#: dynotiq.py:4793 dynotiq.py:12666 dynotiq.py:12671
+#: dynotiq.py:4793 dynotiq.py:12780 dynotiq.py:12785
 #, python-brace-format
 msgid "CPU-Governor stand auf {gov}"
 msgstr "CPU governor was set to {gov}"
@@ -2519,7 +2519,7 @@ msgstr ""
 "Only {t} min under load. Throttling often sets in only after ten minutes, so "
 "this run may have missed it."
 
-#: dynotiq.py:4803 dynotiq.py:9433 dynotiq.py:12697
+#: dynotiq.py:4803 dynotiq.py:9439 dynotiq.py:12811
 msgid "Nichts zu tun"
 msgstr "Nothing to do"
 
@@ -2531,7 +2531,7 @@ msgstr ""
 "Temperatures, clock and memory stayed in the green across the whole load "
 "phase. There is nothing to tune on this machine for games."
 
-#: dynotiq.py:4811 dynotiq.py:12698 dynotiq.py:12699
+#: dynotiq.py:4811 dynotiq.py:12812 dynotiq.py:12813
 msgid "Trotzdem Ruckler?"
 msgstr "Still stuttering?"
 
@@ -2549,7 +2549,7 @@ msgstr ""
 msgid "Zum App-Check"
 msgstr "Go to app check"
 
-#: dynotiq.py:4823 dynotiq.py:12703
+#: dynotiq.py:4823 dynotiq.py:12817
 msgid "Keine Messpunkte aufgezeichnet."
 msgstr "No samples recorded."
 
@@ -2571,7 +2571,7 @@ msgstr "Measured under load:"
 msgid "niedrigster"
 msgstr "lowest"
 
-#: dynotiq.py:4833 dynotiq.py:11108
+#: dynotiq.py:4833 dynotiq.py:11114
 msgid "üblich"
 msgstr "typical"
 
@@ -2579,7 +2579,7 @@ msgstr "typical"
 msgid "höchster"
 msgstr "highest"
 
-#: dynotiq.py:4844 dynotiq.py:12705
+#: dynotiq.py:4844 dynotiq.py:12819
 msgid "Was du ändern kannst:"
 msgstr "What you can change:"
 
@@ -2596,7 +2596,7 @@ msgstr ""
 "The dry run found nothing that would be removed. The command then only "
 "clears away what nobody needs any more anyway."
 
-#: dynotiq.py:4954 dynotiq.py:12324
+#: dynotiq.py:4954 dynotiq.py:12438
 msgid "Trotzdem ausführen"
 msgstr "Run anyway"
 
@@ -2613,12 +2613,12 @@ msgstr ""
 "If something you still need is in there, cancel here and install it again on "
 "its own."
 
-#: dynotiq.py:4962 dynotiq.py:12320
+#: dynotiq.py:4962 dynotiq.py:12434
 #, python-brace-format
 msgid "Ja, dieses {n} {was} entfernen"
 msgstr "Yes, remove this {n} {was}"
 
-#: dynotiq.py:4963 dynotiq.py:12316
+#: dynotiq.py:4963 dynotiq.py:12430
 #, python-brace-format
 msgid "Ja, diese {n} {was} entfernen"
 msgstr "Yes, remove these {n} {was}"
@@ -2638,7 +2638,7 @@ msgstr "Ubuntu recommends {pkg} for this card."
 msgid "{v} empfohlen"
 msgstr "{v} recommended"
 
-#: dynotiq.py:5059 dynotiq.py:9326
+#: dynotiq.py:5059 dynotiq.py:9332
 msgid ""
 "Der Treiber wird neu gebaut. Bis zum Neustart kann die Grafik unvollständig "
 "sein, deshalb vorher alles sichern."
@@ -2665,7 +2665,7 @@ msgstr ""
 msgid "Das passende Modul ist jeweils vorhanden, es wurde nur nicht geladen."
 msgstr "The matching module is present in each case, it was only not loaded."
 
-#: dynotiq.py:5080 dynotiq.py:9352
+#: dynotiq.py:5080 dynotiq.py:9358
 msgid "kein Treiber"
 msgstr "no driver"
 
@@ -2964,7 +2964,7 @@ msgstr "supported"
 msgid "fehlt"
 msgstr "missing"
 
-#: dynotiq.py:5670 dynotiq.py:12582
+#: dynotiq.py:5670 dynotiq.py:12696
 msgid "Keine Fremdquellen eingetragen. Beim Upgrade wird nichts abgeschaltet."
 msgstr ""
 "No third-party sources configured. The upgrade will not switch anything off."
@@ -2974,7 +2974,7 @@ msgstr ""
 msgid "Kennt die Quelle {codename} schon?"
 msgstr "Does the source know {codename} yet?"
 
-#: dynotiq.py:5679 dynotiq.py:12579
+#: dynotiq.py:5679 dynotiq.py:12693
 #, python-brace-format
 msgid "{n} von {total} Quellen haben noch keine Pakete für {codename}."
 msgstr "{n} of {total} sources have no packages for {codename} yet."
@@ -2984,7 +2984,7 @@ msgstr "{n} of {total} sources have no packages for {codename} yet."
 msgid "{n} Quellen haben nicht geantwortet, über die sagt die Prüfung nichts."
 msgstr "{n} sources did not answer, the check says nothing about those."
 
-#: dynotiq.py:5745 dynotiq.py:12234
+#: dynotiq.py:5745 dynotiq.py:12348
 msgid "Sicherheitsupdates"
 msgstr "Security updates"
 
@@ -3000,11 +3000,11 @@ msgstr "Backports"
 msgid "Grundsystem"
 msgstr "Base system"
 
-#: dynotiq.py:5821 dynotiq.py:5861
+#: dynotiq.py:5822 dynotiq.py:5862
 msgid "Alles in Ordnung"
 msgstr "All fine"
 
-#: dynotiq.py:5823
+#: dynotiq.py:5824
 #, python-brace-format
 msgid ""
 "Gehört zu Ubuntu {suite}, dieser Rechner läuft {cur}. Von hier kommt nichts "
@@ -3013,7 +3013,7 @@ msgstr ""
 "Belongs to Ubuntu {suite}, this machine runs {cur}. Nothing arrives from "
 "here any more."
 
-#: dynotiq.py:5830
+#: dynotiq.py:5831
 msgid ""
 "Neu eingetragen, noch nicht abgeholt. Der Knopf 'Paketlisten holen' erledigt "
 "das."
@@ -3021,40 +3021,40 @@ msgstr ""
 "Newly added, not fetched yet. The button 'Fetch package lists' takes care of "
 "it."
 
-#: dynotiq.py:5833
+#: dynotiq.py:5834
 msgid "Antwortet nicht, von hier kommen keine Updates"
 msgstr "No answer, no updates arrive from here"
 
-#: dynotiq.py:5846
+#: dynotiq.py:5847
 msgid "Abgeschaltet, wird nicht gefragt"
 msgstr "Switched off, not asked"
 
-#: dynotiq.py:5851
+#: dynotiq.py:5852
 #, python-brace-format
 msgid "Zuletzt kam von hier nicht alles an: {why}"
 msgstr "Last time not everything arrived from here: {why}"
 
-#: dynotiq.py:5856
+#: dynotiq.py:5857
 msgid "Antwortet"
 msgstr "Responding"
 
-#: dynotiq.py:5856
+#: dynotiq.py:5857
 msgid "Eingetragen"
 msgstr "Configured"
 
-#: dynotiq.py:5860
+#: dynotiq.py:5861
 msgid "Snap Store"
 msgstr "Snap Store"
 
-#: dynotiq.py:5929
+#: dynotiq.py:5930
 msgid "BLEIBT ERHALTEN"
 msgstr "STAYS AS IT IS"
 
-#: dynotiq.py:5930
+#: dynotiq.py:5931
 msgid "  Home-Verzeichnis, Einstellungen und Dokumente"
 msgstr "  Home directory, settings and documents"
 
-#: dynotiq.py:5932
+#: dynotiq.py:5933
 #, python-brace-format
 msgid ""
 "  {snaps} Snaps und {flatpaks} Flatpaks, sie bringen ihre Bibliotheken "
@@ -3062,7 +3062,7 @@ msgid ""
 msgstr ""
 "  {snaps} snaps and {flatpaks} flatpaks, they bring their own libraries"
 
-#: dynotiq.py:5936
+#: dynotiq.py:5937
 #, python-brace-format
 msgid ""
 "  {n} selbst installierte Pakete bleiben liegen, bekommen aber weiterhin "
@@ -3070,7 +3070,7 @@ msgid ""
 msgstr ""
 "  {n} self installed packages stay behind, but keep getting no updates:"
 
-#: dynotiq.py:5942
+#: dynotiq.py:5943
 msgid ""
 "  Davon gibt es als Flatpak, der Upgrades unbeschadet übersteht und Updates "
 "bekommt:"
@@ -3078,20 +3078,20 @@ msgstr ""
 "Of those there is a flatpak that survives upgrades unharmed and keeps "
 "getting updates:"
 
-#: dynotiq.py:5946
+#: dynotiq.py:5947
 msgid "  Autostart-Einträge und eigene systemd-Dienste"
 msgstr "  Startup entries and your own systemd services"
 
-#: dynotiq.py:5950
+#: dynotiq.py:5951
 msgid "WIRD NEU GEBAUT"
 msgstr "GETS REBUILT"
 
-#: dynotiq.py:5952
+#: dynotiq.py:5953
 #, python-brace-format
 msgid "  {module} über DKMS"
 msgstr "  {module} through DKMS"
 
-#: dynotiq.py:5953
+#: dynotiq.py:5954
 msgid ""
 "  Scheitert der Bau, startet das System ohne dieses Modul. Bei "
 "Grafiktreibern heißt das: Anmeldung ohne Beschleunigung."
@@ -3099,12 +3099,12 @@ msgstr ""
 "If the build fails the system starts without that module. For graphics "
 "drivers that means logging in without acceleration."
 
-#: dynotiq.py:5965
+#: dynotiq.py:5966
 #, python-brace-format
 msgid "WIRD ABGESCHALTET, solange es kein {codename} gibt"
 msgstr "GETS DISABLED as long as there is no {codename}"
 
-#: dynotiq.py:5969
+#: dynotiq.py:5970
 msgid ""
 "  Diese Programme bleiben installiert, bekommen aber keine Updates mehr, bis "
 "der Anbieter nachzieht. Ob er das tut, hängt am Anbieter, nicht am Point-"
@@ -3114,44 +3114,44 @@ msgstr ""
 "catches up. Whether that happens is up to the vendor, not to Ubuntu's point "
 "release."
 
-#: dynotiq.py:5976
+#: dynotiq.py:5977
 msgid "  Vom Anbieter unabhängig macht dich der Flatpak:"
 msgstr "  The flatpak makes you independent of the vendor:"
 
-#: dynotiq.py:5981
+#: dynotiq.py:5982
 msgid "LÄUFT WEITER"
 msgstr "KEEPS RUNNING"
 
-#: dynotiq.py:5986
+#: dynotiq.py:5987
 msgid "VORBEREITUNG"
 msgstr "PREPARATION"
 
-#: dynotiq.py:5990
+#: dynotiq.py:5991
 #, python-brace-format
 msgid "  {free:.0f} GB frei auf /, "
 msgstr "  {free:.0f} GB free on /, "
 
-#: dynotiq.py:5991
+#: dynotiq.py:5992
 msgid "das reicht"
 msgstr "that is enough"
 
-#: dynotiq.py:5992
+#: dynotiq.py:5993
 msgid "mindestens 10 GB wären nötig"
 msgstr "at least 10 GB would be needed"
 
-#: dynotiq.py:5995
+#: dynotiq.py:5996
 msgid "  Snapshot anlegen: "
 msgstr "  Create a snapshot: "
 
-#: dynotiq.py:5996
+#: dynotiq.py:5997
 msgid "Timeshift ist da"
 msgstr "Timeshift is available"
 
-#: dynotiq.py:5997
+#: dynotiq.py:5998
 msgid "Timeshift ist nicht installiert"
 msgstr "Timeshift is not installed"
 
-#: dynotiq.py:5998
+#: dynotiq.py:5999
 msgid ""
 "  Das Upgrade läuft in einem eigenen Terminal und dauert eine halbe bis "
 "anderthalb Stunden."
@@ -3159,12 +3159,12 @@ msgstr ""
 "The upgrade runs in its own terminal and takes half an hour to an hour and a "
 "half."
 
-#: dynotiq.py:6045
+#: dynotiq.py:6046
 #, python-brace-format
 msgid "Ubuntu {v} steht bereit"
 msgstr "Ubuntu {v} is ready"
 
-#: dynotiq.py:6046
+#: dynotiq.py:6047
 #, python-brace-format
 msgid ""
 "Aktuell läuft {v}. Der Wechsel dauert je nach Anschluss eine halbe bis "
@@ -3173,7 +3173,7 @@ msgstr ""
 "You are currently on {v}. Depending on your connection the switch takes half "
 "an hour to an hour and a half."
 
-#: dynotiq.py:6050
+#: dynotiq.py:6051
 msgid ""
 "Läuft bewusst in einem eigenen Terminal, nicht in diesem Fenster: das "
 "Upgrade tauscht Python und GTK aus, unter denen dynotiq selbst läuft. Das "
@@ -3185,12 +3185,12 @@ msgstr ""
 "window open until it finishes, otherwise the upgrade breaks off halfway. "
 "Create a Timeshift snapshot first."
 
-#: dynotiq.py:6060
+#: dynotiq.py:6061
 #, python-brace-format
 msgid "Ubuntu {v} ist erschienen"
 msgstr "Ubuntu {v} has been released"
 
-#: dynotiq.py:6073
+#: dynotiq.py:6074
 #, python-brace-format
 msgid ""
 "Ubuntu bietet den Wechsel erst mit {point} an. Bis dahin bekommt {cur} "
@@ -3199,7 +3199,7 @@ msgstr ""
 "Ubuntu only offers the switch with {point}. Until then {cur} keeps getting "
 "security updates. Waiting costs nothing."
 
-#: dynotiq.py:6076
+#: dynotiq.py:6077
 #, python-brace-format
 msgid ""
 "Ubuntu bietet den Wechsel erst mit {point} an, meist im {month}. Bis dahin "
@@ -3208,12 +3208,12 @@ msgstr ""
 "Ubuntu only offers the switch with {point}, usually in {month}. Until then "
 "{cur} keeps getting security updates. Waiting costs nothing."
 
-#: dynotiq.py:6092
+#: dynotiq.py:6093
 #, python-brace-format
 msgid "{cur} bekommt noch bis {year} Sicherheitsupdates."
 msgstr "{cur} keeps getting security updates until {year}."
 
-#: dynotiq.py:6097
+#: dynotiq.py:6098
 #, python-brace-format
 msgid ""
 "Ob deine Fremdquellen schon Pakete für {v} haben, ist noch nicht geprüft. "
@@ -3222,7 +3222,7 @@ msgstr ""
 "Whether your third-party sources have packages for {v} has not been checked "
 "yet. Sources without packages would be switched off by the upgrade."
 
-#: dynotiq.py:6102
+#: dynotiq.py:6103
 #, python-brace-format
 msgid ""
 "{n} von {total} Fremdquellen haben noch keine Pakete für {v}. Beim Upgrade "
@@ -3231,32 +3231,32 @@ msgstr ""
 "{n} of {total} third-party sources have no packages for {v} yet. The upgrade "
 "would switch them off."
 
-#: dynotiq.py:6108
+#: dynotiq.py:6109
 msgid "Keine Fremdquellen eingetragen, beim Upgrade würde keine abgeschaltet."
 msgstr "No third-party sources configured, the upgrade would switch none off."
 
-#: dynotiq.py:6113
+#: dynotiq.py:6114
 #, python-brace-format
 msgid "Ubuntu schaltet das Upgrade voraussichtlich im {month} frei."
 msgstr "Ubuntu is expected to open the upgrade in {month}."
 
-#: dynotiq.py:6120
+#: dynotiq.py:6121
 msgid "Später erinnern"
 msgstr "Remind me later"
 
-#: dynotiq.py:6122 dynotiq.py:9112
+#: dynotiq.py:6123 dynotiq.py:9118
 msgid "Fremdquellen prüfen"
 msgstr "Check third-party sources"
 
-#: dynotiq.py:6123
+#: dynotiq.py:6124
 msgid "Trotzdem upgraden"
 msgstr "Upgrade anyway"
 
-#: dynotiq.py:6148
+#: dynotiq.py:6154
 msgid "Neuerer Kernel verfügbar"
 msgstr "Newer kernel available"
 
-#: dynotiq.py:6149
+#: dynotiq.py:6155
 #, python-brace-format
 msgid ""
 "{pkg} bringt den aktuellen Kernel samt Grafikstack. Nach der Installation "
@@ -3265,7 +3265,7 @@ msgstr ""
 "{pkg} brings the current kernel along with the graphics stack. A reboot is "
 "needed after installing."
 
-#: dynotiq.py:6155
+#: dynotiq.py:6161
 msgid ""
 "Wechselt die Kernel-Serie. Fremde Kernelmodule wie VirtualBox oder NVIDIA "
 "werden neu gebaut."
@@ -3273,23 +3273,23 @@ msgstr ""
 "Switches the kernel series. Third party kernel modules like VirtualBox or "
 "NVIDIA are rebuilt."
 
-#: dynotiq.py:6159
+#: dynotiq.py:6165
 msgid "Ein CPU-Kern"
 msgstr "One CPU core"
 
-#: dynotiq.py:6159
+#: dynotiq.py:6165
 msgid "Alle CPU-Kerne"
 msgstr "All CPU cores"
 
-#: dynotiq.py:6160
+#: dynotiq.py:6166
 msgid "Speicherdurchsatz"
 msgstr "Memory bandwidth"
 
-#: dynotiq.py:6160
+#: dynotiq.py:6166
 msgid "Schreibrate der Platte"
 msgstr "Disk write rate"
 
-#: dynotiq.py:6182
+#: dynotiq.py:6188
 #, python-brace-format
 msgid ""
 "Zuletzt {now:.0f} statt der üblichen {base:.0f}. Typische Gründe: "
@@ -3299,7 +3299,7 @@ msgstr ""
 "Last run {now:.0f} instead of the usual {base:.0f}. Typical reasons: thermal "
 "throttling, a full filesystem or a background process running alongside."
 
-#: dynotiq.py:6191
+#: dynotiq.py:6197
 #, python-brace-format
 msgid ""
 "\n"
@@ -3312,30 +3312,30 @@ msgstr ""
 "The drop comes after the update of {date}. That does not say it is the "
 "cause, but before it the value was {pct:.0f} % higher."
 
-#: dynotiq.py:6197
+#: dynotiq.py:6203
 #, python-brace-format
 msgid "{what} {pct:.0f} % langsamer als sonst"
 msgstr "{what} {pct:.0f} % slower than usual"
 
-#: dynotiq.py:6201
+#: dynotiq.py:6207
 msgid "Nochmal messen"
 msgstr "Measure again"
 
-#: dynotiq.py:6251
+#: dynotiq.py:6257
 #, python-brace-format
 msgid "Logdatei vom {date}, {size}"
 msgstr "Log file from {date}, {size}"
 
-#: dynotiq.py:6264
+#: dynotiq.py:6270
 #, python-brace-format
 msgid "Systemjournal belegt {gb:.1f} GB"
 msgstr "System journal uses {gb:.1f} GB"
 
-#: dynotiq.py:6265
+#: dynotiq.py:6271
 msgid "Alte Logs lassen sich auf 500 MB eindampfen."
 msgstr "Old logs can be trimmed down to 500 MB."
 
-#: dynotiq.py:6266
+#: dynotiq.py:6272
 #, python-brace-format
 msgid ""
 " Danach reicht das Journal nur noch bis zum {date} zurück, davor ist nichts "
@@ -3344,25 +3344,25 @@ msgstr ""
 " After that the journal only reaches back to {date}, and nothing before that "
 "can be looked up any more."
 
-#: dynotiq.py:6271
+#: dynotiq.py:6277
 #, python-brace-format
 msgid "{gb:.1f} GB frei"
 msgstr "{gb:.1f} GB free"
 
-#: dynotiq.py:6275
+#: dynotiq.py:6281
 msgid "Logdateien"
 msgstr "log files"
 
-#: dynotiq.py:6276
+#: dynotiq.py:6282
 msgid "Logdatei"
 msgstr "log file"
 
-#: dynotiq.py:6325
+#: dynotiq.py:6331
 #, python-brace-format
 msgid "{size} in alten Snap-Revisionen"
 msgstr "{size} in old snap revisions"
 
-#: dynotiq.py:6326
+#: dynotiq.py:6332
 msgid ""
 "Das sind die Vorgängerversionen, auf die snap zurückrollen könnte. Nach dem "
 "Entfernen geht das nicht mehr."
@@ -3370,29 +3370,29 @@ msgstr ""
 "These are the previous versions snap could roll back to. Once they are gone "
 "that is no longer possible."
 
-#: dynotiq.py:6328 dynotiq.py:6596
+#: dynotiq.py:6334 dynotiq.py:6602
 #, python-brace-format
 msgid "{n} Pakete"
 msgstr "{n} packages"
 
-#: dynotiq.py:6332
+#: dynotiq.py:6338
 msgid "Auf diese Versionen lässt sich danach nicht mehr zurückrollen."
 msgstr "Rolling back to these versions will no longer be possible."
 
-#: dynotiq.py:6335 dynotiq.py:12319
+#: dynotiq.py:6341 dynotiq.py:12433
 msgid "Snap-Revisionen"
 msgstr "snap revisions"
 
-#: dynotiq.py:6335 dynotiq.py:12319 dynotiq.py:12321
+#: dynotiq.py:6341 dynotiq.py:12433 dynotiq.py:12435
 msgid "Snap-Revision"
 msgstr "snap revision"
 
-#: dynotiq.py:6338
+#: dynotiq.py:6344
 #, python-brace-format
 msgid "{name}, Revision {rev}, {size}"
 msgstr "{name}, revision {rev}, {size}"
 
-#: dynotiq.py:6345
+#: dynotiq.py:6351
 msgid ""
 "Damit es nicht wiederkommt: snap hebt drei Fassungen auf, zwei sind das "
 "Minimum. sudo snap set system refresh.retain=2"
@@ -3400,12 +3400,12 @@ msgstr ""
 "So it does not come back: snap keeps three revisions, two is the minimum. "
 "sudo snap set system refresh.retain=2"
 
-#: dynotiq.py:6357
+#: dynotiq.py:6363
 #, python-brace-format
 msgid "{n} eigene Autostart-Einträge beim Login"
 msgstr "{n} startup entries of your own at login"
 
-#: dynotiq.py:6358
+#: dynotiq.py:6364
 msgid ""
 "Jeder davon verlängert die Anmeldung und läuft danach weiter im Hintergrund. "
 "Nichts davon ist kaputt. Was du nicht brauchst, kannst du abschalten, "
@@ -3415,25 +3415,25 @@ msgstr ""
 "afterwards. None of this is broken. Switch off what you do not need, it "
 "stays installed."
 
-#: dynotiq.py:6361 dynotiq.py:6413
+#: dynotiq.py:6367 dynotiq.py:6419
 #, python-brace-format
 msgid "{n} Einträge"
 msgstr "{n} entries"
 
-#: dynotiq.py:6363
+#: dynotiq.py:6369
 msgid "Autostart öffnen"
 msgstr "Open Startup"
 
-#: dynotiq.py:6383
+#: dynotiq.py:6389
 msgid "1 Proton-Fassung startet kein Spiel"
 msgstr "1 Proton version starts no game"
 
-#: dynotiq.py:6384
+#: dynotiq.py:6390
 #, python-brace-format
 msgid "{n} Proton-Fassungen starten kein Spiel"
 msgstr "{n} Proton versions start no game"
 
-#: dynotiq.py:6385
+#: dynotiq.py:6391
 msgid ""
 "Steam sagt dazu nichts, es beendet das Spiel gleich wieder. Woran es liegt "
 "und was hilft, steht auf der Proton-Seite."
@@ -3441,20 +3441,20 @@ msgstr ""
 "Steam says nothing about it, it just exits the game right away. What causes "
 "it and what helps is on the Proton page."
 
-#: dynotiq.py:6392
+#: dynotiq.py:6398
 msgid "Proton öffnen"
 msgstr "Open Proton"
 
-#: dynotiq.py:6407
+#: dynotiq.py:6413
 msgid "1 Menüeintrag zeigt ins Leere"
 msgstr "1 menu entry points nowhere"
 
-#: dynotiq.py:6408
+#: dynotiq.py:6414
 #, python-brace-format
 msgid "{n} Menüeinträge zeigen ins Leere"
 msgstr "{n} menu entries point nowhere"
 
-#: dynotiq.py:6409
+#: dynotiq.py:6415
 msgid ""
 "Zu diesen Einträgen gibt es kein Programm mehr. Sie stehen in deinem Home-"
 "Verzeichnis, nicht im System, und lassen sich gefahrlos entfernen. "
@@ -3465,21 +3465,21 @@ msgstr ""
 "directory, not in the system, and can be removed safely. Nothing gets "
 "uninstalled by this, the programs are gone already."
 
-#: dynotiq.py:6416
+#: dynotiq.py:6422
 #, python-brace-format
 msgid "{name}: {why}"
 msgstr "{name}: {why}"
 
-#: dynotiq.py:6418
+#: dynotiq.py:6424
 msgid "Einträge entfernen"
 msgstr "Remove entries"
 
-#: dynotiq.py:6431
+#: dynotiq.py:6437
 #, python-brace-format
 msgid "Swap zu {pct:.0f} % belegt"
 msgstr "Swap is {pct:.0f} % used"
 
-#: dynotiq.py:6433
+#: dynotiq.py:6439
 #, python-brace-format
 msgid ""
 "Das System lagert aus, und frei sind nur noch {avail:.1f} von {ram:.0f} GB. "
@@ -3488,16 +3488,16 @@ msgstr ""
 "The system is swapping out, and only {avail:.1f} of {ram:.0f} GB are left. "
 "More RAM or fewer open programs."
 
-#: dynotiq.py:6489
+#: dynotiq.py:6495
 msgid "1 Dienst läuft nicht"
 msgstr "1 service is not running"
 
-#: dynotiq.py:6490
+#: dynotiq.py:6496
 #, python-brace-format
 msgid "{n} Dienste laufen nicht"
 msgstr "{n} services are not running"
 
-#: dynotiq.py:6491
+#: dynotiq.py:6497
 msgid ""
 "systemd hat sie gestartet und sie sind gescheitert. Was davon abhängt, "
 "funktioniert nicht, ohne dass irgendwo eine Meldung erscheint."
@@ -3505,58 +3505,58 @@ msgstr ""
 "systemd started them and they failed. Whatever depends on them does not "
 "work, and no message shows up anywhere."
 
-#: dynotiq.py:6494
+#: dynotiq.py:6500
 #, python-brace-format
 msgid "{n} Dienst(e)"
 msgstr "{n} service(s)"
 
-#: dynotiq.py:6497
+#: dynotiq.py:6503
 #, python-brace-format
 msgid "{unit}: {was}"
 msgstr "{unit}: {was}"
 
-#: dynotiq.py:6498
+#: dynotiq.py:6504
 msgid "ohne Beschreibung"
 msgstr "no description"
 
-#: dynotiq.py:6501
+#: dynotiq.py:6507
 msgid "Journal ansehen"
 msgstr "View the journal"
 
-#: dynotiq.py:6511
+#: dynotiq.py:6517
 msgid "1 kritischer Vorfall in den letzten 24 Stunden"
 msgstr "1 critical incident in the last 24 hours"
 
-#: dynotiq.py:6513
+#: dynotiq.py:6519
 #, python-brace-format
 msgid "{n} kritische Vorfälle in den letzten 24 Stunden"
 msgstr "{n} critical incidents in the last 24 hours"
 
-#: dynotiq.py:6516
+#: dynotiq.py:6522
 #, python-brace-format
 msgid "{n} Ereignis(se)"
 msgstr "{n} event(s)"
 
-#: dynotiq.py:6519
+#: dynotiq.py:6525
 #, python-brace-format
 msgid "{when}: {what}"
 msgstr "{when}: {what}"
 
-#: dynotiq.py:6523
+#: dynotiq.py:6529
 msgid "Vorfälle öffnen"
 msgstr "Open Incidents"
 
-#: dynotiq.py:6571
+#: dynotiq.py:6577
 #, python-brace-format
 msgid ", überwiegend {prog}"
 msgstr ", mostly {prog}"
 
-#: dynotiq.py:6573
+#: dynotiq.py:6579
 #, python-brace-format
 msgid "Journal wächst mit {rate:.0f} Zeilen pro Minute"
 msgstr "Journal is growing by {rate:.0f} lines per minute"
 
-#: dynotiq.py:6575
+#: dynotiq.py:6581
 #, python-brace-format
 msgid ""
 "Hochgerechnet {k:.0f} Tausend Zeilen pro Tag{who}. Das füllt die Platte und "
@@ -3565,21 +3565,21 @@ msgstr ""
 "Extrapolated to {k:.0f} thousand lines per day{who}. That fills the disk and "
 "makes every journal search slow."
 
-#: dynotiq.py:6580
+#: dynotiq.py:6586
 #, python-brace-format
 msgid "{prog}: {n} Zeilen in fünf Minuten"
 msgstr "{prog}: {n} lines in five minutes"
 
-#: dynotiq.py:6582
+#: dynotiq.py:6588
 msgid "Nachsehen, was da steht"
 msgstr "See what it writes"
 
-#: dynotiq.py:6593
+#: dynotiq.py:6599
 #, python-brace-format
 msgid "{n} Paket-Updates stehen aus"
 msgstr "{n} package updates are pending"
 
-#: dynotiq.py:6594
+#: dynotiq.py:6600
 msgid ""
 "Sicherheits- und Treiber-Updates bleiben sonst liegen. Die Updates-Seite "
 "zeigt sie einzeln und installiert sie."
@@ -3587,15 +3587,15 @@ msgstr ""
 "Otherwise security and driver updates are left behind. The updates page "
 "lists them one by one and installs them."
 
-#: dynotiq.py:6597
+#: dynotiq.py:6603
 msgid "Updates öffnen"
 msgstr "Open Updates"
 
-#: dynotiq.py:6618
+#: dynotiq.py:6624
 msgid "dynotiq bekommt keine Updates"
 msgstr "dynotiq gets no updates"
 
-#: dynotiq.py:6619
+#: dynotiq.py:6625
 #, python-brace-format
 msgid ""
 "Version {v} steht in keiner Paketquelle. Ohne sie kommt hier nie eine neue "
@@ -3604,16 +3604,16 @@ msgstr ""
 "Version {v} is in no package source. Without one, a newer release will never "
 "arrive here. The three commands put the key and the source back."
 
-#: dynotiq.py:6622
+#: dynotiq.py:6628
 msgid "keine Quelle"
 msgstr "no source"
 
-#: dynotiq.py:6632
+#: dynotiq.py:6638
 #, python-brace-format
 msgid "dynotiq {v} ist verfügbar"
 msgstr "dynotiq {v} is available"
 
-#: dynotiq.py:6633
+#: dynotiq.py:6639
 #, python-brace-format
 msgid ""
 "Installiert ist {v}. Das Update kommt aus der Paketquelle und läuft wie "
@@ -3622,19 +3622,19 @@ msgstr ""
 "Version {v} is installed. The update comes from the package source and runs "
 "through apt like any other package."
 
-#: dynotiq.py:6637
+#: dynotiq.py:6643
 msgid "Dieses Fenster läuft bis zum Schließen mit der alten Fassung weiter."
 msgstr "This window keeps running the old build until you close it."
 
-#: dynotiq.py:6722
+#: dynotiq.py:6728
 msgid "In Steam prüfen lassen"
 msgstr "Let Steam verify it"
 
-#: dynotiq.py:6728 dynotiq.py:13502
+#: dynotiq.py:6734 dynotiq.py:13616
 msgid "Steam-Laufzeitumgebung unvollständig"
 msgstr "Steam runtime is incomplete"
 
-#: dynotiq.py:6729
+#: dynotiq.py:6735
 msgid ""
 "Steam hält die Laufzeitumgebung für installiert, aber Dateien fehlen auf der "
 "Platte. Spiele, die sie brauchen, starten dann gar nicht oder fallen auf "
@@ -3643,18 +3643,18 @@ msgstr ""
 "Steam thinks the runtime is installed, but files are missing on disk. Games "
 "that need it either fail to start or fall back to an older one."
 
-#: dynotiq.py:6732
+#: dynotiq.py:6738
 msgid ""
 "In Steam die Installation der Laufzeitumgebung prüfen lassen, das lädt das "
 "Fehlende nach."
 msgstr ""
 "Have Steam verify the runtime installation, that downloads what is missing."
 
-#: dynotiq.py:6739
+#: dynotiq.py:6745
 msgid "Dateisystemfehler, ext4 schaltet auf nur lesen"
 msgstr "File system error, ext4 switched to read-only"
 
-#: dynotiq.py:6740
+#: dynotiq.py:6746
 msgid ""
 "Der Kernel hat im Dateisystem eine Unstimmigkeit gefunden. Ubuntu hängt mit "
 "errors=remount-ro ein, deshalb ist die Partition ab sofort schreibgeschützt."
@@ -3662,7 +3662,7 @@ msgstr ""
 "The kernel found an inconsistency in the file system. Ubuntu mounts with "
 "errors=remount-ro, so the partition is write protected from now on."
 
-#: dynotiq.py:6743
+#: dynotiq.py:6749
 msgid ""
 "Erst sichern, was lesbar ist. Dann von einem Live-USB fsck.ext4 -f auf die "
 "Partition laufen lassen, nie auf dem laufenden System. Danach den "
@@ -3672,11 +3672,11 @@ msgstr ""
 "from a live USB, never on the running system. Check the drive itself "
 "afterwards, otherwise the error comes back."
 
-#: dynotiq.py:6751
+#: dynotiq.py:6757
 msgid "NVMe antwortet nicht, der Treiber setzt sie zurück"
 msgstr "NVMe stopped responding, the driver is resetting it"
 
-#: dynotiq.py:6752
+#: dynotiq.py:6758
 msgid ""
 "Ein Kommando kam nicht in der Frist zurück, deshalb setzt der Treiber den "
 "Controller zurück. Währenddessen hängt jeder Zugriff auf die Platte. "
@@ -3687,7 +3687,7 @@ msgstr ""
 "While that happens every access to the drive stalls. The cause is firmware, "
 "power states that are too deep, heat or a dying SSD."
 
-#: dynotiq.py:6756
+#: dynotiq.py:6762
 msgid ""
 "Zustand der SSD ansehen (smartmontools installieren, dann sudo smartctl -a /"
 "dev/nvme0). Bei Medienfehlern tauschen. Sonst hilft oft der Kernelparameter "
@@ -3699,11 +3699,11 @@ msgstr ""
 "parameter nvme_core.default_ps_max_latency_us=0 often helps, it forbids the "
 "deepest power states."
 
-#: dynotiq.py:6763
+#: dynotiq.py:6769
 msgid "PCIe meldet einen nicht behebbaren Fehler"
 msgstr "PCIe reports an uncorrectable error"
 
-#: dynotiq.py:6764
+#: dynotiq.py:6770
 msgid ""
 "Eine Steckkarte oder ein M.2-Modul überträgt fehlerhaft, und der Fehler ließ "
 "sich nicht korrigieren. Am Desktop steckt meist eine schlecht sitzende "
@@ -3713,7 +3713,7 @@ msgstr ""
 "On a desktop that usually means a card that does not sit properly, a riser "
 "cable or a dying SSD."
 
-#: dynotiq.py:6768
+#: dynotiq.py:6774
 msgid ""
 "Karte oder M.2-Modul neu einsetzen, anderen Slot testen, BIOS aktualisieren. "
 "Welches Gerät gemeint ist, zeigt lspci mit der Adresse aus der Meldung."
@@ -3721,11 +3721,11 @@ msgstr ""
 "Reseat the card or M.2 module, try another slot, update the BIOS. Which "
 "device is meant shows up in lspci with the address from the message."
 
-#: dynotiq.py:6773
+#: dynotiq.py:6779
 msgid "AMD-Grafik hängt im Zeitlimit"
 msgstr "AMD graphics ran into a timeout"
 
-#: dynotiq.py:6774
+#: dynotiq.py:6780
 msgid ""
 "Die Karte hat eine eingereichte Aufgabe nicht fertig bekommen, der Treiber "
 "setzt sie zurück. Sichtbar als Standbild für ein paar Sekunden oder als "
@@ -3734,7 +3734,7 @@ msgstr ""
 "The card did not finish a submitted job, so the driver resets it. You see it "
 "as a frozen picture for a few seconds or as a crashed session."
 
-#: dynotiq.py:6777
+#: dynotiq.py:6783
 msgid ""
 "Mesa und Kernel aktualisieren. Hält es an, hilft oft der Kernelparameter "
 "amdgpu.ppfeaturemask=0xfffd7fff, der die aggressiven Stromsparzustände "
@@ -3744,11 +3744,11 @@ msgstr ""
 "ppfeaturemask=0xfffd7fff often helps, it turns off the aggressive power "
 "saving states. Undo overclocking and XMP as a test."
 
-#: dynotiq.py:6785
+#: dynotiq.py:6791
 msgid "Der Bildwechsel wurde abgelehnt"
 msgstr "The screen update was rejected"
 
-#: dynotiq.py:6786
+#: dynotiq.py:6792
 msgid ""
 "Der Compositor hat einen Bildwechsel an den Grafiktreiber geschickt und der "
 "hat abgelehnt. Sichtbar als kurzes Schwarzbild, stehender Monitor oder ein "
@@ -3758,7 +3758,7 @@ msgstr ""
 "rejected. You see a short black screen, a monitor that stops or a picture "
 "that no longer moves. Mostly when leaving full screen."
 
-#: dynotiq.py:6790
+#: dynotiq.py:6796
 msgid ""
 "Kernel und Grafiktreiber aktualisieren. Bleibt es, variable "
 "Bildwiederholrate testweise abschalten, bei NVIDIA prüfen, ob nvidia-drm."
@@ -3767,11 +3767,11 @@ msgstr ""
 "Update the kernel and the graphics driver. If it stays, turn off variable "
 "refresh rate as a test, on NVIDIA check whether nvidia-drm.modeset=1 is set."
 
-#: dynotiq.py:6795
+#: dynotiq.py:6801
 msgid "systemd-oomd hat eine Anwendung beendet"
 msgstr "systemd-oomd killed an application"
 
-#: dynotiq.py:6796
+#: dynotiq.py:6802
 msgid ""
 "Der Speicherdruck war zu hoch, deshalb hat systemd-oomd die betroffene "
 "Gruppe abgeschossen, bevor der Kernel eingreifen musste. Das erklärt ein "
@@ -3781,7 +3781,7 @@ msgstr ""
 "before the kernel had to step in. That explains a program that was simply "
 "gone without any crash message."
 
-#: dynotiq.py:6800
+#: dynotiq.py:6806
 msgid ""
 "Mehr Swap oder weniger gleichzeitige Last. Wer die Grenze verschieben will, "
 "setzt ManagedOOMMemoryPressureLimit für die Unit, die globale Vorgabe steht "
@@ -3791,76 +3791,76 @@ msgstr ""
 "ManagedOOMMemoryPressureLimit for the unit, the global default lives in /etc/"
 "systemd/oomd.conf."
 
-#: dynotiq.py:6828
+#: dynotiq.py:6834
 msgid "Audio-Aussetzer erkannt"
 msgstr "Audio dropouts detected"
 
-#: dynotiq.py:6831
+#: dynotiq.py:6837
 msgid "GPU-Treiberfehler erkannt"
 msgstr "GPU driver error detected"
 
-#: dynotiq.py:6835
+#: dynotiq.py:6841
 msgid "OOM-Killer aktiv"
 msgstr "OOM killer active"
 
-#: dynotiq.py:6844
+#: dynotiq.py:6850
 msgid "Audio"
 msgstr "Audio"
 
-#: dynotiq.py:6844
+#: dynotiq.py:6850
 msgid "GPU"
 msgstr "GPU"
 
-#: dynotiq.py:6845
+#: dynotiq.py:6851
 msgid "Systemd"
 msgstr "Systemd"
 
-#: dynotiq.py:6846
+#: dynotiq.py:6852
 msgid "Datenträger"
 msgstr "Drives"
 
-#: dynotiq.py:6846
+#: dynotiq.py:6852
 msgid "Alle"
 msgstr "All"
 
-#: dynotiq.py:6894
+#: dynotiq.py:6900
 msgid "systemd-Unit fehlgeschlagen"
 msgstr "systemd unit failed"
 
-#: dynotiq.py:6938
+#: dynotiq.py:6944
 msgid "Neues Ubuntu-Release"
 msgstr "New Ubuntu release"
 
-#: dynotiq.py:7013
+#: dynotiq.py:7019
 #, python-brace-format
 msgid "CPU {temp} °C"
 msgstr "CPU {temp} °C"
 
-#: dynotiq.py:7015
+#: dynotiq.py:7021
 #, python-brace-format
 msgid "GPU {temp} °C"
 msgstr "GPU {temp} °C"
 
-#: dynotiq.py:7017
+#: dynotiq.py:7023
 #, python-brace-format
 msgid " bei {mhz} MHz"
 msgstr " at {mhz} MHz"
 
-#: dynotiq.py:7019
+#: dynotiq.py:7025
 msgid ", gedrosselt"
 msgstr ", throttled"
 
-#: dynotiq.py:7022
+#: dynotiq.py:7028
 #, python-brace-format
 msgid "RAM {pct} %"
 msgstr "RAM {pct} %"
 
-#: dynotiq.py:7024
+#: dynotiq.py:7030
 #, python-brace-format
 msgid "Last {load:.1f}"
 msgstr "Load {load:.1f}"
 
-#: dynotiq.py:7107
+#: dynotiq.py:7113
 msgid ""
 "Xid 79: GPU has fallen off the bus. Der PCIe-Bus antwortet nicht mehr, die "
 "GPU ist aus Systemsicht komplett verschwunden."
@@ -3868,20 +3868,20 @@ msgstr ""
 "Xid 79: GPU has fallen off the bus. The PCIe bus stopped responding, from "
 "the system's point of view the GPU has vanished completely."
 
-#: dynotiq.py:7109
+#: dynotiq.py:7115
 msgid ""
 "Hardwareproblem auf der PCIe-Verbindung (Sitz der Karte, Stromversorgung)"
 msgstr "Hardware problem on the PCIe link (card seating, power supply)"
 
-#: dynotiq.py:7110
+#: dynotiq.py:7116
 msgid "Überhitzung oder instabiles Power-Limit/Overclocking"
 msgstr "Overheating or an unstable power limit / overclock"
 
-#: dynotiq.py:7111
+#: dynotiq.py:7117
 msgid "Fehlerhafter oder zu alter Treiber"
 msgstr "A faulty or outdated driver"
 
-#: dynotiq.py:7112
+#: dynotiq.py:7118
 msgid ""
 "System komplett neu starten (nicht nur die Anwendung), oft hilft nur ein "
 "Reboot, weil die GPU aus dem PCIe-Bus verschwunden ist"
@@ -3889,19 +3889,19 @@ msgstr ""
 "Reboot the whole system (not just the application), often only a reboot "
 "helps because the GPU has disappeared from the PCIe bus"
 
-#: dynotiq.py:7114
+#: dynotiq.py:7120
 msgid "Kartensitz, PCIe-Stromstecker und Kühlung prüfen"
 msgstr "Check card seating, PCIe power connectors and cooling"
 
-#: dynotiq.py:7115
+#: dynotiq.py:7121
 msgid "Bei Overclocking: Takt und Spannung auf Standardwerte zurücksetzen"
 msgstr "If overclocking: reset clock and voltage to stock values"
 
-#: dynotiq.py:7116
+#: dynotiq.py:7122
 msgid "GPU-Treiber aktualisieren (nvidia-smi -q prüfen)"
 msgstr "Update the GPU driver (check nvidia-smi -q)"
 
-#: dynotiq.py:7117
+#: dynotiq.py:7123
 msgid ""
 "Wiederholt sich das häufig: Temperaturen unter Last beobachten (nvidia-smi -"
 "q -d TEMPERATURE), Netzteil-Kapazität prüfen"
@@ -3909,7 +3909,7 @@ msgstr ""
 "If this repeats often: watch temperatures under load (nvidia-smi -q -d "
 "TEMPERATURE), check power supply headroom"
 
-#: dynotiq.py:7120
+#: dynotiq.py:7126
 msgid ""
 "Xid 48: nicht behebbarer Speicherfehler auf der Grafikkarte. Zwei Bits im "
 "selben Wort sind gekippt und ließen sich nicht korrigieren."
@@ -3917,19 +3917,19 @@ msgstr ""
 "Xid 48: uncorrectable memory error on the graphics card. Two bits in the "
 "same word flipped and could not be corrected."
 
-#: dynotiq.py:7122
+#: dynotiq.py:7128
 msgid "Degradierte Speicherzellen auf der Karte"
 msgstr "Degraded memory cells on the card"
 
-#: dynotiq.py:7123
+#: dynotiq.py:7129
 msgid "Instabile Übertaktung des Speichers"
 msgstr "Unstable memory overclock"
 
-#: dynotiq.py:7124
+#: dynotiq.py:7130
 msgid "Übertaktung zurücknehmen und beobachten, ob es wiederkommt"
 msgstr "Undo the overclock and watch whether it comes back"
 
-#: dynotiq.py:7125
+#: dynotiq.py:7131
 msgid ""
 "Bleibt es dabei, ist die Karte defekt, auf Consumer-Karten ist dieser Code "
 "selten und dann ernst gemeint"
@@ -3937,26 +3937,26 @@ msgstr ""
 "If it stays, the card is broken, on consumer cards this code is rare and "
 "then it means what it says"
 
-#: dynotiq.py:7127
+#: dynotiq.py:7133
 msgid ""
 "Folgen davon sind oft Xid 31 in Serie, die zuerst auftretende Meldung zählt"
 msgstr ""
 "It often drags a series of Xid 31 behind it, the message that came first is "
 "the one that counts"
 
-#: dynotiq.py:7129
+#: dynotiq.py:7135
 msgid "Xid 62: interner Mikrocontroller der GPU (PMU) ist stehengeblieben."
 msgstr "Xid 62: the GPU's internal microcontroller (PMU) has stalled."
 
-#: dynotiq.py:7130
+#: dynotiq.py:7136
 msgid "Instabiler Treiberzustand nach längerer Laufzeit"
 msgstr "Unstable driver state after a long uptime"
 
-#: dynotiq.py:7131
+#: dynotiq.py:7137
 msgid "Firmware- oder VBIOS-Problem, selten Hardwaredefekt"
 msgstr "A firmware or VBIOS problem, rarely a hardware defect"
 
-#: dynotiq.py:7132
+#: dynotiq.py:7138
 msgid ""
 "nvidia-smi --gpu-reset probieren, falls keine Prozesse mehr auf der GPU "
 "laufen, sonst System neu starten"
@@ -3964,17 +3964,17 @@ msgstr ""
 "Try nvidia-smi --gpu-reset if no processes are left on the GPU, otherwise "
 "reboot the system"
 
-#: dynotiq.py:7134 dynotiq.py:7168 dynotiq.py:7243
+#: dynotiq.py:7140 dynotiq.py:7174 dynotiq.py:7249
 msgid "GPU-Treiber aktualisieren"
 msgstr "Update the GPU driver"
 
-#: dynotiq.py:7135
+#: dynotiq.py:7141
 msgid ""
 "Tritt es wiederholt auf: VBIOS-Version prüfen, Hersteller-Support "
 "kontaktieren"
 msgstr "If it repeats: check the VBIOS version, contact the vendor's support"
 
-#: dynotiq.py:7137
+#: dynotiq.py:7143
 msgid ""
 "Xid 43: GPU-Kanal wurde zurückgesetzt, die GPU bleibt laut NVIDIA dabei in "
 "einem gesunden Zustand."
@@ -3982,11 +3982,11 @@ msgstr ""
 "Xid 43: a GPU channel was reset, according to NVIDIA the GPU stays in a "
 "healthy state."
 
-#: dynotiq.py:7139
+#: dynotiq.py:7145
 msgid "Meist ein Softwarefehler in der Anwendung, die die GPU genutzt hat"
 msgstr "Usually a software bug in the application that used the GPU"
 
-#: dynotiq.py:7140
+#: dynotiq.py:7146
 msgid ""
 "Nur relevant, wenn die betroffene Anwendung abgestürzt ist, dann dort nach "
 "einem Update suchen"
@@ -3994,32 +3994,32 @@ msgstr ""
 "Only relevant if the affected application crashed, then look for an update "
 "there"
 
-#: dynotiq.py:7142
+#: dynotiq.py:7148
 msgid "Tritt es isoliert auf und lief alles weiter: keine Aktion nötig"
 msgstr ""
 "If it happens in isolation and everything kept running: no action needed"
 
-#: dynotiq.py:7144
+#: dynotiq.py:7150
 msgid "Xid 8: GPU-Kanal ist wegen eines Timeouts gestoppt worden."
 msgstr "Xid 8: a GPU channel was stopped because of a timeout."
 
-#: dynotiq.py:7145
+#: dynotiq.py:7151
 msgid ""
 "Anwendung oder Spiel hat die GPU zu lange blockiert oder ist hängengeblieben"
 msgstr "An application or game blocked the GPU for too long or got stuck"
 
-#: dynotiq.py:7146
+#: dynotiq.py:7152
 msgid "Betroffene Anwendung neu starten"
 msgstr "Restart the affected application"
 
-#: dynotiq.py:7147
+#: dynotiq.py:7153
 msgid ""
 "Tritt es nur bei einer bestimmten Anwendung auf: dort nach einem Update "
 "suchen"
 msgstr ""
 "If it only happens with one specific application: look for an update there"
 
-#: dynotiq.py:7149
+#: dynotiq.py:7155
 msgid ""
 "Xid 13: Graphics Engine Exception, typischerweise ein Programmierfehler in "
 "der Anwendung, etwa ein Zugriff außerhalb eines Arrays auf der GPU."
@@ -4027,15 +4027,15 @@ msgstr ""
 "Xid 13: Graphics Engine Exception, typically a programming error in the "
 "application, such as an out of bounds array access on the GPU."
 
-#: dynotiq.py:7151
+#: dynotiq.py:7157
 msgid "Bug in der Anwendung oder dem Spiel, das die GPU genutzt hat"
 msgstr "A bug in the application or game that used the GPU"
 
-#: dynotiq.py:7152
+#: dynotiq.py:7158
 msgid "Betroffene Anwendung aktualisieren"
 msgstr "Update the affected application"
 
-#: dynotiq.py:7153
+#: dynotiq.py:7159
 msgid ""
 "Tritt es nur bei einer bestimmten Anwendung auf: das ist der beste Hinweis "
 "auf die Ursache, gegebenenfalls beim Hersteller melden"
@@ -4043,7 +4043,7 @@ msgstr ""
 "If it only happens with one specific application: that is the best clue to "
 "the cause, report it to the vendor if needed"
 
-#: dynotiq.py:7156
+#: dynotiq.py:7162
 msgid ""
 "Xid 31: GPU-Speicher-Seitenfehler (MMU-Fehler), meist ein "
 "Speicherzugriffsfehler in der Anwendung."
@@ -4051,15 +4051,15 @@ msgstr ""
 "Xid 31: GPU memory page fault (MMU error), usually a memory access error in "
 "the application."
 
-#: dynotiq.py:7158
+#: dynotiq.py:7164
 msgid "Anwendung greift auf ungültigen GPU-Speicherbereich zu"
 msgstr "The application accesses an invalid GPU memory region"
 
-#: dynotiq.py:7159
+#: dynotiq.py:7165
 msgid "Betroffene Anwendung oder Treiber aktualisieren"
 msgstr "Update the affected application or the driver"
 
-#: dynotiq.py:7160
+#: dynotiq.py:7166
 msgid ""
 "Kein Hardwaredefekt, laut NVIDIA kein RMA-Grund, wenn es nur bei dieser "
 "einen Anwendung auftritt"
@@ -4067,7 +4067,7 @@ msgstr ""
 "Not a hardware defect, according to NVIDIA no reason for an RMA if it only "
 "happens with this one application"
 
-#: dynotiq.py:7163
+#: dynotiq.py:7169
 msgid ""
 "Xid 32: beschädigter Command-Buffer, meist ein PCIe-Qualitäts- oder "
 "Treiberproblem, kein direkter Anwendungsfehler."
@@ -4075,20 +4075,20 @@ msgstr ""
 "Xid 32: corrupted command buffer, usually a PCIe signal quality or driver "
 "problem, not a direct application error."
 
-#: dynotiq.py:7165
+#: dynotiq.py:7171
 msgid "PCIe-Signalqualität (Sitz der Karte, Riser-Kabel)"
 msgstr "PCIe signal quality (card seating, riser cable)"
 
-#: dynotiq.py:7166
+#: dynotiq.py:7172
 msgid "Treiber- oder Speicherkorruption auf Host-Seite"
 msgstr "Driver or memory corruption on the host side"
 
-#: dynotiq.py:7167
+#: dynotiq.py:7173
 msgid "Kartensitz prüfen, bei PCIe-Riser-Kabel einmal ohne testen"
 msgstr ""
 "Check card seating, if a PCIe riser cable is in use test once without it"
 
-#: dynotiq.py:7177
+#: dynotiq.py:7183
 msgid ""
 "Audio-Buffer-Underrun (Xrun): PipeWire oder PulseAudio konnte den Puffer "
 "nicht rechtzeitig füllen, hörbar als kurzes Knacken."
@@ -4096,32 +4096,32 @@ msgstr ""
 "Audio buffer underrun (xrun): PipeWire or PulseAudio could not fill the "
 "buffer in time, audible as a short crackle."
 
-#: dynotiq.py:7179
+#: dynotiq.py:7185
 msgid "Quantum oder Puffergröße zu niedrig für die aktuelle CPU-Last"
 msgstr "Quantum or buffer size too low for the current CPU load"
 
-#: dynotiq.py:7180
+#: dynotiq.py:7186
 msgid ""
 "CPU-Governor auf powersave, der Prozessor taktet nicht schnell genug hoch"
 msgstr "CPU governor on powersave, the processor does not clock up fast enough"
 
-#: dynotiq.py:7181
+#: dynotiq.py:7187
 msgid ""
 "Ein anderer Prozess blockiert kurzzeitig CPU oder I/O, etwa Kompilieren oder "
 "ein Backup"
 msgstr ""
 "Another process briefly blocks CPU or I/O, such as a compile or a backup"
 
-#: dynotiq.py:7183
+#: dynotiq.py:7189
 msgid "USB-Audio-Gerät mit hoher Latenz oder instabilem Port"
 msgstr "A USB audio device with high latency or an unstable port"
 
-#: dynotiq.py:7184
+#: dynotiq.py:7190
 msgid ""
 "pw-top laufen lassen und beobachten, welcher Client die Xruns verursacht"
 msgstr "Run pw-top and watch which client causes the xruns"
 
-#: dynotiq.py:7185
+#: dynotiq.py:7191
 msgid ""
 "Quantum probeweise erhöhen: pw-metadata -n settings 0 clock.force-quantum "
 "1024"
@@ -4129,7 +4129,7 @@ msgstr ""
 "Raise the quantum as a test: pw-metadata -n settings 0 clock.force-quantum "
 "1024"
 
-#: dynotiq.py:7187
+#: dynotiq.py:7193
 msgid ""
 "Bessert sich das, schrittweise wieder runter (512, 256) bis die Xruns "
 "zurückkommen, dann eine Stufe höher bleiben"
@@ -4137,23 +4137,23 @@ msgstr ""
 "If that helps, step back down (512, 256) until the xruns return, then stay "
 "one step above"
 
-#: dynotiq.py:7189
+#: dynotiq.py:7195
 msgid "cpupower frequency-info prüfen, Governor auf performance oder schedutil"
 msgstr ""
 "Check cpupower frequency-info, set the governor to performance or schedutil"
 
-#: dynotiq.py:7190
+#: dynotiq.py:7196
 msgid "Bei USB-Audio: anderen Port testen, USB-Autosuspend für das Gerät aus"
 msgstr ""
 "For USB audio: try another port, turn off USB autosuspend for the device"
 
-#: dynotiq.py:7193
+#: dynotiq.py:7199
 msgid ""
 "Der Kernel hat einen Prozess beendet, weil dem System der Arbeitsspeicher "
 "ausgegangen ist."
 msgstr "The kernel killed a process because the system ran out of memory."
 
-#: dynotiq.py:7195
+#: dynotiq.py:7201
 msgid ""
 "Ein Prozess hat deutlich mehr Speicher belegt als erwartet, Leck oder "
 "schlicht zu große Last wie viele Browser-Tabs oder eine RAM-hungrige VM"
@@ -4161,15 +4161,15 @@ msgstr ""
 "A process used far more memory than expected, a leak or simply too much load "
 "such as many browser tabs or a RAM hungry VM"
 
-#: dynotiq.py:7197
+#: dynotiq.py:7203
 msgid "Zu wenig oder kein Swap bzw. zram als Puffer für Lastspitzen"
 msgstr "Too little or no swap or zram as a buffer for load peaks"
 
-#: dynotiq.py:7198
+#: dynotiq.py:7204
 msgid "Mehrere speicherhungrige Programme liefen gleichzeitig"
 msgstr "Several memory hungry programs ran at the same time"
 
-#: dynotiq.py:7199
+#: dynotiq.py:7205
 msgid ""
 "journalctl -k --since \"-1 hour\" | grep -i 'killed process' für Details zum "
 "getroffenen Prozess (Name, PID, RSS)"
@@ -4177,11 +4177,11 @@ msgstr ""
 "journalctl -k --since \\\"-1 hour\\\" | grep -i 'killed process' for details "
 "on the process that was hit (name, PID, RSS)"
 
-#: dynotiq.py:7201
+#: dynotiq.py:7207
 msgid "free -h ausführen, Speicher- und Swap-Stand prüfen"
 msgstr "Run free -h, check memory and swap usage"
 
-#: dynotiq.py:7202
+#: dynotiq.py:7208
 msgid ""
 "Falls kein Swap aktiv: zram über systemd-zram-generator oder eine Swapdatei "
 "einrichten"
@@ -4189,13 +4189,13 @@ msgstr ""
 "If no swap is active: set up zram through systemd-zram-generator or a swap "
 "file"
 
-#: dynotiq.py:7204
+#: dynotiq.py:7210
 msgid "Betroffenes Programm auf ein Speicherleck prüfen, etwa laufend in htop"
 msgstr ""
 "Check the affected program for a memory leak, for instance by watching it in "
 "htop"
 
-#: dynotiq.py:7205
+#: dynotiq.py:7211
 msgid ""
 "Optional systemd-oomd oder earlyoom installieren, damit gezielt statt "
 "zufällig der unwichtigste Prozess beendet wird"
@@ -4203,7 +4203,7 @@ msgstr ""
 "Optionally install systemd-oomd or earlyoom so the least important process "
 "is killed deliberately instead of at random"
 
-#: dynotiq.py:7211
+#: dynotiq.py:7217
 msgid ""
 "Das VirtualBox-Kernelmodul konnte nicht geladen werden. Sehr häufig durch "
 "Secure Boot verursacht, das unsignierte Kernelmodule blockiert."
@@ -4211,7 +4211,7 @@ msgstr ""
 "The VirtualBox kernel module could not be loaded. Very often caused by "
 "Secure Boot, which blocks unsigned kernel modules."
 
-#: dynotiq.py:7213
+#: dynotiq.py:7219
 msgid ""
 "Secure Boot ist aktiv und das Modul ist nicht signiert oder die Signatur "
 "liegt nicht im MOK"
@@ -4219,23 +4219,23 @@ msgstr ""
 "Secure Boot is active and the module is unsigned, or the signature is not in "
 "the MOK"
 
-#: dynotiq.py:7215
+#: dynotiq.py:7221
 msgid "DKMS-Modul wurde nach einem Kernel-Update nicht neu gebaut"
 msgstr "The DKMS module was not rebuilt after a kernel update"
 
-#: dynotiq.py:7216
+#: dynotiq.py:7222
 msgid "dmesg | grep -i vbox für die genaue Fehlermeldung"
 msgstr "dmesg | grep -i vbox for the exact error message"
 
-#: dynotiq.py:7217
+#: dynotiq.py:7223
 msgid "sudo apt install --reinstall virtualbox-dkms baut das Modul neu"
 msgstr "sudo apt install --reinstall virtualbox-dkms rebuilds the module"
 
-#: dynotiq.py:7218
+#: dynotiq.py:7224
 msgid "sudo modprobe vboxdrv danach erneut versuchen"
 msgstr "sudo modprobe vboxdrv to try again afterwards"
 
-#: dynotiq.py:7219
+#: dynotiq.py:7225
 msgid ""
 "Bei Secure Boot den MOK-Schlüssel beim nächsten Neustart im MOK-Manager "
 "bestätigen, alternativ Secure Boot im UEFI abschalten"
@@ -4243,53 +4243,53 @@ msgstr ""
 "With Secure Boot, confirm the MOK key in the MOK manager on the next reboot, "
 "or turn Secure Boot off in the UEFI"
 
-#: dynotiq.py:7222
+#: dynotiq.py:7228
 #, python-brace-format
 msgid "Der systemd-Dienst {unit} ist in den failed-Zustand gewechselt."
 msgstr "The systemd service {unit} has entered the failed state."
 
-#: dynotiq.py:7224
+#: dynotiq.py:7230
 msgid "Fehlkonfiguration der Unit oder der Anwendung selbst"
 msgstr "A misconfiguration of the unit or of the application itself"
 
-#: dynotiq.py:7225
+#: dynotiq.py:7231
 msgid "Fehlende Abhängigkeit beim Start, etwa Netzwerk oder ein Gerät"
 msgstr "A missing dependency at start, such as the network or a device"
 
-#: dynotiq.py:7226
+#: dynotiq.py:7232
 msgid "Anwendung ist beim Start abgestürzt oder mit Fehlercode beendet"
 msgstr "The application crashed at start or exited with an error code"
 
-#: dynotiq.py:7227
+#: dynotiq.py:7233
 #, python-brace-format
 msgid "systemctl status {unit} für den genauen Fehlerstatus"
 msgstr "systemctl status {unit} for the exact failure status"
 
-#: dynotiq.py:7229
+#: dynotiq.py:7235
 #, python-brace-format
 msgid "journalctl -u {unit} -e für die Logs rund um den Absturz"
 msgstr "journalctl -u {unit} -e for the logs around the crash"
 
-#: dynotiq.py:7231
+#: dynotiq.py:7237
 #, python-brace-format
 msgid "Nach Beheben der Ursache: systemctl restart {unit}"
 msgstr "After fixing the cause: systemctl restart {unit}"
 
-#: dynotiq.py:7239
+#: dynotiq.py:7245
 #, python-brace-format
 msgid ""
 "Xid {code}: GPU-Fehler, für diesen Code liegt noch kein eigener Eintrag vor."
 msgstr "Xid {code}: GPU error, there is no dedicated entry for this code yet."
 
-#: dynotiq.py:7241
+#: dynotiq.py:7247
 msgid "Siehe NVIDIA Xid-Errors-Dokumentation für die Code-Details"
 msgstr "See the NVIDIA Xid Errors documentation for the details of this code"
 
-#: dynotiq.py:7242
+#: dynotiq.py:7248
 msgid "nvidia-bug-report.sh ausführen, falls der Fehler sich wiederholt"
 msgstr "Run nvidia-bug-report.sh if the error repeats"
 
-#: dynotiq.py:7245
+#: dynotiq.py:7251
 msgid ""
 "GPU- oder Display-Fehler ohne erkennbaren Xid-Code, etwa ein anderer Treiber "
 "als NVIDIA oder ein Compositor-Neustart."
@@ -4297,15 +4297,15 @@ msgstr ""
 "A GPU or display error without a recognisable Xid code, for instance a "
 "driver other than NVIDIA or a compositor restart."
 
-#: dynotiq.py:7247
+#: dynotiq.py:7253
 msgid "Compositor ist abgestürzt und neugestartet"
 msgstr "The compositor crashed and restarted"
 
-#: dynotiq.py:7248
+#: dynotiq.py:7254
 msgid "Treiberfehler eines AMD- oder Intel-Treibers"
 msgstr "A driver error in an AMD or Intel driver"
 
-#: dynotiq.py:7249
+#: dynotiq.py:7255
 msgid ""
 "journalctl -k --since \"-1 hour\" auf weitere Details rund um den Zeitpunkt "
 "prüfen"
@@ -4313,144 +4313,144 @@ msgstr ""
 "Check journalctl -k --since \\\"-1 hour\\\" for more details around that "
 "moment"
 
-#: dynotiq.py:7251
+#: dynotiq.py:7257
 msgid "Grafiktreiber aktualisieren"
 msgstr "Update the graphics driver"
 
-#: dynotiq.py:7255
+#: dynotiq.py:7261
 msgid "Für diesen Typ gibt es noch keinen Eintrag in der Wissensbasis."
 msgstr "There is no knowledge base entry for this type yet."
 
-#: dynotiq.py:7256
+#: dynotiq.py:7262
 msgid "Journal-Auszug oben manuell prüfen."
 msgstr "Check the journal excerpt above by hand."
 
-#: dynotiq.py:7275
+#: dynotiq.py:7281
 msgid "Der Wechsel wird jetzt offiziell angeboten."
 msgstr "The switch is now officially offered."
 
-#: dynotiq.py:7299
+#: dynotiq.py:7305
 msgid "1 Update wartet"
 msgstr "1 update waiting"
 
-#: dynotiq.py:7299
+#: dynotiq.py:7305
 #, python-brace-format
 msgid "{n} Updates warten"
 msgstr "{n} updates are waiting"
 
-#: dynotiq.py:7300
+#: dynotiq.py:7306
 msgid "Auf der Updates-Seite von dynotiq stehen sie mit Größe und Version."
 msgstr "The updates page of dynotiq lists them with size and version."
 
-#: dynotiq.py:7331
+#: dynotiq.py:7337
 #, python-brace-format
 msgid "{game}: {verdict}"
 msgstr "{game}: {verdict}"
 
-#: dynotiq.py:7333
+#: dynotiq.py:7339
 #, python-brace-format
 msgid "{mins:.0f} Minuten aufgezeichnet, der Bericht steht im Prüfstand."
 msgstr "{mins:.0f} minutes recorded, the report is on the dyno page."
 
-#: dynotiq.py:7365
+#: dynotiq.py:7371
 msgid "1 neuer Vorfall"
 msgstr "1 new incident"
 
-#: dynotiq.py:7366
+#: dynotiq.py:7372
 #, python-brace-format
 msgid "{n} neue Vorfälle"
 msgstr "{n} new incidents"
 
-#: dynotiq.py:7452
+#: dynotiq.py:7458
 #, python-brace-format
 msgid ""
 "Zu wenig Platz für den Test: {free:.0f} MiB frei, nötig sind {need:.0f} MiB"
 msgstr ""
 "Not enough space for the test: {free:.0f} MiB free, {need:.0f} MiB needed"
 
-#: dynotiq.py:7682
+#: dynotiq.py:7688
 msgid "DIAGNOSE"
 msgstr "DIAGNOSTICS"
 
-#: dynotiq.py:7682
+#: dynotiq.py:7688
 msgid "Übersicht"
 msgstr "Overview"
 
-#: dynotiq.py:7682 dynotiq.py:8823
+#: dynotiq.py:7688 dynotiq.py:8829
 msgid "Probleme"
 msgstr "Problems"
 
-#: dynotiq.py:7683 dynotiq.py:9271
+#: dynotiq.py:7689 dynotiq.py:9277
 msgid "Treiber"
 msgstr "Drivers"
 
-#: dynotiq.py:7684
+#: dynotiq.py:7690
 msgid "SYSTEM"
 msgstr "SYSTEM"
 
-#: dynotiq.py:7684 dynotiq.py:10582
+#: dynotiq.py:7690 dynotiq.py:10588
 msgid "Proton"
 msgstr "Proton"
 
-#: dynotiq.py:7685 dynotiq.py:10757
+#: dynotiq.py:7691 dynotiq.py:10763
 msgid "Autostart"
 msgstr "Startup"
 
-#: dynotiq.py:7685 dynotiq.py:10835
+#: dynotiq.py:7691 dynotiq.py:10841
 msgid "Live-Monitor"
 msgstr "Live Monitor"
 
-#: dynotiq.py:7685 dynotiq.py:10930
+#: dynotiq.py:7691 dynotiq.py:10936
 msgid "Speicher"
 msgstr "Storage"
 
-#: dynotiq.py:7686
+#: dynotiq.py:7692
 msgid "DATEN"
 msgstr "DATA"
 
-#: dynotiq.py:7686 dynotiq.py:11058
+#: dynotiq.py:7692 dynotiq.py:11064
 msgid "Benchmark"
 msgstr "Benchmark"
 
-#: dynotiq.py:7686 dynotiq.py:11182
+#: dynotiq.py:7692 dynotiq.py:11188
 msgid "Verlauf"
 msgstr "History"
 
-#: dynotiq.py:7687 dynotiq.py:11313
+#: dynotiq.py:7693 dynotiq.py:11319
 msgid "Einstellungen"
 msgstr "Settings"
 
-#: dynotiq.py:8149
+#: dynotiq.py:8155
 msgid "Systemdiagnose"
 msgstr "System diagnostics"
 
-#: dynotiq.py:8362
+#: dynotiq.py:8368
 msgid "dynotiq öffnen"
 msgstr "Open dynotiq"
 
-#: dynotiq.py:8363 dynotiq.py:8735 dynotiq.py:8820
+#: dynotiq.py:8369 dynotiq.py:8741 dynotiq.py:8826
 msgid "Neu scannen"
 msgstr "Scan again"
 
-#: dynotiq.py:8365
+#: dynotiq.py:8371
 msgid "Beenden"
 msgstr "Quit"
 
-#: dynotiq.py:8382
+#: dynotiq.py:8388
 #, python-brace-format
 msgid "Fehlgeschlagen: {err}"
 msgstr "Failed: {err}"
 
-#: dynotiq.py:8445 dynotiq.py:11346
+#: dynotiq.py:8451 dynotiq.py:11352
 msgid "Statusicon aktiv"
 msgstr "Status icon active"
 
-#: dynotiq.py:8487
+#: dynotiq.py:8493
 #, python-brace-format
 msgid "SYSTEMDIAGNOSE v{v}"
 msgstr "SYSTEM DIAGNOSTICS v{v}"
 
-#: dynotiq.py:8531
+#: dynotiq.py:8537
 #, python-brace-format
 msgid ""
 "{cpu}\n"
@@ -4459,20 +4459,20 @@ msgstr ""
 "{cpu}\n"
 "Reading graphics … · {gb:.0f} GB RAM"
 
-#: dynotiq.py:8579
+#: dynotiq.py:8585
 msgid "Willkommen"
 msgstr "Welcome"
 
-#: dynotiq.py:8580
+#: dynotiq.py:8586
 #, python-brace-format
 msgid "Neu in Version {v}"
 msgstr "New in version {v}"
 
-#: dynotiq.py:8585
+#: dynotiq.py:8591
 msgid "Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es losgehen."
 msgstr "System diagnostics for Ubuntu. A short tour, then you are set."
 
-#: dynotiq.py:8604
+#: dynotiq.py:8610
 msgid ""
 "Nichts davon greift von allein ein. Jeder Eingriff fragt vorher nach und "
 "zeigt, was er ausführt."
@@ -4480,15 +4480,15 @@ msgstr ""
 "None of this acts on its own. Every change asks first and shows you what it "
 "will run."
 
-#: dynotiq.py:8618
+#: dynotiq.py:8624
 msgid "Los geht's"
 msgstr "Let's go"
 
-#: dynotiq.py:8618
+#: dynotiq.py:8624
 msgid "Weiter"
 msgstr "Continue"
 
-#: dynotiq.py:8630
+#: dynotiq.py:8636
 #, python-brace-format
 msgid ""
 "{cpu}\n"
@@ -4497,25 +4497,25 @@ msgstr ""
 "{cpu}\n"
 "{gpu} · {gb:.0f} GB RAM"
 
-#: dynotiq.py:8632
+#: dynotiq.py:8638
 msgid "Keine dGPU"
 msgstr "No dGPU"
 
-#: dynotiq.py:8650
+#: dynotiq.py:8656
 #, python-brace-format
 msgid "{n}x  {msg}"
 msgstr "{n}x  {msg}"
 
-#: dynotiq.py:8651
+#: dynotiq.py:8657
 msgid "Im Moment nichts, der Dienst ist inzwischen still."
 msgstr "Nothing right now, the service has gone quiet."
 
-#: dynotiq.py:8655
+#: dynotiq.py:8661
 #, python-brace-format
 msgid "Ganze Zeilen: journalctl -u {unit} -n 100"
 msgstr "Full lines: journalctl -u {unit} -n 100"
 
-#: dynotiq.py:8657
+#: dynotiq.py:8663
 msgid ""
 "Wiederholt sich dieselbe Meldung, liegt es an dem Dienst, nicht am Journal. "
 "Ob er hier gebraucht wird, zeigt die Seite Autostart, bevor er abgeschaltet "
@@ -4524,11 +4524,11 @@ msgstr ""
 "If the same message repeats, the service is the cause, not the journal. The "
 "Autostart page shows whether it is needed here before it gets switched off."
 
-#: dynotiq.py:8664
+#: dynotiq.py:8670
 msgid "Steam ohne GPU-Beschleunigung der Oberfläche starten?"
 msgstr "Start Steam without GPU acceleration for its interface?"
 
-#: dynotiq.py:8665
+#: dynotiq.py:8671
 #, python-brace-format
 msgid ""
 "Die Startdateien von Steam bekommen den Parameter {flag}. Betroffen sind: "
@@ -4542,33 +4542,33 @@ msgstr ""
 "next time Steam starts, so quit it once and open it again. To undo: delete "
 "the file in your own folder, then the one shipped by Steam applies again."
 
-#: dynotiq.py:8673 dynotiq.py:9025 dynotiq.py:9069 dynotiq.py:9145
-#: dynotiq.py:9720 dynotiq.py:9882 dynotiq.py:10564 dynotiq.py:10568
-#: dynotiq.py:11298 dynotiq.py:11493
+#: dynotiq.py:8679 dynotiq.py:9031 dynotiq.py:9075 dynotiq.py:9151
+#: dynotiq.py:9726 dynotiq.py:9888 dynotiq.py:10570 dynotiq.py:10574
+#: dynotiq.py:11304 dynotiq.py:11499
 msgid "Abbrechen"
 msgstr "Cancel"
 
-#: dynotiq.py:8673
+#: dynotiq.py:8679
 msgid "Setzen"
 msgstr "Set"
 
-#: dynotiq.py:8679
+#: dynotiq.py:8685
 msgid "Startparameter nicht gesetzt"
 msgstr "Launch option not set"
 
-#: dynotiq.py:8682
+#: dynotiq.py:8688
 msgid "Nichts zu ändern"
 msgstr "Nothing to change"
 
-#: dynotiq.py:8683
+#: dynotiq.py:8689
 msgid "Der Parameter steht schon in allen Startdateien."
 msgstr "The option is already in every launcher file."
 
-#: dynotiq.py:8685
+#: dynotiq.py:8691
 msgid "Startparameter gesetzt"
 msgstr "Launch option set"
 
-#: dynotiq.py:8686
+#: dynotiq.py:8692
 #, python-brace-format
 msgid ""
 "Geändert: {files}. Steam einmal beenden und neu starten, vorher greift es "
@@ -4577,68 +4577,68 @@ msgstr ""
 "Changed: {files}. Quit Steam once and start it again, it does not apply "
 "before that."
 
-#: dynotiq.py:8732 dynotiq.py:9905 dynotiq.py:10518 dynotiq.py:11746
+#: dynotiq.py:8738 dynotiq.py:9911 dynotiq.py:10524 dynotiq.py:11752
 msgid "Bericht kopieren"
 msgstr "Copy report"
 
-#: dynotiq.py:8738 dynotiq.py:8756 dynotiq.py:11643
+#: dynotiq.py:8744 dynotiq.py:8762 dynotiq.py:11649
 msgid "Scan läuft …"
 msgstr "Scanning …"
 
-#: dynotiq.py:8745
+#: dynotiq.py:8751
 msgid "Systemzustand"
 msgstr "System health"
 
-#: dynotiq.py:8746
+#: dynotiq.py:8752
 msgid "wird ermittelt"
 msgstr "being determined"
 
-#: dynotiq.py:8754
+#: dynotiq.py:8760
 msgid "BEFUND"
 msgstr "FINDING"
 
-#: dynotiq.py:8793
+#: dynotiq.py:8799
 msgid "Was du zuerst angehen solltest"
 msgstr "What you should tackle first"
 
-#: dynotiq.py:8838 dynotiq.py:11694
+#: dynotiq.py:8844 dynotiq.py:11700
 #, python-brace-format
 msgid "{crit} kritisch · {warn} Hinweise"
 msgstr "{crit} critical · {warn} warnings"
 
-#: dynotiq.py:8842
+#: dynotiq.py:8848
 msgid "Keine Befunde. Das System läuft sauber."
 msgstr "No findings. The system is running clean."
 
-#: dynotiq.py:8845
+#: dynotiq.py:8851
 msgid "Kritisch"
 msgstr "Critical"
 
-#: dynotiq.py:8845
+#: dynotiq.py:8851
 msgid "Hinweise"
 msgstr "Warnings"
 
-#: dynotiq.py:8846
+#: dynotiq.py:8852
 msgid "Zur Kenntnis"
 msgstr "For information"
 
-#: dynotiq.py:8885
+#: dynotiq.py:8891
 msgid "Was heißt das für mich?"
 msgstr "What does this mean for me?"
 
-#: dynotiq.py:8892
+#: dynotiq.py:8898
 msgid "Beheben"
 msgstr "Fix"
 
-#: dynotiq.py:8892
+#: dynotiq.py:8898
 msgid "Details"
 msgstr "Details"
 
-#: dynotiq.py:8903
+#: dynotiq.py:8909
 msgid "Was das für diesen Rechner heißt"
 msgstr "What that means for this machine"
 
-#: dynotiq.py:8935
+#: dynotiq.py:8941
 msgid ""
 "Wird für diesen Rechner geprüft …\n"
 "\n"
@@ -4650,37 +4650,37 @@ msgstr ""
 "This also asks the package sources whether they already know the new "
 "release. It takes a moment."
 
-#: dynotiq.py:8949 dynotiq.py:8988 dynotiq.py:8991 dynotiq.py:9259
-#: dynotiq.py:9262 dynotiq.py:9703 dynotiq.py:9721 dynotiq.py:11597
+#: dynotiq.py:8955 dynotiq.py:8994 dynotiq.py:8997 dynotiq.py:9265
+#: dynotiq.py:9268 dynotiq.py:9709 dynotiq.py:9727 dynotiq.py:11603
 msgid "Schließen"
 msgstr "Close"
 
-#: dynotiq.py:8951
+#: dynotiq.py:8957
 msgid "Text kopieren"
 msgstr "Copy text"
 
-#: dynotiq.py:8973
+#: dynotiq.py:8979
 #, python-brace-format
 msgid "Die Prüfung ist fehlgeschlagen: {err}"
 msgstr "The check failed: {err}"
 
-#: dynotiq.py:8991
+#: dynotiq.py:8997
 msgid "Befehl kopieren"
 msgstr "Copy command"
 
-#: dynotiq.py:8993
+#: dynotiq.py:8999
 msgid "Jetzt ausführen"
 msgstr "Run now"
 
-#: dynotiq.py:9056
+#: dynotiq.py:9062
 msgid "Nichts zu entfernen"
 msgstr "Nothing to remove"
 
-#: dynotiq.py:9057
+#: dynotiq.py:9063
 msgid "Zu jedem Menüeintrag gibt es wieder ein Programm."
 msgstr "Every menu entry has a program behind it again."
 
-#: dynotiq.py:9061
+#: dynotiq.py:9067
 #, python-brace-format
 msgid ""
 "\n"
@@ -4689,16 +4689,16 @@ msgstr ""
 "\n"
 "  … and {n} more"
 
-#: dynotiq.py:9063
+#: dynotiq.py:9069
 msgid "1 Menüeintrag entfernen?"
 msgstr "Remove 1 menu entry?"
 
-#: dynotiq.py:9064
+#: dynotiq.py:9070
 #, python-brace-format
 msgid "{n} Menüeinträge entfernen?"
 msgstr "Remove {n} menu entries?"
 
-#: dynotiq.py:9065
+#: dynotiq.py:9071
 msgid ""
 "\n"
 "\n"
@@ -4712,32 +4712,32 @@ msgstr ""
 "Nothing changes about the programs, they are gone anyway. Nothing under /usr "
 "is touched."
 
-#: dynotiq.py:9069
+#: dynotiq.py:9075
 msgid "Entfernen"
 msgstr "Remove"
 
-#: dynotiq.py:9079
+#: dynotiq.py:9085
 #, python-brace-format
 msgid "{n} von {total} entfernt"
 msgstr "{n} of {total} removed"
 
-#: dynotiq.py:9081
+#: dynotiq.py:9087
 msgid ""
 "Der Rest ließ sich nicht löschen. Meist fehlt das Schreibrecht auf die Datei."
 msgstr ""
 "The rest could not be deleted. Usually the write permission on the file is "
 "missing."
 
-#: dynotiq.py:9084
+#: dynotiq.py:9090
 #, python-brace-format
 msgid "{n} Einträge entfernt"
 msgstr "{n} entries removed"
 
-#: dynotiq.py:9085
+#: dynotiq.py:9091
 msgid "Das Menü zeigt sie beim nächsten Aufbau nicht mehr."
 msgstr "The menu will not show them the next time it is built."
 
-#: dynotiq.py:9113
+#: dynotiq.py:9119
 #, python-brace-format
 msgid ""
 "Jede eingetragene Fremdquelle wird einmal gefragt, ob sie {codename} schon "
@@ -4746,7 +4746,7 @@ msgstr ""
 "Every configured third-party source is asked once whether it knows "
 "{codename}. {secs} seconds at most."
 
-#: dynotiq.py:9122
+#: dynotiq.py:9128
 msgid ""
 "Die Fremdquellen sind noch nicht geprüft. Ohne die Prüfung ist offen, welche "
 "beim Upgrade wegfallen."
@@ -4754,12 +4754,12 @@ msgstr ""
 "The third-party sources have not been checked. Without that check it is open "
 "which of them the upgrade drops."
 
-#: dynotiq.py:9126
+#: dynotiq.py:9132
 #, python-brace-format
 msgid "{n} von {total} Fremdquellen kennen {codename} noch nicht."
 msgstr "{n} of {total} third-party sources do not know {codename} yet."
 
-#: dynotiq.py:9130
+#: dynotiq.py:9136
 msgid ""
 "Quellen ohne Pakete für das neue Release werden vom Upgrade abgeschaltet. "
 "Die Programme daraus bleiben installiert, bekommen aber keine Updates mehr."
@@ -4767,7 +4767,7 @@ msgstr ""
 "Sources without packages for the new release are switched off by the "
 "upgrade. Their programs stay installed but stop getting updates."
 
-#: dynotiq.py:9133
+#: dynotiq.py:9139
 msgid ""
 "Das Upgrade läuft in einem eigenen Terminal, dauert je nach Verbindung eine "
 "halbe bis anderthalb Stunden und endet mit einem Neustart. Vorher einen "
@@ -4777,38 +4777,38 @@ msgstr ""
 "a half depending on the connection and ends with a reboot. Take a Timeshift "
 "snapshot first."
 
-#: dynotiq.py:9139
+#: dynotiq.py:9145
 msgid "Kein Terminal gefunden"
 msgstr "No terminal found"
 
-#: dynotiq.py:9140
+#: dynotiq.py:9146
 msgid ""
 "Das Upgrade gehört in ein sichtbares Terminal. Öffne eins und starte dort:"
 msgstr "The upgrade belongs in a visible terminal. Open one and run:"
 
-#: dynotiq.py:9143
+#: dynotiq.py:9149
 #, python-brace-format
 msgid "Jetzt auf {v} wechseln?"
 msgstr "Switch to {v} now?"
 
-#: dynotiq.py:9145
+#: dynotiq.py:9151
 msgid "Upgrade starten"
 msgstr "Start upgrade"
 
-#: dynotiq.py:9154
+#: dynotiq.py:9160
 msgid "Terminal nicht gestartet"
 msgstr "Terminal did not start"
 
-#: dynotiq.py:9164
+#: dynotiq.py:9170
 msgid "Journal neu einlesen"
 msgstr "Reread journal"
 
-#: dynotiq.py:9167 dynotiq.py:9271 dynotiq.py:9376 dynotiq.py:9385
-#: dynotiq.py:10582 dynotiq.py:10590 dynotiq.py:10757
+#: dynotiq.py:9173 dynotiq.py:9277 dynotiq.py:9382 dynotiq.py:9391
+#: dynotiq.py:10588 dynotiq.py:10596 dynotiq.py:10763
 msgid "wird gelesen …"
 msgstr "reading …"
 
-#: dynotiq.py:9170
+#: dynotiq.py:9176
 msgid ""
 "Gelesen wird das Journal der letzten 24 Stunden. Erkannt werden Audio-"
 "Aussetzer, GPU-Treiberfehler, OOM-Killer-Ereignisse und fehlgeschlagene "
@@ -4817,156 +4817,156 @@ msgstr ""
 "The journal of the last 24 hours is read. Detected are audio dropouts, GPU "
 "driver errors, OOM killer events and failed systemd units."
 
-#: dynotiq.py:9180
+#: dynotiq.py:9186
 msgid "Journal wird gelesen …"
 msgstr "Reading the journal …"
 
-#: dynotiq.py:9192
+#: dynotiq.py:9198
 #, python-brace-format
 msgid "{n} Vorfälle · {crit} kritisch"
 msgstr "{n} incidents · {crit} critical"
 
-#: dynotiq.py:9201
+#: dynotiq.py:9207
 msgid "Keine Vorfälle in diesem Zeitraum."
 msgstr "No incidents in this period."
 
-#: dynotiq.py:9202
+#: dynotiq.py:9208
 #, python-brace-format
 msgid "Keine Vorfälle der Kategorie {cat}."
 msgstr "No incidents in the {cat} category."
 
-#: dynotiq.py:9208
+#: dynotiq.py:9214
 msgid "Erkannte Vorfälle"
 msgstr "Detected incidents"
 
-#: dynotiq.py:9209
+#: dynotiq.py:9215
 #, python-brace-format
 msgid "{n} angezeigt"
 msgstr "{n} shown"
 
-#: dynotiq.py:9227
+#: dynotiq.py:9233
 msgid "Zu dem Zeitpunkt: "
 msgstr "At that moment: "
 
-#: dynotiq.py:9236
+#: dynotiq.py:9242
 msgid "Diagnose"
 msgstr "Diagnosis"
 
-#: dynotiq.py:9245
+#: dynotiq.py:9251
 msgid "Sollte behoben werden"
 msgstr "Should be fixed"
 
-#: dynotiq.py:9245
+#: dynotiq.py:9251
 msgid "Lohnt sich zu beheben"
 msgstr "Worth fixing"
 
-#: dynotiq.py:9246
+#: dynotiq.py:9252
 msgid "Nur zur Information"
 msgstr "For information only"
 
-#: dynotiq.py:9249
+#: dynotiq.py:9255
 msgid "Mögliche Ursachen:"
 msgstr "Possible causes:"
 
-#: dynotiq.py:9251
+#: dynotiq.py:9257
 msgid "Schritte:"
 msgstr "Steps:"
 
-#: dynotiq.py:9254
+#: dynotiq.py:9260
 msgid "Zustand des Rechners zu diesem Zeitpunkt:"
 msgstr "State of the machine at that moment:"
 
-#: dynotiq.py:9255
+#: dynotiq.py:9261
 msgid "Journal-Zeile:"
 msgstr "Journal line:"
 
-#: dynotiq.py:9259 dynotiq.py:9262
+#: dynotiq.py:9265 dynotiq.py:9268
 msgid "Schritte kopieren"
 msgstr "Copy steps"
 
-#: dynotiq.py:9291
+#: dynotiq.py:9297
 #, python-brace-format
 msgid "{n} Geräte · {bad} ohne Treiber · {mods} Module geladen"
 msgstr "{n} devices · {bad} without a driver · {mods} modules loaded"
 
-#: dynotiq.py:9308
+#: dynotiq.py:9314
 msgid "Verfügbare Branches: "
 msgstr "Available branches: "
 
-#: dynotiq.py:9313
+#: dynotiq.py:9319
 #, python-brace-format
 msgid "Empfohlen: {pkg}"
 msgstr "Recommended: {pkg}"
 
-#: dynotiq.py:9315
+#: dynotiq.py:9321
 #, python-brace-format
 msgid "{pkg} installieren"
 msgstr "Install {pkg}"
 
-#: dynotiq.py:9320
+#: dynotiq.py:9326
 msgid "Wechsel der Treiber-Branch, danach Neustart nötig."
 msgstr "Switches the driver branch, a reboot is needed afterwards."
 
-#: dynotiq.py:9342
+#: dynotiq.py:9348
 msgid "Geräte"
 msgstr "Devices"
 
-#: dynotiq.py:9368 dynotiq.py:9393
+#: dynotiq.py:9374 dynotiq.py:9399
 msgid "Paketlisten holen"
 msgstr "Fetch package lists"
 
-#: dynotiq.py:9372 dynotiq.py:10578
+#: dynotiq.py:9378 dynotiq.py:10584
 msgid "Neu einlesen"
 msgstr "Reload"
 
-#: dynotiq.py:9407
+#: dynotiq.py:9413
 #, python-brace-format
 msgid "{n} zurückgehalten"
 msgstr "{n} held back"
 
-#: dynotiq.py:9410
+#: dynotiq.py:9416
 msgid "ungeprüft: "
 msgstr "unchecked: "
 
-#: dynotiq.py:9411
+#: dynotiq.py:9417
 msgid "alles aktuell"
 msgstr "everything up to date"
 
-#: dynotiq.py:9419
+#: dynotiq.py:9425
 msgid "nicht geprüft"
 msgstr "not checked"
 
-#: dynotiq.py:9420
+#: dynotiq.py:9426
 #, python-brace-format
 msgid "{err}. Ob hier Updates anstehen, ist unbekannt."
 msgstr "{err}. Whether updates are pending here is unknown."
 
-#: dynotiq.py:9434
+#: dynotiq.py:9440
 msgid "Alle Quellen sind auf dem aktuellen Stand."
 msgstr "All sources are up to date."
 
-#: dynotiq.py:9456 dynotiq.py:10196 dynotiq.py:11474
+#: dynotiq.py:9462 dynotiq.py:10202 dynotiq.py:11480
 msgid "Installieren"
 msgstr "Install"
 
-#: dynotiq.py:9461
+#: dynotiq.py:9467
 msgid "Alle in dieser Quelle"
 msgstr "All in this source"
 
-#: dynotiq.py:9481
+#: dynotiq.py:9487
 msgid "Ungewöhnlicher Name, hier nicht ausführbar"
 msgstr "Unusual name, cannot be run from here"
 
-#: dynotiq.py:9495
+#: dynotiq.py:9501
 #, python-brace-format
 msgid "Scheiterte zuletzt: {why}"
 msgstr "Last attempt failed: {why}"
 
-#: dynotiq.py:9508
+#: dynotiq.py:9514
 msgid "Deine Konfigurationsdateien bleiben, wie sie sind"
 msgstr "Your configuration files stay as they are"
 
-#: dynotiq.py:9510
+#: dynotiq.py:9516
 msgid ""
 "Bringt ein Paket eine neue Fassung einer Datei unter /etc mit, die du selbst "
 "geändert hast, behält dynotiq deine. Nachfragen kann es nicht: im "
@@ -4979,12 +4979,12 @@ msgstr ""
 "answered in the log window anyway. The new version lands next to it as .dpkg-"
 "dist, and apt names it at the end of the run."
 
-#: dynotiq.py:9525
+#: dynotiq.py:9531
 #, python-brace-format
 msgid "{n} Pakete müssten dafür weichen"
 msgstr "{n} packages would have to go for this"
 
-#: dynotiq.py:9527
+#: dynotiq.py:9533
 msgid ""
 "Das kann diese Seite nicht, sie aktualisiert nur Vorhandenes. Im Terminal: "
 "sudo apt full-upgrade"
@@ -4992,12 +4992,12 @@ msgstr ""
 "This page cannot do that, it only updates what is there. In a terminal: sudo "
 "apt full-upgrade"
 
-#: dynotiq.py:9539
+#: dynotiq.py:9545
 #, python-brace-format
 msgid "{n} Pakete hält Ubuntu noch zurück"
 msgstr "Ubuntu is still holding back {n} packages"
 
-#: dynotiq.py:9541
+#: dynotiq.py:9547
 msgid ""
 "Ubuntu gibt neue Fassungen nicht auf einen Schlag frei, sondern nach und "
 "nach an immer mehr Rechner. Bis dieser dran ist, sind sie hier nicht "
@@ -5009,21 +5009,21 @@ msgstr ""
 "here. That usually takes a few days and happens on its own, there is nothing "
 "to do. Ubuntu exempts security updates, those arrive right away."
 
-#: dynotiq.py:9573
+#: dynotiq.py:9579
 #, python-brace-format
 msgid "{n} von {total} antworten nicht"
 msgstr "{n} of {total} do not answer"
 
-#: dynotiq.py:9575
+#: dynotiq.py:9581
 #, python-brace-format
 msgid "alle {n} in Ordnung"
 msgstr "all {n} fine"
 
-#: dynotiq.py:9577
+#: dynotiq.py:9583
 msgid "Woher die Updates kommen"
 msgstr "Where the updates come from"
 
-#: dynotiq.py:9578
+#: dynotiq.py:9584
 msgid ""
 "Jedes Programm auf diesem Rechner holt seine Aktualisierungen von einer "
 "festen Stelle im Netz. Antwortet eine davon nicht mehr, bleiben die Updates "
@@ -5033,7 +5033,7 @@ msgstr ""
 "net. When one of them stops answering, the updates for exactly that program "
 "stop arriving, and nothing says so."
 
-#: dynotiq.py:9583
+#: dynotiq.py:9589
 msgid ""
 "Jedes Programm holt seine Aktualisierungen von einer festen Stelle im Netz. "
 "Hier antworten alle."
@@ -5041,36 +5041,36 @@ msgstr ""
 "Every program fetches its updates from a fixed place on the net. All of them "
 "answer here."
 
-#: dynotiq.py:9592
+#: dynotiq.py:9598
 msgid "Die einzelnen Stellen ansehen"
 msgstr "Look at the individual places"
 
-#: dynotiq.py:9626
+#: dynotiq.py:9632
 msgid "Läuft bereits"
 msgstr "Already running"
 
-#: dynotiq.py:9626
+#: dynotiq.py:9632
 msgid "Warte, bis die laufende Installation fertig ist."
 msgstr "Wait until the running installation has finished."
 
-#: dynotiq.py:9631
+#: dynotiq.py:9637
 msgid "Nichts ausgewählt"
 msgstr "Nothing selected"
 
-#: dynotiq.py:9632
+#: dynotiq.py:9638
 msgid "Wähle mindestens einen Eintrag zum Aktualisieren."
 msgstr "Select at least one entry to update."
 
-#: dynotiq.py:9651
+#: dynotiq.py:9657
 #, python-brace-format
 msgid "{src} aktualisieren"
 msgstr "Update {src}"
 
-#: dynotiq.py:9665
+#: dynotiq.py:9671
 msgid "Nicht nachprüfbar"
 msgstr "Cannot be verified"
 
-#: dynotiq.py:9666
+#: dynotiq.py:9672
 #, python-brace-format
 msgid ""
 "Der Lauf ist beendet, aber {err}. Ob die Updates wirklich angekommen sind, "
@@ -5079,12 +5079,12 @@ msgstr ""
 "The run is finished, but {err}. Whether the updates really arrived will only "
 "show on the next reload."
 
-#: dynotiq.py:9696
+#: dynotiq.py:9702
 #, python-brace-format
 msgid "{n} von {total} nicht aktualisiert"
 msgstr "{n} of {total} not updated"
 
-#: dynotiq.py:9698
+#: dynotiq.py:9704
 msgid ""
 "Diese Einträge stehen weiterhin an:\n"
 "\n"
@@ -5092,34 +5092,34 @@ msgstr ""
 "These entries are still pending:\n"
 "\n"
 
-#: dynotiq.py:9718
+#: dynotiq.py:9724
 msgid "startet …"
 msgstr "starting …"
 
-#: dynotiq.py:9779
+#: dynotiq.py:9785
 #, python-brace-format
 msgid "{done} von {total}"
 msgstr "{done} of {total}"
 
-#: dynotiq.py:9784
+#: dynotiq.py:9790
 #, python-brace-format
 msgid "seit {secs} s keine Ausgabe"
 msgstr "no output for {secs} s"
 
-#: dynotiq.py:9796
+#: dynotiq.py:9802
 msgid "Ein Neustart ist nötig, damit die Updates wirksam werden."
 msgstr "A reboot is needed for the updates to take effect."
 
-#: dynotiq.py:9799
+#: dynotiq.py:9805
 #, python-brace-format
 msgid "{what} nach {time}"
 msgstr "{what} after {time}"
 
-#: dynotiq.py:9811
+#: dynotiq.py:9817
 msgid "Abbruch angefordert …"
 msgstr "Cancellation requested …"
 
-#: dynotiq.py:9817
+#: dynotiq.py:9823
 msgid ""
 "Der Lauf gehört root und lässt sich von hier nicht stoppen. Im Terminal: "
 "sudo pkill -TERM apt-get"
@@ -5127,16 +5127,16 @@ msgstr ""
 "The run belongs to root and cannot be stopped from here. In a terminal: sudo "
 "pkill -TERM apt-get"
 
-#: dynotiq.py:9820
+#: dynotiq.py:9826
 #, python-brace-format
 msgid "Abbruch nicht möglich: {err}"
 msgstr "Cannot cancel: {err}"
 
-#: dynotiq.py:9824
+#: dynotiq.py:9830
 msgid "Installation abbrechen?"
 msgstr "Cancel the installation?"
 
-#: dynotiq.py:9825
+#: dynotiq.py:9831
 msgid ""
 "Mitten im Entpacken abzubrechen kann halb installierte Pakete hinterlassen. "
 "Danach hilft nur 'sudo dpkg --configure -a'."
@@ -5144,136 +5144,136 @@ msgstr ""
 "Aborting in the middle of unpacking can leave half installed packages "
 "behind. After that only 'sudo dpkg --configure -a' helps."
 
-#: dynotiq.py:9828
+#: dynotiq.py:9834
 msgid "Weiterlaufen lassen"
 msgstr "Keep running"
 
-#: dynotiq.py:9828
+#: dynotiq.py:9834
 msgid "Abbrechen erzwingen"
 msgstr "Force cancel"
 
-#: dynotiq.py:9846
+#: dynotiq.py:9852
 #, python-brace-format
 msgid "Start fehlgeschlagen: {err}"
 msgstr "Failed to start: {err}"
 
-#: dynotiq.py:9854
+#: dynotiq.py:9860
 msgid "Abgebrochen."
 msgstr "Cancelled."
 
-#: dynotiq.py:9856
+#: dynotiq.py:9862
 #, python-brace-format
 msgid "Beendet mit Code {rc}."
 msgstr "Exited with code {rc}."
 
-#: dynotiq.py:9858
+#: dynotiq.py:9864
 msgid "Fertig."
 msgstr "Done."
 
-#: dynotiq.py:9873
+#: dynotiq.py:9879
 msgid "Keine Beschreibung hinterlegt."
 msgstr "No description available."
 
-#: dynotiq.py:9874
+#: dynotiq.py:9880
 msgid "Ebene: "
 msgstr "Level: "
 
-#: dynotiq.py:9874
+#: dynotiq.py:9880
 msgid "Nutzer-Dienst"
 msgstr "User service"
 
-#: dynotiq.py:9874
+#: dynotiq.py:9880
 msgid "Systemdienst"
 msgstr "System service"
 
-#: dynotiq.py:9876
+#: dynotiq.py:9882
 msgid "Darauf bauen auf:"
 msgstr "Depending on this:"
 
-#: dynotiq.py:9878
+#: dynotiq.py:9884
 msgid "Diese Dienste starten danach möglicherweise nicht mehr."
 msgstr "These services may no longer start afterwards."
 
-#: dynotiq.py:9880
+#: dynotiq.py:9886
 msgid "Befehl: "
 msgstr "Command: "
 
-#: dynotiq.py:9881
+#: dynotiq.py:9887
 #, python-brace-format
 msgid "{unit} abschalten?"
 msgstr "Disable {unit}?"
 
-#: dynotiq.py:9882 dynotiq.py:10801
+#: dynotiq.py:9888 dynotiq.py:10807
 msgid "Abschalten"
 msgstr "Disable"
 
-#: dynotiq.py:9899
+#: dynotiq.py:9905
 msgid "BILDRATE"
 msgstr "FRAME RATE"
 
-#: dynotiq.py:9899
+#: dynotiq.py:9905
 msgid "UNTER LAST"
 msgstr "UNDER LOAD"
 
-#: dynotiq.py:9900
+#: dynotiq.py:9906
 msgid "GPU-TEMPERATUR"
 msgstr "GPU TEMPERATURE"
 
-#: dynotiq.py:9900
+#: dynotiq.py:9906
 msgid "GPU-TAKT"
 msgstr "GPU CLOCK"
 
-#: dynotiq.py:9901
+#: dynotiq.py:9907
 msgid "GEDROSSELT"
 msgstr "THROTTLED"
 
-#: dynotiq.py:9908 dynotiq.py:10281
+#: dynotiq.py:9914 dynotiq.py:10287
 msgid "Aufzeichnung starten"
 msgstr "Start recording"
 
-#: dynotiq.py:9911
+#: dynotiq.py:9917
 msgid "bereit"
 msgstr "ready"
 
-#: dynotiq.py:9948
+#: dynotiq.py:9954
 msgid "Overlay und Automatik"
 msgstr "Overlay and automation"
 
-#: dynotiq.py:9959
+#: dynotiq.py:9965
 msgid "Temperatur"
 msgstr "Temperature"
 
-#: dynotiq.py:9959
+#: dynotiq.py:9965
 msgid "CPU und GPU"
 msgstr "CPU and GPU"
 
-#: dynotiq.py:9960
+#: dynotiq.py:9966
 msgid "hält er durch?"
 msgstr "does it hold?"
 
-#: dynotiq.py:9974
+#: dynotiq.py:9980
 msgid "Messwerte unter Last"
 msgstr "Readings under load"
 
-#: dynotiq.py:9975
+#: dynotiq.py:9981
 msgid "niedrigster · üblich · höchster"
 msgstr "lowest · typical · highest"
 
-#: dynotiq.py:9982
+#: dynotiq.py:9988
 msgid "Was du ändern kannst"
 msgstr "What you can change"
 
-#: dynotiq.py:10007
+#: dynotiq.py:10013
 #, python-brace-format
 msgid "aufgezeichnet, während {game} lief"
 msgstr "recorded while {game} was running"
 
-#: dynotiq.py:10012
+#: dynotiq.py:10018
 #, python-brace-format
 msgid "langsamstes Prozent bei {fps:.0f} fps"
 msgstr "slowest percent at {fps:.0f} fps"
 
-#: dynotiq.py:10015
+#: dynotiq.py:10021
 msgid ""
 "ohne Bildraten: dieses Spiel rendert mit OpenGL, dafür ist die vorhandene "
 "MangoHud-Fassung zu alt"
@@ -5281,7 +5281,7 @@ msgstr ""
 "no frame rates: this game renders with OpenGL, and the installed MangoHud "
 "version is too old for that"
 
-#: dynotiq.py:10018
+#: dynotiq.py:10024
 msgid ""
 "ohne Bildraten: dieses Spiel rendert mit OpenGL, dafür braucht MangoHud "
 "'mangohud' in den Startoptionen"
@@ -5289,11 +5289,11 @@ msgstr ""
 "no frame rates: this game renders with OpenGL, which needs 'mangohud' in the "
 "launch options"
 
-#: dynotiq.py:10041
+#: dynotiq.py:10047
 msgid "Noch keine Messwerte. Der Lauf füllt diese Tabelle."
 msgstr "No readings yet. The run fills this table."
 
-#: dynotiq.py:10069
+#: dynotiq.py:10075
 msgid ""
 "Hier stehen nach dem Lauf die Maßnahmen, die bei genau diesem Rechner etwas "
 "bringen."
@@ -5301,48 +5301,48 @@ msgstr ""
 "After the run this lists the measures that make a difference on this "
 "particular machine."
 
-#: dynotiq.py:10107
+#: dynotiq.py:10113
 #, python-brace-format
 msgid "{tool} nicht gestartet"
 msgstr "{tool} did not start"
 
-#: dynotiq.py:10116 dynotiq.py:11087
+#: dynotiq.py:10122 dynotiq.py:11093
 msgid "Frühere Läufe"
 msgstr "Earlier runs"
 
-#: dynotiq.py:10124
+#: dynotiq.py:10130
 #, python-brace-format
 msgid "{t} min Last"
 msgstr "{t} min load"
 
-#: dynotiq.py:10126
+#: dynotiq.py:10132
 #, python-brace-format
 msgid "{t} min"
 msgstr "{t} min"
 
-#: dynotiq.py:10132
+#: dynotiq.py:10138
 #, python-brace-format
 msgid "GPU max {v:.0f} °C"
 msgstr "GPU max {v:.0f} °C"
 
-#: dynotiq.py:10146
+#: dynotiq.py:10152
 msgid "Diesen Lauf wieder anzeigen"
 msgstr "Show this run again"
 
-#: dynotiq.py:10156
+#: dynotiq.py:10162
 msgid "Erst nach der Aufzeichnung"
 msgstr "Only after the recording"
 
-#: dynotiq.py:10161
+#: dynotiq.py:10167
 #, python-brace-format
 msgid "Lauf vom {when}"
 msgstr "Run from {when}"
 
-#: dynotiq.py:10167
+#: dynotiq.py:10173
 msgid "Bericht in der Zwischenablage"
 msgstr "Report copied to the clipboard"
 
-#: dynotiq.py:10179
+#: dynotiq.py:10185
 msgid ""
 "Erkennt ein laufendes Spiel und misst mit. Bildraten kommen nur dazu, wenn "
 "unten das Overlay läuft"
@@ -5350,33 +5350,33 @@ msgstr ""
 "Detects a running game and measures along. Frame rates only come along when "
 "the overlay below is running"
 
-#: dynotiq.py:10182
+#: dynotiq.py:10188
 msgid "Aus. Der Prüfstand misst dann nur, wenn du ihn oben von Hand startest"
 msgstr "Off. The dyno then only measures when you start it by hand above"
 
-#: dynotiq.py:10184 dynotiq.py:10191 dynotiq.py:11403
+#: dynotiq.py:10190 dynotiq.py:10197 dynotiq.py:11409
 msgid "Spiele von selbst aufzeichnen"
 msgstr "Record games automatically"
 
-#: dynotiq.py:10188
+#: dynotiq.py:10194
 msgid "Überwachung einschalten"
 msgstr "Turn monitoring on"
 
-#: dynotiq.py:10192
+#: dynotiq.py:10198
 msgid ""
 "Braucht die Hintergrundüberwachung: sie ist es, die merkt, dass ein Spiel "
 "läuft"
 msgstr "Needs background monitoring: that is what notices a game is running"
 
-#: dynotiq.py:10198
+#: dynotiq.py:10204
 msgid "Bildraten messen"
 msgstr "Measure frame rates"
 
-#: dynotiq.py:10200 dynotiq.py:10223
+#: dynotiq.py:10206 dynotiq.py:10229
 msgid "Bildraten und Bildzeiten"
 msgstr "Frame rates and frame times"
 
-#: dynotiq.py:10201
+#: dynotiq.py:10207
 msgid ""
 "Dafür muss ein Overlay im Spiel selbst mitzählen, von außen ist die Bildrate "
 "nicht zu sehen. MangoHud kann das, dynotiq richtet es in seinen Farben ein "
@@ -5386,15 +5386,15 @@ msgstr ""
 "visible from outside. MangoHud does it, dynotiq sets it up in its own "
 "colours and reads the result"
 
-#: dynotiq.py:10205
+#: dynotiq.py:10211
 msgid "Overlay abschalten"
 msgstr "Turn overlay off"
 
-#: dynotiq.py:10206
+#: dynotiq.py:10212
 msgid "Overlay einrichten"
 msgstr "Set up overlay"
 
-#: dynotiq.py:10210
+#: dynotiq.py:10216
 msgid ""
 "Eingerichtet in dynotiq-Farben. Gilt für jedes Spiel, das mit Vulkan "
 "rendert, sobald Steam einmal neu gestartet wurde, und ändert nichts an "
@@ -5407,11 +5407,11 @@ msgstr ""
 "options. Show and hide it in game with the right shift key and F12. The few "
 "games that use OpenGL also need 'mangohud' in the launch options"
 
-#: dynotiq.py:10218
+#: dynotiq.py:10224
 msgid "Halb eingerichtet. Noch einmal einrichten setzt beides"
 msgstr "Half set up. Setting it up again does both"
 
-#: dynotiq.py:10220
+#: dynotiq.py:10226
 msgid ""
 "MangoHud ist da, aber nicht eingerichtet. dynotiq schreibt seine "
 "Konfiguration in den eigenen Farben und liest danach die Bildraten in den "
@@ -5420,25 +5420,25 @@ msgstr ""
 "MangoHud is there but not set up. dynotiq writes its configuration in its "
 "own colours and then reads the frame rates into the report"
 
-#: dynotiq.py:10243 dynotiq.py:11565
+#: dynotiq.py:10249 dynotiq.py:11571
 msgid "Dienst nicht geschaltet"
 msgstr "Service not switched"
 
-#: dynotiq.py:10244 dynotiq.py:11566
+#: dynotiq.py:10250 dynotiq.py:11572
 #, python-brace-format
 msgid ""
 "systemctl --user hat den Zustand nicht übernommen. Unit liegt unter {path}."
 msgstr "systemctl --user did not take the state. The unit is at {path}."
 
-#: dynotiq.py:10258
+#: dynotiq.py:10264
 msgid "Nicht eingerichtet"
 msgstr "Not set up"
 
-#: dynotiq.py:10261
+#: dynotiq.py:10267
 msgid "Overlay eingerichtet"
 msgstr "Overlay set up"
 
-#: dynotiq.py:10262
+#: dynotiq.py:10268
 #, python-brace-format
 msgid ""
 "Geschrieben nach {path}.\n"
@@ -5470,23 +5470,23 @@ msgstr ""
 "If a run ends without frame rates, the dyno tells you whether OpenGL was the "
 "reason."
 
-#: dynotiq.py:10285
+#: dynotiq.py:10291
 msgid "wird ausgewertet …"
 msgstr "evaluating …"
 
-#: dynotiq.py:10302
+#: dynotiq.py:10308
 msgid "Aufzeichnung beenden"
 msgstr "Stop recording"
 
-#: dynotiq.py:10304
+#: dynotiq.py:10310
 msgid "LÄUFT"
 msgstr "RECORDING"
 
-#: dynotiq.py:10305
+#: dynotiq.py:10311
 msgid "Aufzeichnung läuft"
 msgstr "Recording in progress"
 
-#: dynotiq.py:10306
+#: dynotiq.py:10312
 msgid ""
 "Starte jetzt das Spiel und spiel eine Runde, wie du sie normal spielst. Zehn "
 "Minuten unter Last reichen. Drosselung setzt erst nach Minuten ein, kürzere "
@@ -5496,41 +5496,41 @@ msgstr ""
 "under load is enough. Throttling only sets in after minutes, shorter runs "
 "miss it."
 
-#: dynotiq.py:10337
+#: dynotiq.py:10343
 #, python-brace-format
 msgid "fertig · {game}"
 msgstr "done · {game}"
 
-#: dynotiq.py:10338
+#: dynotiq.py:10344
 msgid "fertig"
 msgstr "done"
 
-#: dynotiq.py:10377
+#: dynotiq.py:10383
 msgid " · gedrosselt"
 msgstr " · throttled"
 
-#: dynotiq.py:10379
+#: dynotiq.py:10385
 #, python-brace-format
 msgid "läuft seit {t} · {n} Messpunkte, {load} unter Last{thr}"
 msgstr "running for {t} · {n} samples, {load} under load{thr}"
 
-#: dynotiq.py:10387
+#: dynotiq.py:10393
 msgid "Anwendung wählen und prüfen"
 msgstr "Pick an application and check it"
 
-#: dynotiq.py:10399
+#: dynotiq.py:10405
 msgid "nichts gefunden"
 msgstr "nothing found"
 
-#: dynotiq.py:10404
+#: dynotiq.py:10410
 msgid "Anwendung suchen"
 msgstr "Search applications"
 
-#: dynotiq.py:10407
+#: dynotiq.py:10413
 msgid "Prüfen"
 msgstr "Check"
 
-#: dynotiq.py:10438
+#: dynotiq.py:10444
 #, python-brace-format
 msgid ""
 "{n} Anwendungen gefunden. Gesucht wird nach fehlenden Bibliotheken, "
@@ -5541,50 +5541,50 @@ msgstr ""
 "sandbox permissions, blocked accesses, crashes and errors in the journal. "
 "Where there is a fix, a button sits next to it."
 
-#: dynotiq.py:10493
+#: dynotiq.py:10499
 #, python-brace-format
 msgid "{app} wird geprüft …"
 msgstr "Checking {app} …"
 
-#: dynotiq.py:10495
+#: dynotiq.py:10501
 msgid ""
 "Läuft. Journal und Paketverwaltung werden gefragt, das dauert einen Moment."
 msgstr ""
 "Running. The journal and the package manager are being queried, this takes a "
 "moment."
 
-#: dynotiq.py:10508
+#: dynotiq.py:10514
 msgid "1 Problem"
 msgstr "1 problem"
 
-#: dynotiq.py:10509
+#: dynotiq.py:10515
 #, python-brace-format
 msgid "{n} Probleme"
 msgstr "{n} problems"
 
-#: dynotiq.py:10511
+#: dynotiq.py:10517
 msgid "läuft, 1 Hinweis"
 msgstr "running, 1 note"
 
-#: dynotiq.py:10512
+#: dynotiq.py:10518
 #, python-brace-format
 msgid "läuft, {n} Hinweise"
 msgstr "running, {n} notes"
 
-#: dynotiq.py:10514
+#: dynotiq.py:10520
 msgid "alles in Ordnung"
 msgstr "all good"
 
-#: dynotiq.py:10522
+#: dynotiq.py:10528
 msgid "Ergebnis"
 msgstr "Result"
 
-#: dynotiq.py:10561
+#: dynotiq.py:10567
 #, python-brace-format
 msgid "{action}?"
 msgstr "{action}?"
 
-#: dynotiq.py:10562
+#: dynotiq.py:10568
 #, python-brace-format
 msgid ""
 "{title}\n"
@@ -5595,34 +5595,34 @@ msgstr ""
 "\n"
 "This will run:\n"
 
-#: dynotiq.py:10604
+#: dynotiq.py:10610
 #, python-brace-format
 msgid "{n} Fassungen · alles in Ordnung"
 msgstr "{n} versions · all fine"
 
-#: dynotiq.py:10606
+#: dynotiq.py:10612
 #, python-brace-format
 msgid "{n} Fassungen · {b} zu klären"
 msgstr "{n} versions · {b} to sort out"
 
-#: dynotiq.py:10614
+#: dynotiq.py:10620
 msgid "Was zu klären ist"
 msgstr "What needs sorting out"
 
-#: dynotiq.py:10615
+#: dynotiq.py:10621
 #, python-brace-format
 msgid "{n} Punkt(e)"
 msgstr "{n} point(s)"
 
-#: dynotiq.py:10616
+#: dynotiq.py:10622
 msgid "nichts"
 msgstr "nothing"
 
-#: dynotiq.py:10618
+#: dynotiq.py:10624
 msgid "Kein Steam gefunden. Diese Seite prüft Proton, und das gehört zu Steam."
 msgstr "No Steam found. This page checks Proton, and Proton belongs to Steam."
 
-#: dynotiq.py:10622
+#: dynotiq.py:10628
 msgid ""
 "Jede Fassung hat die Laufzeitumgebung, die sie verlangt, und kein Titel "
 "zeigt auf eine Fassung, die es nicht gibt."
@@ -5630,15 +5630,15 @@ msgstr ""
 "Every version has the runtime it asks for, and no title points at a version "
 "that does not exist."
 
-#: dynotiq.py:10635
+#: dynotiq.py:10641
 msgid "Warum, und was es bewirkt"
 msgstr "Why, and what it does"
 
-#: dynotiq.py:10650
+#: dynotiq.py:10656
 msgid "Selbst installierte Fassungen"
 msgstr "Versions you installed yourself"
 
-#: dynotiq.py:10651
+#: dynotiq.py:10657
 msgid ""
 "Von Hand oder über ein Werkzeug wie ProtonPlus eingespielt. Updates kommen "
 "nicht über Steam."
@@ -5646,19 +5646,19 @@ msgstr ""
 "Put in by hand or through a tool like ProtonPlus. Updates do not come "
 "through Steam."
 
-#: dynotiq.py:10653
+#: dynotiq.py:10659
 msgid "Fassungen von Valve"
 msgstr "Versions from Valve"
 
-#: dynotiq.py:10655
+#: dynotiq.py:10661
 msgid "Lädt und aktualisiert Steam selbst."
 msgstr "Steam downloads and updates these itself."
 
-#: dynotiq.py:10682
+#: dynotiq.py:10688
 msgid "Fassungen holen und entfernen"
 msgstr "Getting and removing versions"
 
-#: dynotiq.py:10684
+#: dynotiq.py:10690
 msgid ""
 "Eigene Fassungen wie GE-Proton verwaltet ein eigenes Werkzeug. dynotiq baut "
 "dafür nichts Zweites: es sagt, was fehlt oder klemmt, und öffnet das "
@@ -5668,7 +5668,7 @@ msgstr ""
 "does not build a second one: it says what is missing or stuck, and opens the "
 "tool that can do it."
 
-#: dynotiq.py:10687
+#: dynotiq.py:10693
 msgid ""
 "Eigene Fassungen wie GE-Proton bringt ein Werkzeug wie ProtonPlus auf den "
 "Rechner, hält sie aktuell und räumt alte wieder weg. Hier ist keins davon "
@@ -5678,33 +5678,33 @@ msgstr ""
 "machine, keeps them current and clears old ones away. None of them is "
 "installed here."
 
-#: dynotiq.py:10696
+#: dynotiq.py:10702
 #, python-brace-format
 msgid "{tool} installieren"
 msgstr "Install {tool}"
 
-#: dynotiq.py:10698
+#: dynotiq.py:10704
 msgid "Fassungen verwalten"
 msgstr "Manage versions"
 
-#: dynotiq.py:10707
+#: dynotiq.py:10713
 msgid "Welcher Titel benutzt was"
 msgstr "Which title uses what"
 
-#: dynotiq.py:10708
+#: dynotiq.py:10714
 #, python-brace-format
 msgid "{n} Titel"
 msgstr "{n} titles"
 
-#: dynotiq.py:10711
+#: dynotiq.py:10717
 msgid "Liste ansehen"
 msgstr "View the list"
 
-#: dynotiq.py:10733
+#: dynotiq.py:10739
 msgid "Wozu das alles gut ist"
 msgstr "What all this is for"
 
-#: dynotiq.py:10735
+#: dynotiq.py:10741
 msgid ""
 "Windows-Spiele laufen unter Linux nicht direkt. Proton übersetzt sie. Weil "
 "jede Fassung andere Bibliotheken braucht, läuft sie selbst in einem "
@@ -5720,85 +5720,85 @@ msgstr ""
 "says nothing beyond the game having exited right away. This page looks into "
 "the files to find out why."
 
-#: dynotiq.py:10771
+#: dynotiq.py:10777
 #, python-brace-format
 msgid "{n} Einträge · {on} aktiv"
 msgstr "{n} entries · {on} active"
 
-#: dynotiq.py:10774
+#: dynotiq.py:10780
 msgid "Eigene Einträge"
 msgstr "Your entries"
 
-#: dynotiq.py:10774
+#: dynotiq.py:10780
 msgid "Systemweit"
 msgstr "System wide"
 
-#: dynotiq.py:10780
+#: dynotiq.py:10786
 #, python-brace-format
 msgid "{on} von {total} aktiv"
 msgstr "{on} of {total} active"
 
-#: dynotiq.py:10790
+#: dynotiq.py:10796
 msgid "Langsamste Dienste beim Boot"
 msgstr "Slowest services at boot"
 
-#: dynotiq.py:10791
+#: dynotiq.py:10797
 #, python-brace-format
 msgid "{n} Unit(s)"
 msgstr "{n} unit(s)"
 
-#: dynotiq.py:10836 dynotiq.py:11538
+#: dynotiq.py:10842 dynotiq.py:11544
 #, python-brace-format
 msgid "Aktualisierung alle {secs} s"
 msgstr "Refreshing every {secs} s"
 
-#: dynotiq.py:10846
+#: dynotiq.py:10852
 msgid "Netz und Datenträger"
 msgstr "Network and disks"
 
-#: dynotiq.py:10864
+#: dynotiq.py:10870
 msgid "Kerne"
 msgstr "Cores"
 
-#: dynotiq.py:10878
+#: dynotiq.py:10884
 msgid "Top-Prozesse"
 msgstr "Top processes"
 
-#: dynotiq.py:10878
+#: dynotiq.py:10884
 msgid "nach CPU"
 msgstr "by CPU"
 
-#: dynotiq.py:10927
+#: dynotiq.py:10933
 msgid "Neu berechnen"
 msgstr "Recalculate"
 
-#: dynotiq.py:10930
+#: dynotiq.py:10936
 msgid "wird berechnet …"
 msgstr "calculating …"
 
-#: dynotiq.py:10950
+#: dynotiq.py:10956
 msgid "Systemjournal"
 msgstr "System journal"
 
-#: dynotiq.py:10953
+#: dynotiq.py:10959
 msgid "Alte Logzeilen werden verworfen, die letzten 500 MB bleiben."
 msgstr "Old log lines are discarded, the last 500 MB stay."
 
-#: dynotiq.py:10955
+#: dynotiq.py:10961
 msgid "APT-Paketcache"
 msgstr "APT package cache"
 
-#: dynotiq.py:10958
+#: dynotiq.py:10964
 msgid ""
 "Heruntergeladene Installationsdateien. Werden bei Bedarf erneut geladen."
 msgstr "Downloaded installation files. They are fetched again when needed."
 
-#: dynotiq.py:10962
+#: dynotiq.py:10968
 #, python-brace-format
 msgid "Alte Snap-Revisionen ({n})"
 msgstr "Old snap revisions ({n})"
 
-#: dynotiq.py:10969
+#: dynotiq.py:10975
 msgid ""
 "Das sind die Vorgängerversionen, auf die snap zurückrollen könnte. Danach "
 "geht das nicht mehr."
@@ -5806,11 +5806,11 @@ msgstr ""
 "These are the previous versions snap could roll back to. Afterwards that is "
 "no longer possible."
 
-#: dynotiq.py:10972
+#: dynotiq.py:10978
 msgid "Nutzer-Cache"
 msgstr "User cache"
 
-#: dynotiq.py:10973
+#: dynotiq.py:10979
 msgid ""
 "Darin liegen auch die übersetzten Shader deiner Spiele. Die baut der Treiber "
 "neu, das erste Spiel danach ruckelt."
@@ -5818,65 +5818,65 @@ msgstr ""
 "This also holds the compiled shaders of your games. The driver rebuilds "
 "them, so the first game afterwards stutters."
 
-#: dynotiq.py:10975
+#: dynotiq.py:10981
 msgid "Papierkorb"
 msgstr "Trash"
 
-#: dynotiq.py:10977
+#: dynotiq.py:10983
 msgid "Deine gelöschten Dateien sind danach endgültig weg."
 msgstr "Your deleted files are gone for good afterwards."
 
-#: dynotiq.py:10978
+#: dynotiq.py:10984
 msgid "Thumbnails"
 msgstr "Thumbnails"
 
-#: dynotiq.py:10980
+#: dynotiq.py:10986
 msgid ""
 "Vorschaubilder des Dateimanagers, werden beim nächsten Öffnen neu erzeugt."
 msgstr ""
 "Preview images of the file manager, regenerated the next time you open a "
 "folder."
 
-#: dynotiq.py:10997
+#: dynotiq.py:11003
 #, python-brace-format
 msgid "{n} Dateisysteme · {free} frei · {clean} aufräumbar"
 msgstr "{n} filesystems · {free} free · {clean} reclaimable"
 
-#: dynotiq.py:11003
+#: dynotiq.py:11009
 msgid "Dateisysteme"
 msgstr "Filesystems"
 
-#: dynotiq.py:11012
+#: dynotiq.py:11018
 #, python-brace-format
 msgid "{used} von {total}"
 msgstr "{used} of {total}"
 
-#: dynotiq.py:11027
+#: dynotiq.py:11033
 msgid "Aufräumbar"
 msgstr "Reclaimable"
 
-#: dynotiq.py:11030
+#: dynotiq.py:11036
 msgid "Nichts Nennenswertes gefunden."
 msgstr "Nothing worth mentioning found."
 
-#: dynotiq.py:11039
+#: dynotiq.py:11045
 msgid "Aufräumen"
 msgstr "Clean up"
 
-#: dynotiq.py:11043
+#: dynotiq.py:11049
 #, python-brace-format
 msgid "{path} belegt {size}."
 msgstr "{path} uses {size}."
 
-#: dynotiq.py:11055
+#: dynotiq.py:11061
 msgid "Benchmark starten"
 msgstr "Start benchmark"
 
-#: dynotiq.py:11058
+#: dynotiq.py:11064
 msgid "noch nicht gelaufen"
 msgstr "not run yet"
 
-#: dynotiq.py:11062
+#: dynotiq.py:11068
 msgid ""
 "Gemessen wird, was ohne Root messbar ist: SHA-256-Durchsatz ein- und "
 "mehrfädig, Speicherkopie und Schreibrate auf die Home-Partition."
@@ -5884,7 +5884,7 @@ msgstr ""
 "Measured is what can be measured without root: SHA-256 throughput single and "
 "multi threaded, memory copy and write rate to the home partition."
 
-#: dynotiq.py:11065
+#: dynotiq.py:11071
 msgid ""
 "Der Lesewert fehlt bewusst, ohne Cache-Drop wäre er gelogen. Die Zahlen "
 "taugen zum Vergleich mit dir selbst, nicht mit fremden Rechnern."
@@ -5893,79 +5893,79 @@ msgstr ""
 "be a lie. The numbers are good for comparing against yourself, not against "
 "other machines."
 
-#: dynotiq.py:11072
+#: dynotiq.py:11078
 msgid "CPU einfädig"
 msgstr "CPU single threaded"
 
-#: dynotiq.py:11073
+#: dynotiq.py:11079
 msgid "CPU alle Kerne"
 msgstr "CPU all cores"
 
-#: dynotiq.py:11074
+#: dynotiq.py:11080
 msgid "Speicherkopie"
 msgstr "Memory copy"
 
-#: dynotiq.py:11075
+#: dynotiq.py:11081
 msgid "Schreibrate"
 msgstr "Write rate"
 
-#: dynotiq.py:11099
+#: dynotiq.py:11105
 msgid "Noch kein Lauf aufgezeichnet."
 msgstr "No run recorded yet."
 
-#: dynotiq.py:11126
+#: dynotiq.py:11132
 #, python-brace-format
 msgid "Gegenüber der ersten Messung am {date}: {pct:.0f} %"
 msgstr "Against the first measurement on {date}: {pct:.0f} %"
 
-#: dynotiq.py:11146
+#: dynotiq.py:11152
 msgid "läuft, das dauert etwa 8 Sekunden …"
 msgstr "running, this takes about 8 seconds …"
 
-#: dynotiq.py:11169
+#: dynotiq.py:11175
 msgid "fertig, Lauf im Verlauf gespeichert"
 msgstr "done, run saved to the history"
 
-#: dynotiq.py:11179
+#: dynotiq.py:11185
 msgid "Verlauf löschen"
 msgstr "Clear history"
 
-#: dynotiq.py:11187
+#: dynotiq.py:11193
 msgid "Systemzustand über die Zeit"
 msgstr "System health over time"
 
-#: dynotiq.py:11197
+#: dynotiq.py:11203
 msgid "Aufzeichnungen"
 msgstr "Records"
 
-#: dynotiq.py:11209
+#: dynotiq.py:11215
 #, python-brace-format
 msgid "{scans} Scans · {benches} Benchmarks"
 msgstr "{scans} scans · {benches} benchmarks"
 
-#: dynotiq.py:11214
+#: dynotiq.py:11220
 #, python-brace-format
 msgid "{n}× aktualisiert"
 msgstr "updated {n}×"
 
-#: dynotiq.py:11223
+#: dynotiq.py:11229
 msgid "Noch nichts aufgezeichnet."
 msgstr "Nothing recorded yet."
 
-#: dynotiq.py:11233
+#: dynotiq.py:11239
 #, python-brace-format
 msgid "Seit dem Update vom {date}: {what} um {pct:.0f} % {dir}"
 msgstr "Since the update of {date}: {what} {pct:.0f} % {dir}"
 
-#: dynotiq.py:11238
+#: dynotiq.py:11244
 msgid "langsamer"
 msgstr "slower"
 
-#: dynotiq.py:11238
+#: dynotiq.py:11244
 msgid "schneller"
 msgstr "faster"
 
-#: dynotiq.py:11240
+#: dynotiq.py:11246
 msgid ""
 "Verglichen werden die letzte Messung vor dem Update und die jüngste danach. "
 "Das ist eine Reihenfolge, keine Ursache: miss noch einmal, wenn der Rechner "
@@ -5975,123 +5975,123 @@ msgstr ""
 "one after it. That is an order of events, not a cause: measure again when "
 "the machine has nothing else to do."
 
-#: dynotiq.py:11260
+#: dynotiq.py:11266
 #, python-brace-format
 msgid "{src} aktualisiert · {names}"
 msgstr "{src} updated · {names}"
 
-#: dynotiq.py:11269
+#: dynotiq.py:11275
 #, python-brace-format
 msgid "{src}: {n} Eintrag/Einträge nicht aktualisiert · {names}"
 msgstr "{src}: {n} entry/entries not updated · {names}"
 
-#: dynotiq.py:11279
+#: dynotiq.py:11285
 #, python-brace-format
 msgid "Prüfstand · {mins:.0f} min · {game}"
 msgstr "Dyno · {mins:.0f} min · {game}"
 
-#: dynotiq.py:11280
+#: dynotiq.py:11286
 msgid "ohne Spiel"
 msgstr "no game"
 
-#: dynotiq.py:11281
+#: dynotiq.py:11287
 msgid "Lauf"
 msgstr "Run"
 
-#: dynotiq.py:11295
+#: dynotiq.py:11301
 msgid "Verlauf löschen?"
 msgstr "Clear the history?"
 
-#: dynotiq.py:11296
+#: dynotiq.py:11302
 #, python-brace-format
 msgid "Entfernt alle Aufzeichnungen aus {file}."
 msgstr "Removes all records from {file}."
 
-#: dynotiq.py:11298
+#: dynotiq.py:11304
 msgid "Löschen"
 msgstr "Delete"
 
-#: dynotiq.py:11314
+#: dynotiq.py:11320
 msgid "Darstellung, Hintergrunddienst und Daten"
 msgstr "Appearance, background service and data"
 
-#: dynotiq.py:11335
+#: dynotiq.py:11341
 msgid "Darstellung"
 msgstr "Appearance"
 
-#: dynotiq.py:11336
+#: dynotiq.py:11342
 msgid "Akzentfarbe"
 msgstr "Accent colour"
 
-#: dynotiq.py:11336
+#: dynotiq.py:11342
 msgid "Färbt Knöpfe, Diagramme und das Statusicon"
 msgstr "Colours buttons, charts and the status icon"
 
-#: dynotiq.py:11337
+#: dynotiq.py:11343
 msgid "Statusfarben"
 msgstr "Status colours"
 
-#: dynotiq.py:11337
+#: dynotiq.py:11343
 msgid "Farbschema für ok, Hinweis und kritisch"
 msgstr "Colour scheme for ok, warning and critical"
 
-#: dynotiq.py:11338
+#: dynotiq.py:11344
 msgid "Aktualisierungsintervall"
 msgstr "Refresh interval"
 
-#: dynotiq.py:11338
+#: dynotiq.py:11344
 msgid "Wie oft Live-Werte neu gelesen werden"
 msgstr "How often live values are reread"
 
-#: dynotiq.py:11347
+#: dynotiq.py:11353
 msgid "Warte auf StatusNotifier …"
 msgstr "Waiting for StatusNotifier …"
 
-#: dynotiq.py:11353
+#: dynotiq.py:11359
 msgid "Beim Schließen im Tray weiterlaufen"
 msgstr "Keep running in the tray when closed"
 
-#: dynotiq.py:11358
+#: dynotiq.py:11364
 msgid "Ordner öffnen"
 msgstr "Open folder"
 
-#: dynotiq.py:11362 dynotiq.py:11493
+#: dynotiq.py:11368 dynotiq.py:11499
 msgid "Zurücksetzen"
 msgstr "Reset"
 
-#: dynotiq.py:11365
+#: dynotiq.py:11371
 msgid "Programm"
 msgstr "Application"
 
-#: dynotiq.py:11366
+#: dynotiq.py:11372
 msgid "dynotiq beim Login starten"
 msgstr "Start dynotiq at login"
 
-#: dynotiq.py:11367
+#: dynotiq.py:11373
 msgid "Legt einen Starter in den Autostart-Ordner"
 msgstr "Puts a launcher in the autostart folder"
 
-#: dynotiq.py:11369
+#: dynotiq.py:11375
 msgid "Daten und Einstellungen"
 msgstr "Data and settings"
 
-#: dynotiq.py:11371
+#: dynotiq.py:11377
 msgid "Alle Einstellungen zurücksetzen"
 msgstr "Reset all settings"
 
-#: dynotiq.py:11372
+#: dynotiq.py:11378
 msgid "Farben, Intervalle und Schalter auf den Auslieferungszustand"
 msgstr "Colours, intervals and switches back to the defaults"
 
-#: dynotiq.py:11392
+#: dynotiq.py:11398
 msgid "Hintergrundüberwachung"
 msgstr "Background monitoring"
 
-#: dynotiq.py:11393
+#: dynotiq.py:11399
 msgid "Im Hintergrund überwachen"
 msgstr "Watch in the background"
 
-#: dynotiq.py:11394
+#: dynotiq.py:11400
 msgid ""
 "systemd-User-Dienst, liest das Journal auf neue Vorfälle und meldet sie per "
 "Benachrichtigung"
@@ -6099,19 +6099,19 @@ msgstr ""
 "systemd user service, reads the journal for new incidents and notifies about "
 "them"
 
-#: dynotiq.py:11396
+#: dynotiq.py:11402
 msgid "Prüfintervall"
 msgstr "Check interval"
 
-#: dynotiq.py:11396
+#: dynotiq.py:11402
 msgid "Wie oft der Dienst nachsieht"
 msgstr "How often the service looks"
 
-#: dynotiq.py:11397
+#: dynotiq.py:11403
 msgid "Nur kritische Vorfälle melden"
 msgstr "Notify only about critical incidents"
 
-#: dynotiq.py:11398
+#: dynotiq.py:11404
 msgid ""
 "Hinweise sammeln sich weiter auf der Vorfallsseite, ohne dass eine "
 "Benachrichtigung aufgeht"
@@ -6119,11 +6119,11 @@ msgstr ""
 "Warnings still collect on the incidents page without a notification popping "
 "up"
 
-#: dynotiq.py:11400
+#: dynotiq.py:11406
 msgid "Wöchentlich an Updates erinnern"
 msgstr "Remind about updates weekly"
 
-#: dynotiq.py:11401
+#: dynotiq.py:11407
 msgid ""
 "Ubuntu 26.04 meldet anstehende Updates von sich aus nicht mehr. Höchstens "
 "eine Erinnerung pro Woche"
@@ -6131,7 +6131,7 @@ msgstr ""
 "Ubuntu 26.04 no longer reports pending updates on its own. One reminder a "
 "week at most"
 
-#: dynotiq.py:11404
+#: dynotiq.py:11410
 msgid ""
 "Erkennt ein laufendes Spiel und misst mit. Nach dem Spielen steht der "
 "Bericht im Prüfstand, Läufe unter drei Minuten werden verworfen"
@@ -6139,27 +6139,27 @@ msgstr ""
 "Detects a running game and measures along. After playing, the report is on "
 "the dyno page, runs under three minutes are discarded"
 
-#: dynotiq.py:11411
+#: dynotiq.py:11417
 msgid "Firmware-Updates mitprüfen"
 msgstr "Check firmware updates too"
 
-#: dynotiq.py:11412
+#: dynotiq.py:11418
 msgid "fwupd nach Geräte-Updates fragen"
 msgstr "ask fwupd for device updates"
 
-#: dynotiq.py:11415
+#: dynotiq.py:11421
 msgid "Vor Updates einen Snapshot anlegen"
 msgstr "Create a snapshot before updates"
 
-#: dynotiq.py:11416
+#: dynotiq.py:11422
 msgid "Timeshift läuft vor der Installation, bricht sie ab wenn er scheitert"
 msgstr "Timeshift runs before the installation and aborts it if it fails"
 
-#: dynotiq.py:11423
+#: dynotiq.py:11429
 msgid "Zurückgestellte Befunde"
 msgstr "Postponed findings"
 
-#: dynotiq.py:11427
+#: dynotiq.py:11433
 msgid ""
 "Nichts zurückgestellt. Wer im Systemcheck auf \"Später erinnern\" tippt, "
 "findet den Befund hier wieder."
@@ -6167,20 +6167,20 @@ msgstr ""
 "Nothing postponed. Whatever you send away with \"Remind me later\" in the "
 "system check turns up here."
 
-#: dynotiq.py:11440
+#: dynotiq.py:11446
 #, python-brace-format
 msgid "Wieder ab {v}, zurückgestellt am {date}"
 msgstr "Back with {v}, postponed on {date}"
 
-#: dynotiq.py:11443
+#: dynotiq.py:11449
 msgid "Wieder anzeigen"
 msgstr "Show again"
 
-#: dynotiq.py:11452
+#: dynotiq.py:11458
 msgid "Über"
 msgstr "About"
 
-#: dynotiq.py:11455
+#: dynotiq.py:11461
 msgid ""
 "Analysiert von sich aus nur lesend. Was etwas ändert, also Updates und "
 "Behebungen, läuft erst nach deinem Klick, zeigt vorher den vollständigen "
@@ -6190,21 +6190,21 @@ msgstr ""
 "and fixes, runs only after you click, shows the full command first and asks "
 "for your password through the system dialog."
 
-#: dynotiq.py:11477
+#: dynotiq.py:11483
 #, python-brace-format
 msgid "{pkg} ist nicht installiert, die Einstellung wirkt ohne das Paket nicht"
 msgstr "{pkg} is not installed, the setting does nothing without the package"
 
-#: dynotiq.py:11483
+#: dynotiq.py:11489
 #, python-brace-format
 msgid "Installiert {pkg} aus den Paketquellen von Ubuntu."
 msgstr "Installs {pkg} from the Ubuntu package sources."
 
-#: dynotiq.py:11489
+#: dynotiq.py:11495
 msgid "Einstellungen zurücksetzen?"
 msgstr "Reset settings?"
 
-#: dynotiq.py:11490
+#: dynotiq.py:11496
 msgid ""
 "Farben, Intervalle und Schalter gehen auf den Auslieferungszustand. Der "
 "Verlauf, die zurückgestellten Befunde und der Hintergrunddienst bleiben, wie "
@@ -6213,87 +6213,87 @@ msgstr ""
 "Colours, intervals and switches go back to the defaults. History, snoozed "
 "findings and the background service stay as they are."
 
-#: dynotiq.py:11651
+#: dynotiq.py:11657
 #, python-brace-format
 msgid "Prüfung {done} von {total} läuft …"
 msgstr "Check {done} of {total} running …"
 
-#: dynotiq.py:11685
+#: dynotiq.py:11691
 msgid "gut"
 msgstr "good"
 
-#: dynotiq.py:11686
+#: dynotiq.py:11692
 msgid "mittelmäßig"
 msgstr "middling"
 
-#: dynotiq.py:11686
+#: dynotiq.py:11692
 msgid "schlecht"
 msgstr "poor"
 
-#: dynotiq.py:11687
+#: dynotiq.py:11693
 #, python-brace-format
 msgid "Systemzustand: {state}"
 msgstr "System health: {state}"
 
-#: dynotiq.py:11688
+#: dynotiq.py:11694
 #, python-brace-format
 msgid "{n} Befunde"
 msgstr "{n} findings"
 
-#: dynotiq.py:11690
+#: dynotiq.py:11696
 #, python-brace-format
 msgid "Letzter Scan: heute, {time} · Dauer {secs:.0f} s"
 msgstr "Last scan: today, {time} · took {secs:.0f} s"
 
-#: dynotiq.py:11698
+#: dynotiq.py:11704
 msgid "Eine Sache bremst"
 msgstr "One thing is slowing"
 
-#: dynotiq.py:11698
+#: dynotiq.py:11704
 msgid "Zwei Dinge bremsen"
 msgstr "Two things are slowing"
 
-#: dynotiq.py:11699
+#: dynotiq.py:11705
 msgid "Drei Dinge bremsen"
 msgstr "Three things are slowing"
 
-#: dynotiq.py:11700
+#: dynotiq.py:11706
 #, python-brace-format
 msgid "{n} Dinge bremsen"
 msgstr "{n} things are slowing"
 
-#: dynotiq.py:11701
+#: dynotiq.py:11707
 #, python-brace-format
 msgid "{what} deinen PC aus."
 msgstr "{what} your PC down."
 
-#: dynotiq.py:11702
+#: dynotiq.py:11708
 msgid "Behebst du sie, läuft die Kiste wieder so, wie sie soll."
 msgstr "Fix them and the machine runs the way it should again."
 
-#: dynotiq.py:11704
+#: dynotiq.py:11710
 msgid "Nichts Kritisches gefunden."
 msgstr "Nothing critical found."
 
-#: dynotiq.py:11705
+#: dynotiq.py:11711
 msgid "Das System läuft im grünen Bereich."
 msgstr "The system is in the green."
 
-#: dynotiq.py:11717
+#: dynotiq.py:11723
 #, python-brace-format
 msgid "{n} weitere Hinweise"
 msgstr "{n} more warnings"
 
-#: dynotiq.py:11731
+#: dynotiq.py:11737
 #, python-brace-format
 msgid "Systemzustand {score}/100 · {crit} kritisch"
 msgstr "System health {score}/100 · {crit} critical"
 
-#: dynotiq.py:11745
+#: dynotiq.py:11751
 msgid "Kopiert"
 msgstr "Copied"
 
-#: dynotiq.py:11846
+#: dynotiq.py:11852
 msgid "MHz gedrosselt"
 msgstr "MHz throttled"
 

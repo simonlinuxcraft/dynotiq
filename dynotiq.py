@@ -5774,7 +5774,7 @@ def source_origin(uri):
     return re.sub(r"^[a-z][a-z0-9+.-]*://", "", uri).split("/")[0]
 
 
-def source_newer_than_lists(uri, secs=None):
+def source_newer_than_lists(uri, secs=None, pfade=None):
     """Wurde diese Quelle erst nach dem letzten `apt-get update` eingetragen?
 
     Dann fehlt ihre Liste, ohne dass etwas kaputt ist. Verglichen wird die
@@ -5786,7 +5786,8 @@ def source_newer_than_lists(uri, secs=None):
     if secs is None:
         return False
     letzter = time.time() - secs
-    for path in (glob.glob("/etc/apt/sources.list.d/*.list")
+    for path in (pfade if pfade is not None else
+                 glob.glob("/etc/apt/sources.list.d/*.list")
                  + glob.glob("/etc/apt/sources.list.d/*.sources")
                  + ["/etc/apt/sources.list"]):
         if uri not in (read(path) or ""):
@@ -6130,8 +6131,13 @@ def kernel_version_tuple(text):
     return nums(text, 4)
 
 
-def check_hwe_kernel(ctx):
-    """Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber."""
+def check_hwe_kernel(ctx, laufend=None):
+    """Auf LTS bringt der HWE-Stack neueren Kernel und Grafiktreiber.
+
+    laufend ist die Fassung des laufenden Kernels. Als Parameter, damit sich
+    der Vergleich pruefen laesst: ein Befund, der auf einem OEM- oder
+    Mainline-Kernel einen Rueckschritt vorschlaegt, ist schlimmer als keiner.
+    """
     ver = os_release("VERSION_ID")
     if not ver or not shutil.which("apt-cache"):
         return None
@@ -6143,7 +6149,7 @@ def check_hwe_kernel(ctx):
     # "Neuerer Kernel" darf nur dastehen, wenn er wirklich neuer ist.
     cand = re.search(r"Candidate:\s*(\S+)", policy)
     if not cand or kernel_version_tuple(cand.group(1)) <= kernel_version_tuple(
-            os.uname().release):
+            laufend or os.uname().release):
         return None
     return Finding("warn", _("Neuerer Kernel verfügbar"),
                    _("{pkg} bringt den aktuellen Kernel samt Grafikstack. "
@@ -11968,6 +11974,114 @@ def selftest():
     assert parse_cache_sizes("Size: 5\n") == {}          # ohne Package kein Wert
     assert parse_cache_sizes("Package: a\nSize: kaputt\n") == {}
     assert apt_cache_sizes([]) == {}
+    # parse_apt_sizes stand ohne Zusicherung da, obwohl es der einzige Weg ist,
+    # wie eine Groesse auf die Updateseite kommt. Multi-Arch ist der Fall, an
+    # dem es sonst still danebenliegt: libfoo:amd64 und libfoo:i386 wuerden
+    # sich sonst gegenseitig ueberschreiben.
+    uris = ("'http://x/pool/l/libfoo/libfoo_1.1_amd64.deb' "
+            "libfoo_1.1_amd64.deb 111 SHA256:a\n"
+            "'http://x/pool/l/libfoo/libfoo_1.1_i386.deb' "
+            "libfoo_1.1_i386.deb 222 SHA256:b\n"
+            "'http://x/pool/c/code/code_1.2_amd64.deb' "
+            "code_1.2_amd64.deb 333 SHA256:c\n"
+            "Kopf: irgendwas anderes\n")
+    groessen = parse_apt_sizes(uris)
+    assert groessen["libfoo:amd64"] == 111 and groessen["libfoo:i386"] == 222
+    assert groessen["code"] == 333 and groessen["code:amd64"] == 333
+    assert parse_apt_sizes("") == {} and parse_apt_sizes("Müll\n") == {}
+    # Eine Zeile ohne Zahl darf nichts eintragen statt zu sprengen
+    assert parse_apt_sizes("'http://x/a_1_amd64.deb' a_1_amd64.deb keine\n") == {}
+
+    # Die nackte Kennung aus jeder Schreibweise einer Flatpak-Ref
+    assert flatpak_appid("app/com.foo.Bar/x86_64/stable") == "com.foo.Bar"
+    assert flatpak_appid("runtime/org.gnome.Platform/x86_64/47") \
+        == "org.gnome.Platform"
+    assert flatpak_appid("com.foo.Bar/x86_64/stable") == "com.foo.Bar"
+    assert flatpak_appid("com.foo.Bar") == "com.foo.Bar"
+
+    # Liegt eine Liste vor? Der Name kommt aus apt_list_name, geprueft wird
+    # gegen beide Endungen, die apt vergibt.
+    with tempfile.TemporaryDirectory() as lists:
+        alt = globals()["APT_LISTS"]
+        try:
+            globals()["APT_LISTS"] = lists
+            assert not apt_list_present("https://x.example/r", "noble")
+            stamm = apt_list_name("https://x.example/r", "noble")
+            open(os.path.join(lists, f"{stamm}_Release"), "w").close()
+            assert apt_list_present("https://x.example/r", "noble")
+            os.rename(os.path.join(lists, f"{stamm}_Release"),
+                      os.path.join(lists, f"{stamm}_InRelease"))
+            assert apt_list_present("https://x.example/r", "noble")
+        finally:
+            globals()["APT_LISTS"] = alt
+
+    # Wenige anstehende Pakete sind kein Befund fuer die Problemseite, sie
+    # stehen auf der Updateseite. Viele schon, sonst bleiben Sicherheits- und
+    # Treiberupdates unbemerkt liegen.
+    alt_sh = sh
+    try:
+        def viele(n):
+            globals()["sh"] = lambda *a, **k: "".join(
+                f"Inst p{i} [1] (2 Ubuntu:24.04/noble [amd64])\n"
+                for i in range(n))
+            return check_updates({})
+
+        assert viele(5) is None
+        f = viele(25)
+        assert f and "25" in f.badge, (f.title if f else None, f.badge if f else "")
+        assert viele(0) is None
+    finally:
+        globals()["sh"] = alt_sh
+
+    # Der HWE-Stack darf nur angeboten werden, wenn er wirklich neuer ist. Auf
+    # einem OEM- oder Mainline-Kernel waere er ein Rueckschritt, und ein Befund,
+    # der einen Kernelwechsel nach hinten vorschlaegt, ist schlimmer als keiner.
+    alt_sh, alt_which, alt_os = sh, shutil.which, os_release
+    try:
+        globals()["shutil"].which = lambda p: "/usr/bin/apt-cache"
+        globals()["os_release"] = lambda k: "24.04" if k == "VERSION_ID" else ""
+        globals()["sh"] = lambda *a, **k: (
+            "linux-generic-hwe-24.04:\n  Installed: (none)\n"
+            "  Candidate: 6.11.0-25.25~24.04.1\n")
+        assert check_hwe_kernel({}, laufend="6.8.0-45-generic")
+        # Laeuft schon etwas Neueres, wird nichts vorgeschlagen
+        assert check_hwe_kernel({}, laufend="7.0.0-28-generic") is None
+        # Ohne Kandidat oder ohne Paket gibt es nichts anzubieten
+        globals()["sh"] = lambda *a, **k: (
+            "linux-generic-hwe-24.04:\n  Installed: (none)\n"
+            "  Candidate: (none)\n")
+        assert check_hwe_kernel({}, laufend="6.8.0-45-generic") is None
+        globals()["sh"] = lambda *a, **k: ""
+        assert check_hwe_kernel({}, laufend="6.8.0-45-generic") is None
+        # Und schon installiert heisst ebenfalls nichts zu tun
+        globals()["sh"] = lambda *a, **k: (
+            "linux-generic-hwe-24.04:\n  Installed: 6.11.0-25.25~24.04.1\n"
+            "  Candidate: 6.11.0-25.25~24.04.1\n")
+        assert check_hwe_kernel({}, laufend="6.8.0-45-generic") is None
+    finally:
+        globals()["sh"] = alt_sh
+        globals()["shutil"].which = alt_which
+        globals()["os_release"] = alt_os
+
+    # Eine Quelle, die erst nach dem letzten Abruf dazukam, hat noch keine
+    # Liste. Sie deshalb tot zu nennen ist ein Fehlalarm genau in dem Moment,
+    # in dem jemand etwas Neues eintraegt.
+    with tempfile.TemporaryDirectory() as sd:
+        quelle = os.path.join(sd, "neu.sources")
+        with open(quelle, "w") as fh:
+            fh.write("Types: deb\nURIs: https://neu.example/r\nSuites: noble\n")
+        os.utime(quelle, (time.time(), time.time()))
+        # Letzter Abruf vor einer Stunde, Datei von jetzt: also neu
+        assert source_newer_than_lists("https://neu.example/r", 3600, [quelle])
+        # Letzter Abruf gerade eben, Datei von vor einem Tag: also nicht neu
+        os.utime(quelle, (time.time() - 86400, time.time() - 86400))
+        assert not source_newer_than_lists("https://neu.example/r", 60, [quelle])
+        # Eine fremde Adresse in derselben Datei zaehlt nicht
+        assert not source_newer_than_lists("https://andere.example/r", 3600,
+                                           [quelle])
+        # Ohne bekanntes Alter der Listen wird nichts behauptet
+        assert not source_newer_than_lists("https://neu.example/r", None, [quelle])
+
     assert fmt_lists_age(None) == "" and fmt_lists_age(60)
     # Ungleich heisst nicht neuer. Eine Quelle mit einer aelteren Fassung darf
     # kein Update anbieten, das in Wahrheit ein Rueckschritt ist.
