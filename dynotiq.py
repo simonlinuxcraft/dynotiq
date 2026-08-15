@@ -12170,6 +12170,47 @@ def selftest():
         globals()["sh_rc"] = alt_sh_rc
         globals()["shutil"].which = alt_which
 
+    # Drei Wege, wenn flatpak zu alt ist, und sie muessen in dieser Reihenfolge
+    # geprueft werden: erst Ubuntu, dann die Quelle des Projekts, sonst gar
+    # nichts. Ein Knopf, der auf dieser Fassung nichts liefert, ist schlimmer
+    # als kein Knopf.
+    alt_sh, alt_os, alt_status = sh, os_release, source_status
+    try:
+        globals()["os_release"] = lambda k: "noble"
+
+        def apt_sagt(inst, cand):
+            globals()["sh"] = lambda a, timeout=15: (
+                "1.14.0\n" if a[:2] == ["flatpak", "--version"] else
+                f"flatpak:\n  Installed: {inst}\n  Candidate: {cand}\n")
+
+        # Ubuntu hat etwas Neueres: dann darueber, ohne Fremdquelle
+        apt_sagt("1.14.0", "1.14.6")
+        globals()["source_status"] = lambda *a, **k: "ok"
+        txt, cmd, label = flatpak_too_old_fix()
+        assert cmd and cmd[0] == "pkexec" and "flatpak" in cmd, cmd
+        assert FLATPAK_PPA not in txt, "keine Fremdquelle, wenn apt reicht"
+
+        # Ubuntu hat nichts, das Projekt schon: dann die Quelle anbieten
+        apt_sagt("1.14.6", "1.14.6")
+        txt, cmd, label = flatpak_too_old_fix()
+        assert cmd == flatpak_ppa_argv() and FLATPAK_PPA in txt and label
+
+        # Beide haben nichts: dann kein Knopf statt eines wirkungslosen
+        globals()["source_status"] = lambda *a, **k: "missing"
+        txt, cmd, label = flatpak_too_old_fix()
+        assert cmd is None and label == "" and txt
+        # Auch bei einer Quelle, die nicht antwortet, wird nichts versprochen
+        globals()["source_status"] = lambda *a, **k: "unknown"
+        assert flatpak_too_old_fix()[1] is None
+        # Und ein Rueckschritt in apt ist kein Update
+        apt_sagt("1.14.6", "1.14.0")
+        globals()["source_status"] = lambda *a, **k: "missing"
+        assert flatpak_too_old_fix()[1] is None
+    finally:
+        globals()["sh"] = alt_sh
+        globals()["os_release"] = alt_os
+        globals()["source_status"] = alt_status
+
     assert fmt_lists_age(None) == "" and fmt_lists_age(60)
     # Ungleich heisst nicht neuer. Eine Quelle mit einer aelteren Fassung darf
     # kein Update anbieten, das in Wahrheit ein Rueckschritt ist.
