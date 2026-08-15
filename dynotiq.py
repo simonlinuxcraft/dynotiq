@@ -2121,8 +2121,28 @@ def broken_compat_tools(dirs=None):
     return out
 
 
+def app_depots_empty(appid):
+    """Hat Steam zu dieser AppID gar keine Depots eingetragen?
+
+    Dann ist sie nur nominell installiert: StateFlags sagt 4, aber
+    InstalledDepots ist leer und SizeOnDisk 0. Steam selbst zeigt sie dann in
+    der Bibliothek mit "Installieren" an, und eine Integritaetspruefung laeuft
+    ohne Wirkung durch, denn es gibt nichts zu pruefen. Genau so lag Steam
+    Linux Runtime 4.0 hier: der Knopf "reparieren" war sofort fertig und
+    aenderte nichts.
+    """
+    for lib in steam_libraries():
+        text = read(os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf"))
+        if not text:
+            continue
+        depots = vdf_block(text, "InstalledDepots") or ""
+        return not re.search(r'"\d+"', depots) \
+            or vdf_value(text, "SizeOnDisk") in ("", "0")
+    return False
+
+
 def runtime_state(appid, installed=None):
-    """"" wenn die Laufzeitumgebung brauchbar ist, sonst "missing" oder "broken".
+    """"" wenn brauchbar, sonst "missing", "empty" oder "broken".
 
     Dass ein appmanifest dasteht, heisst nur, dass Steam sie einmal geholt hat.
     Ob sie sich auch laden laesst, entscheidet die toolmanifest.vdf in ihrem
@@ -2143,6 +2163,10 @@ def runtime_state(appid, installed=None):
     g = steam_game(appid)
     if not g or not os.path.isdir(g["path"]):
         return "missing"
+    # Ein Manifest ohne Depots heisst: Steam haelt sie fuer nicht installiert.
+    # Dann hilft nur Holen, und Pruefen laeuft wirkungslos durch.
+    if app_depots_empty(appid):
+        return "empty"
     # Zwei Dateien, zwei unabhaengige Ausfallgruende. Erst die toolmanifest.vdf,
     # an der Steam selbst scheitert. Dann das Programm, das sie nennt: steht es
     # nicht da, laedt Steam die Umgebung zwar, der Start bricht aber trotzdem
@@ -2478,20 +2502,31 @@ def proton_check():
     for name, _path, appid, state in runtime_problems(tools, have):
         broke.setdefault((appid, state), []).append(name)
     for (appid, state), names in sorted(broke.items()):
-        fehlt = state == "missing"
+        fehlt = state in ("missing", "empty")
+        # Bei leeren Depots haelt Steam sie fuer nicht installiert. Eine
+        # Integritaetspruefung laeuft dann wirkungslos durch, geholt werden
+        # muss sie.
         argv = (runtime_install_argv if fehlt else runtime_repair_argv)(appid)
         g = steam_game(appid)
         out.append({
             "sev": "crit",
-            "title": (_("{rt} fehlt").format(rt=runtime_name(appid)) if fehlt
-                      else _("{rt} ist beschädigt").format(
-                          rt=runtime_name(appid))),
+            "title": (_("{rt} ist nicht installiert").format(
+                rt=runtime_name(appid)) if fehlt
+                else _("{rt} ist beschädigt").format(rt=runtime_name(appid))),
             "short": (_("Damit startet keine dieser Fassungen: {names}."
                         ).format(names=", ".join(sorted(names)))),
             "long": (
                 _("Jede dieser Fassungen läuft in einem Container, und alle "
                   "verlangen denselben: {rt}.").format(rt=runtime_name(appid))
-                + (_(" Der ist nicht installiert.") if fehlt else
+                + (_(" Steam hat ihn nicht. In der Bibliothek steht bei ihm "
+                     "'Installieren'.") if state == "missing" else
+                   _(" Steam führt ihn zwar auf, hat aber kein einziges Depot "
+                     "dazu eingetragen: StateFlags sagt installiert, "
+                     "InstalledDepots ist leer und SizeOnDisk steht auf 0. In "
+                     "der Bibliothek steht bei ihm deshalb 'Installieren'. "
+                     "Eine Integritätsprüfung läuft in diesem Zustand ohne "
+                     "Wirkung durch, es gibt nichts zu prüfen. Geholt werden "
+                     "muss er.") if state == "empty" else
                    _(" Steam hat ihn zwar heruntergeladen und führt ihn als "
                      "vollständig, aber in seinem Ordner fehlt die Datei "
                      "toolmanifest.vdf. Ohne die kann Steam ihn nicht laden. "
@@ -2505,11 +2540,13 @@ def proton_check():
                 + (_(" Der Knopf lässt Steam die Dateien prüfen und das "
                      "Fehlende nachladen. Der Ordner ist {path}.").format(
                          path=g["path"]) if g and not fehlt else
-                   _(" Der Knopf lässt Steam ihn holen, je nach Fassung ein "
-                     "bis zwei Gigabyte."))),
+                   _(" Der Knopf öffnet Steam und stößt die Installation an, "
+                     "je nach Fassung ein bis zwei Gigabyte. Reste eines "
+                     "abgebrochenen Versuchs überschreibt Steam dabei."))),
             "_rt": appid,
-            "fix": ((_("{rt} holen") if fehlt else _("{rt} reparieren")).format(
-                rt=short_runtime(appid)), argv) if argv else None})
+            "fix": ((_("{rt} installieren") if fehlt
+                     else _("{rt} reparieren")).format(
+                         rt=short_runtime(appid)), argv) if argv else None})
 
     # Was Steam selbst zuletzt abgebrochen hat. Steht schon oben ein Befund zu
     # derselben Umgebung, ist das nur die Bestaetigung und bleibt draussen.
@@ -2727,7 +2764,7 @@ def proton_rows(tools=None):
         state = runtime_state(need, have) if need else ""
         if not need:
             rt, ok = _("ohne Container"), True
-        elif state == "missing":
+        elif state in ("missing", "empty"):
             rt, ok = _("{rt} fehlt").format(rt=short_runtime(need)), False
         elif state == "broken":
             rt, ok = _("{rt} beschädigt").format(rt=short_runtime(need)), False
@@ -2839,8 +2876,8 @@ def proton_game_rows(tools=None):
         if not valve and tool not in known:
             line, ok = _("Diese Fassung gibt es hier nicht"), False
         elif kaputt:
-            line, ok = (_("{tool} startet nicht, {rt} fehlt") if kaputt[1] ==
-                        "missing" else
+            line, ok = (_("{tool} startet nicht, {rt} fehlt")
+                        if kaputt[1] in ("missing", "empty") else
                         _("{tool} startet nicht, {rt} ist beschädigt")).format(
                             tool=tool, rt=short_runtime(kaputt[0])), False
         elif built and built not in prefix_names(
@@ -6356,6 +6393,69 @@ def check_swap(ctx):
                              "Live-Monitor")])
 
 
+# Zeilen, die systemd zu jedem Fehlschlag schreibt. Sie sagen nur, DASS es
+# schiefging, nicht warum, und verdecken die eine Zeile, auf die es ankommt.
+UNIT_NOISE = ("Failed to start", "Failed with result", "Control process exited",
+              "Consumed ", "Scheduled restart", "Stopped ", "Starting ",
+              "Start request repeated", "Main process exited",
+              "Deactivated successfully", "Triggering OnFailure")
+
+
+def unit_last_error(unit, scope=()):
+    """Die letzte Zeile aus dem Journal dieser Unit, die etwas aussagt.
+
+    Ohne den Filter steht dort 'Consumed 11s CPU time', und damit weiss
+    niemand, warum der Dienst nicht laeuft.
+    """
+    return pick_unit_error(sh(["journalctl", *scope, "-u", unit, "--no-pager",
+                               "-n", "40", "-o", "cat"], timeout=25), unit)
+
+
+def pick_unit_error(text, unit):
+    """Die letzte aussagekraeftige Zeile aus dem Journalausschnitt einer Unit."""
+    echt = [z.strip() for z in text.splitlines()
+            if z.strip() and not z.strip().startswith(UNIT_NOISE)
+            and not z.strip().startswith(unit)]
+    return echt[-1][:160] if echt else ""
+
+
+def failed_unit_rows():
+    """[(Unit, Beschreibung, letzte Fehlermeldung)] aller fehlgeschlagenen."""
+    out = []
+    for unit in failed_units():
+        scope = unit_scope(unit)
+        desc, _needed = unit_info(unit, scope)
+        out.append((unit, desc, unit_last_error(unit, scope)))
+    return out
+
+
+def check_failed_units(ctx):
+    """Dienste, die nicht laufen, obwohl sie sollen.
+
+    Die Vorfallsliste kennt sie laengst, aber nur als Eintrag im Verlauf. Auf
+    der Problemseite standen sie nie, weil dort nur Kritisches der letzten 24
+    Stunden erscheint. Ein Dienst, der seit Tagen scheitert, ist genau das,
+    was ein Nutzer als "geht nicht mehr" erlebt.
+    """
+    rows = failed_unit_rows()
+    if not rows:
+        return None
+    return Finding("warn",
+                   _("1 Dienst läuft nicht") if len(rows) == 1 else
+                   _("{n} Dienste laufen nicht").format(n=len(rows)),
+                   _("systemd hat sie gestartet und sie sind gescheitert. Was "
+                     "davon abhängt, funktioniert nicht, ohne dass irgendwo "
+                     "eine Meldung erscheint."),
+                   _("{n} Dienst(e)").format(n=len(rows)), False,
+                   key="failed_units",
+                   lines=[("dialog-error-symbolic", "warn",
+                           _("{unit}: {was}").format(
+                               unit=u, was=desc or _("ohne Beschreibung"))
+                           + (f"\n{fehler}" if fehler else ""))
+                          for u, desc, fehler in rows[:6]],
+                   actions=[(_("Journal ansehen"), "_journal_who", rows[0][0])])
+
+
 def check_incidents(ctx):
     recent = [i for i in incidents_read()
               if i["sev"] == "crit" and time.time() - i["t"] < 86400]
@@ -6497,6 +6597,7 @@ CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_d
           check_cpu_temp,
           check_filesystems, check_gpu_throttle, check_governor, check_journal,
           check_old_snaps, check_autostart, check_dead_launchers, check_swap,
+          check_failed_units,
           check_proton, check_updates,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
           check_bench_drop, check_shader_cache, check_compat_tools,
@@ -12919,6 +13020,42 @@ def selftest():
             fh.write('"manifest"\n{\n}\n')
         assert tool_entry_point(rt) == ""
     assert tool_entry_point("/gibt/es/nicht") == ""
+    # Ein Manifest mit StateFlags 4, aber ohne Depots und mit SizeOnDisk 0
+    # heisst: Steam haelt die App fuer nicht installiert und zeigt in der
+    # Bibliothek "Installieren". Eine Integritaetspruefung laeuft dann
+    # wirkungslos durch, im content_log steht "No Error" und es aendert sich
+    # nichts. Genau das passierte hier am 15.08.2026 um 20:17.
+    voll = ('"AppState"\n{\n\t"appid"\t\t"1628350"\n\t"StateFlags"\t\t"4"\n'
+            '\t"SizeOnDisk"\t\t"803970096"\n\t"InstalledDepots"\n\t{\n'
+            '\t\t"1628351"\n\t\t{\n\t\t\t"size"\t\t"803970096"\n\t\t}\n\t}\n}\n')
+    leer = ('"AppState"\n{\n\t"appid"\t\t"4183110"\n\t"StateFlags"\t\t"4"\n'
+            '\t"SizeOnDisk"\t\t"0"\n\t"InstalledDepots"\n\t{\n\t}\n}\n')
+    assert re.search(r'"\d+"', vdf_block(voll, "InstalledDepots") or "")
+    assert not re.search(r'"\d+"', vdf_block(leer, "InstalledDepots") or "")
+    assert vdf_value(leer, "SizeOnDisk") == "0"
+    assert vdf_value(voll, "SizeOnDisk") == "803970096"
+    # Und der Knopf muss dann installieren, nicht pruefen
+    assert runtime_install_argv("1") is None or \
+        runtime_install_argv("1")[1] == "steam://install/1"
+    assert runtime_repair_argv("1") is None or \
+        runtime_repair_argv("1")[1] == "steam://validate/1"
+    # systemd schreibt zu jedem Fehlschlag dieselben Zeilen. Sie sagen nur,
+    # DASS es schiefging, und verdecken die eine, auf die es ankommt.
+    lauf = ("vboxdrv.sh: Building VirtualBox kernel modules.\n"
+            "failed: Look at /var/log/vbox-setup.log to find out what went "
+            "wrong.\n"
+            "vboxdrv.service: Control process exited, code=exited, status=1\n"
+            "Failed to start vboxdrv.service - VirtualBox Linux kernel "
+            "module.\n"
+            "vboxdrv.service: Consumed 11.665s CPU time, 23.5M memory peak.\n")
+    assert pick_unit_error(lauf, "vboxdrv.service") == \
+        "failed: Look at /var/log/vbox-setup.log to find out what went wrong."
+    # Bleibt nur Rauschen uebrig, wird nichts behauptet
+    assert pick_unit_error("Failed to start x.service\nStopped x.service\n",
+                           "x.service") == ""
+    assert pick_unit_error("", "x.service") == ""
+    # Lange Zeilen werden gekappt, sonst sprengen sie die Befundzeile
+    assert len(pick_unit_error("x" * 400 + "\n", "y.service")) == 160
     assert runtime_name("1628350").startswith("Steam Linux Runtime 3")
     assert "4711" in runtime_name("4711")
     # Verschieben und Installieren tragen die veränderlichen Teile als
