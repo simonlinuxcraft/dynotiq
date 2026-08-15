@@ -2121,6 +2121,38 @@ def broken_compat_tools(dirs=None):
     return out
 
 
+CONTENT_LOG = "logs/content_log.txt"
+# Steam schreibt jede Aenderung an der Depot-Zuordnung einer App mit. Genau
+# diese Zeile erklaert einen leeren InstalledDepots-Block, und ohne sie sieht
+# es aus, als haette der Nutzer etwas geloescht.
+DEPOT_REMOVED = re.compile(
+    r"^\[([\d-]+ [\d:]+)\] AppID (\d+) config changed : removed depots", re.M)
+
+
+def depot_removed_when(appid, root=None, limit=4 << 20):
+    """Wann Steam der App zuletzt ihre Depots entzogen hat, sonst 0.
+
+    Das passiert nach einer Aenderung der Konfiguration: Steam wertet neu aus,
+    kommt auf null Zieldepots und haengt das Vorhandene aus. Danach steht die
+    App als installiert im Manifest, hat aber nichts mehr, und ein Klick auf
+    Installieren laedt nichts, weil Steam nichts zu laden sieht.
+    """
+    r = root or steam_root()
+    if not r:
+        return 0.0
+    text = read_tail(os.path.join(os.path.realpath(r), CONTENT_LOG), limit)
+    letzte = 0.0
+    for when, app in DEPOT_REMOVED.findall(text or ""):
+        if app != appid:
+            continue
+        try:
+            letzte = max(letzte, time.mktime(
+                time.strptime(when, "%Y-%m-%d %H:%M:%S")))
+        except ValueError:
+            continue
+    return letzte
+
+
 def app_depots_empty(appid):
     """Hat Steam zu dieser AppID gar keine Depots eingetragen?
 
@@ -2507,6 +2539,7 @@ def proton_check():
         # Integritaetspruefung laeuft dann wirkungslos durch, geholt werden
         # muss sie.
         argv = (runtime_install_argv if fehlt else runtime_repair_argv)(appid)
+        entzogen = depot_removed_when(appid) if state == "empty" else 0.0
         g = steam_game(appid)
         out.append({
             "sev": "crit",
@@ -2520,13 +2553,25 @@ def proton_check():
                   "verlangen denselben: {rt}.").format(rt=runtime_name(appid))
                 + (_(" Steam hat ihn nicht. In der Bibliothek steht bei ihm "
                      "'Installieren'.") if state == "missing" else
-                   _(" Steam führt ihn zwar auf, hat aber kein einziges Depot "
-                     "dazu eingetragen: StateFlags sagt installiert, "
-                     "InstalledDepots ist leer und SizeOnDisk steht auf 0. In "
-                     "der Bibliothek steht bei ihm deshalb 'Installieren'. "
-                     "Eine Integritätsprüfung läuft in diesem Zustand ohne "
-                     "Wirkung durch, es gibt nichts zu prüfen. Geholt werden "
-                     "muss er.") if state == "empty" else
+                   (_(" Steam führt ihn zwar auf, hat aber kein einziges "
+                      "Depot dazu eingetragen: StateFlags sagt installiert, "
+                      "InstalledDepots ist leer und SizeOnDisk steht auf 0. "
+                      "In der Bibliothek steht bei ihm deshalb "
+                      "'Installieren'. Eine Integritätsprüfung läuft in "
+                      "diesem Zustand ohne Wirkung durch, es gibt nichts zu "
+                      "prüfen.")
+                    + (_(" Steam hat ihm die Dateien am {date} selbst "
+                        "entzogen, nach einer Änderung der Konfiguration. "
+                        "Sein eigenes Protokoll sagt dazu 'config changed: "
+                        "removed depots'. Führt der Knopf zu nichts, hat "
+                        "Steam eine veraltete Zuordnung im Zwischenspeicher: "
+                        "dann Steam ganz beenden, neu starten und es noch "
+                        "einmal versuchen. Hilft auch das nicht, in Steam "
+                        "deinstallieren und danach installieren, dann "
+                        "verwirft es seinen alten Eintrag.").format(
+                            date=time.strftime("%d.%m.%Y um %H:%M",
+                                               time.localtime(entzogen)))
+                       if entzogen else "")) if state == "empty" else
                    _(" Steam hat ihn zwar heruntergeladen und führt ihn als "
                      "vollständig, aber in seinem Ordner fehlt die Datei "
                      "toolmanifest.vdf. Ohne die kann Steam ihn nicht laden. "
@@ -13056,6 +13101,18 @@ def selftest():
     assert pick_unit_error("", "x.service") == ""
     # Lange Zeilen werden gekappt, sonst sprengen sie die Befundzeile
     assert len(pick_unit_error("x" * 400 + "\n", "y.service")) == 160
+    # Ohne re.M trifft ^ nur den Textanfang, und die eine Zeile, die den
+    # leeren Depot-Block erklaert, bleibt unentdeckt. Genau so lag es hier.
+    log = ("[2026-08-01 15:42:07] AppID 252950 config changed : removed depots "
+           "252951\n"
+           "[2026-08-13 22:29:24] AppID 4183110 config changed : removed depots "
+           "4183111\n"
+           "[2026-08-13 23:16:23] AppID 4183110 finished update, 0 mounted "
+           "depots (BuildID 24599767) : \n")
+    treffer = DEPOT_REMOVED.findall(log)
+    assert treffer == [("2026-08-01 15:42:07", "252950"),
+                       ("2026-08-13 22:29:24", "4183110")], treffer
+    assert DEPOT_REMOVED.findall("AppID 1 config changed : removed depots 2") == []
     assert runtime_name("1628350").startswith("Steam Linux Runtime 3")
     assert "4711" in runtime_name("4711")
     # Verschieben und Installieren tragen die veränderlichen Teile als
