@@ -844,6 +844,34 @@ def parse_apt_sizes(text):
     return sizes
 
 
+def parse_cache_sizes(text):
+    """{Paketname: Byte} aus 'apt-cache show'. Nur Package und Size zaehlen."""
+    out, name = {}, ""
+    for line in text.splitlines():
+        if line.startswith("Package: "):
+            name = line[9:].strip()
+        elif line.startswith("Size: ") and name:
+            try:
+                out[name] = int(line[6:].strip())
+            except ValueError:
+                pass
+    return out
+
+
+def apt_cache_sizes(pkgs):
+    """Groessen aus den Paketlisten, fuer alles was --print-uris nicht nennt.
+
+    apt nennt keine URI fuer ein Paket, das schon in /var/cache/apt/archives
+    liegt. Nach einem abgebrochenen Lauf steht dann bei jedem zweiten Eintrag
+    eine Null, und die Summe auf der Karte ist zu klein. --no-all-versions,
+    sonst kommen alle angebotenen Fassungen und die letzte gewinnt.
+    """
+    if not pkgs:
+        return {}
+    return parse_cache_sizes(sh(["apt-cache", "--no-all-versions", "show",
+                                 *sorted(pkgs)], timeout=60))
+
+
 def parse_apt_updates(text, uris=""):
     """Inst-Zeilen der apt-Simulation: 'Inst name[:arch] [alt] (neu quelle [arch])'.
 
@@ -1074,6 +1102,14 @@ def updates_scan(include_firmware=True):
                    "dist-upgrade"], timeout=90)
         sim = run("apt", ["apt-get", "-s", "-o", "Debug::NoLocking=1",
                           "dist-upgrade"], 60, parse_apt_updates, uris)
+        # Was schon im Zwischenspeicher liegt, hat keine URI und damit keine
+        # Groesse. Nachschlagen statt eine Null anzeigen.
+        fehlt = [u[1] for u in out["apt"]["items"] if not u[4]]
+        if fehlt:
+            nach = apt_cache_sizes(fehlt)
+            out["apt"]["items"] = [
+                (i, n, a, neu, b or nach.get(n, 0))
+                for i, n, a, neu, b in out["apt"]["items"]]
         out["apt"]["removals"] = parse_apt_removals(sim)
         out["apt"]["phased"] = parse_apt_phased(sim)
     if shutil.which("snap"):
@@ -11777,6 +11813,15 @@ def selftest():
     assert "100" in tool_error("apt-get", 100, "")
     # Und die Grossschreibung darf keine Rolle spielen, apt mischt sie
     assert tool_error("apt-get", 100, "E: COULD NOT GET LOCK") == belegt
+    # Ein Paket, das schon im Zwischenspeicher liegt, hat keine URI und damit
+    # keine Groesse. Ohne Nachschlagen stand dort eine Null und die Summe auf
+    # der Karte war zu klein.
+    assert parse_cache_sizes(
+        "Package: a\nVersion: 1\nSize: 100\n\n"
+        "Package: b\nSize: 250\nDescription: x\n") == {"a": 100, "b": 250}
+    assert parse_cache_sizes("Size: 5\n") == {}          # ohne Package kein Wert
+    assert parse_cache_sizes("Package: a\nSize: kaputt\n") == {}
+    assert apt_cache_sizes([]) == {}
     assert fmt_lists_age(None) == "" and fmt_lists_age(60)
     # Ungleich heisst nicht neuer. Eine Quelle mit einer aelteren Fassung darf
     # kein Update anbieten, das in Wahrheit ein Rueckschritt ist.
