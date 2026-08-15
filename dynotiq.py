@@ -2173,6 +2173,15 @@ def app_depots_empty(appid):
     return False
 
 
+def runtime_manifest(appid):
+    """Der Pfad zum appmanifest dieser AppID, "" wenn keins dasteht."""
+    for lib in steam_libraries():
+        p = os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf")
+        if os.path.exists(p):
+            return p
+    return ""
+
+
 def runtime_state(appid, installed=None):
     """"" wenn brauchbar, sonst "missing", "empty" oder "broken".
 
@@ -2382,6 +2391,44 @@ def runtime_repair_argv(appid):
         if shutil.which("steam") else None
 
 
+# Steam nimmt weder install noch validate an, solange sein eigenes Manifest
+# StateFlags 4 meldet: der Eintrag gilt ihm als vollstaendig, auch wenn kein
+# Depot dahinter steht. Im Log stand zu 'steam://install' deshalb nur
+# ExecuteSteamURL und danach nichts, keine GameAction, kein Download. Erst die
+# Deinstallation raeumt den Eintrag weg, danach greift install.
+# Der Pfad des Manifests ist die Probe: solange es dasteht, hat Steam die
+# Deinstallation nicht ausgefuehrt, und dann wird auch nichts nachgeholt.
+RUNTIME_RESET_SH = (
+    'echo "$4"\n'
+    '"$1" "steam://uninstall/$2" >/dev/null 2>&1 &\n'
+    'n=0\n'
+    'while [ -e "$3" ] && [ "$n" -lt 180 ]; do sleep 2; n=$((n + 2)); done\n'
+    'if [ -e "$3" ]; then echo "$5"; exit 1; fi\n'
+    'echo "$6"\n'
+    '"$1" "steam://install/$2" >/dev/null 2>&1 &\n'
+    'sleep 3\n'
+)
+
+
+def runtime_reset_argv(appid):
+    """Steams falschen Eintrag wegraeumen und die Umgebung neu holen.
+
+    Nur fuer den Zustand "empty". Kein pkexec: alles darunter gehoert dem
+    angemeldeten Nutzer, und Steam laeuft ohnehin unter ihm.
+    """
+    steam = shutil.which("steam")
+    mf = runtime_manifest(appid)
+    if not steam or not mf:
+        return None
+    return ["sh", "-c", RUNTIME_RESET_SH, "sh", steam, str(appid), mf,
+            _("Steam fragt gleich, ob es entfernt werden soll. Bestätige das "
+              "dort, hier läuft es dann weiter."),
+            _("Steam hat den Eintrag nicht entfernt. Es bleibt alles, wie es "
+              "war."),
+            _("Der Eintrag ist weg. Steam holt die Umgebung jetzt neu, das "
+              "dauert einige Minuten. Danach hier 'Neu einlesen' drücken.")]
+
+
 def remove_tool_argv(path):
     """Eine unbrauchbare Fassung wegräumen.
 
@@ -2535,10 +2582,11 @@ def proton_check():
         broke.setdefault((appid, state), []).append(name)
     for (appid, state), names in sorted(broke.items()):
         fehlt = state in ("missing", "empty")
-        # Bei leeren Depots haelt Steam sie fuer nicht installiert. Eine
-        # Integritaetspruefung laeuft dann wirkungslos durch, geholt werden
-        # muss sie.
-        argv = (runtime_install_argv if fehlt else runtime_repair_argv)(appid)
+        # Drei Zustaende, drei verschiedene Wege. Bei leeren Depots lehnt Steam
+        # install und validate gleichermassen ab, weil sein Manifest die
+        # Umgebung als vollstaendig fuehrt: erst muss der Eintrag weg.
+        argv = (runtime_reset_argv(appid) if state == "empty" else
+                (runtime_install_argv if fehlt else runtime_repair_argv)(appid))
         entzogen = depot_removed_when(appid) if state == "empty" else 0.0
         g = steam_game(appid)
         out.append({
@@ -2564,11 +2612,7 @@ def proton_check():
                         "entzogen, nach einer Änderung der Konfiguration. "
                         "Sein eigenes Protokoll sagt dazu 'config changed: "
                         "removed depots'. Warum, steht dort nicht, und diese "
-                        "Seite rät es nicht. Führt der Knopf zu nichts, in "
-                        "dieser Reihenfolge weiter: Steam ganz beenden und "
-                        "neu starten, dann noch einmal installieren, und "
-                        "zuletzt in Steam deinstallieren und danach neu "
-                        "installieren.").format(
+                        "Seite rät es nicht.").format(
                             date=time.strftime("%d.%m.%Y um %H:%M",
                                                time.localtime(entzogen)))
                        if entzogen else "")) if state == "empty" else
@@ -2582,14 +2626,21 @@ def proton_check():
                     "\"Kompatibilitätswerkzeug fehlgeschlagen\" beim "
                     "Spielstart, mit jeder dieser Fassungen und bei jedem "
                     "Spiel. Die Fassungen selbst sind in Ordnung.")
-                + (_(" Der Knopf lässt Steam die Dateien prüfen und das "
+                + (_(" Der Knopf lässt Steam den falschen Eintrag entfernen "
+                     "und die Umgebung danach neu holen. Steam fragt beim "
+                     "Entfernen nach, das musst du dort bestätigen. Verloren "
+                     "geht nichts: es steht ja nichts drin. Danach lädt Steam "
+                     "je nach Fassung ein bis zwei Gigabyte.")
+                   if state == "empty" else
+                   _(" Der Knopf lässt Steam die Dateien prüfen und das "
                      "Fehlende nachladen. Der Ordner ist {path}.").format(
                          path=g["path"]) if g and not fehlt else
                    _(" Der Knopf öffnet Steam und stößt die Installation an, "
                      "je nach Fassung ein bis zwei Gigabyte. Reste eines "
                      "abgebrochenen Versuchs überschreibt Steam dabei."))),
             "_rt": appid,
-            "fix": ((_("{rt} installieren") if fehlt
+            "fix": ((_("{rt} neu holen") if state == "empty" else
+                     _("{rt} installieren") if fehlt
                      else _("{rt} reparieren")).format(
                          rt=short_runtime(appid)), argv) if argv else None})
 
@@ -13322,11 +13373,43 @@ def selftest():
     assert not re.search(r'"\d+"', vdf_block(leer, "InstalledDepots") or "")
     assert vdf_value(leer, "SizeOnDisk") == "0"
     assert vdf_value(voll, "SizeOnDisk") == "803970096"
-    # Und der Knopf muss dann installieren, nicht pruefen
     assert runtime_install_argv("1") is None or \
         runtime_install_argv("1")[1] == "steam://install/1"
     assert runtime_repair_argv("1") is None or \
         runtime_repair_argv("1")[1] == "steam://validate/1"
+    # Und der Knopf muss etwas tun, das Steam auch annimmt. install lehnt es
+    # ebenso ab wie validate, solange sein Manifest StateFlags 4 meldet: im
+    # Log stand zu 'steam://install/4183110' nur ExecuteSteamURL und danach
+    # nichts, keine GameAction, kein Download. Erst die Deinstallation raeumt
+    # den Eintrag weg.
+    with tempfile.TemporaryDirectory() as lib:
+        os.makedirs(os.path.join(lib, "steamapps"))
+        mf = os.path.join(lib, "steamapps", "appmanifest_4183110.acf")
+        libs, which = steam_libraries, shutil.which
+        globals()["steam_libraries"] = lambda: [lib]
+        shutil.which = lambda n: "/usr/games/steam" if n == "steam" else None
+        try:
+            assert runtime_manifest("4183110") == ""
+            assert runtime_reset_argv("4183110") is None, \
+                "ohne Manifest gibt es nichts zurueckzusetzen"
+            open(mf, "w").close()
+            assert runtime_manifest("4183110") == mf
+            argv = runtime_reset_argv("4183110")
+            assert argv[:2] == ["sh", "-c"] and argv[3] == "sh", argv
+            # Alles Veraenderliche geht als Argument, nichts in den Skripttext
+            assert "4183110" not in argv[2] and mf not in argv[2], argv[2]
+            assert argv[4:7] == ["/usr/games/steam", "4183110", mf], argv
+            # Erst entfernen, dann holen. Andersherum passiert wieder nichts.
+            assert argv[2].index("steam://uninstall/$2") \
+                < argv[2].index("steam://install/$2"), argv[2]
+            # Und das Manifest ist die Probe: liegt es noch da, hat Steam die
+            # Deinstallation nicht ausgefuehrt, dann wird nichts nachgeholt.
+            assert '[ -e "$3" ]' in argv[2], argv[2]
+            shutil.which = lambda n: None
+            assert runtime_reset_argv("4183110") is None, "ohne Steam kein Knopf"
+        finally:
+            globals()["steam_libraries"] = libs
+            shutil.which = which
     # systemd schreibt zu jedem Fehlschlag dieselben Zeilen. Sie sagen nur,
     # DASS es schiefging, und verdecken die eine, auf die es ankommt.
     lauf = ("vboxdrv.sh: Building VirtualBox kernel modules.\n"
