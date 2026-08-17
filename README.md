@@ -93,7 +93,7 @@ and install it directly. The package carries the repository and its key, so
 updates arrive through apt either way. GitHub replaces the tilde in the version
 with a dot in the attachment name, the package itself is unaffected:
 
-    sudo dpkg -i dynotiq_0.2.beta1_all.deb
+    sudo dpkg -i dynotiq_0.3.beta_all.deb
 
 Build the package yourself:
 
