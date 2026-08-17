@@ -13871,8 +13871,11 @@ def selftest():
         assert not game_exe_present(os.path.join(td, "gibt-es-nicht"))
     # Fehlt ein Datentraeger, darf nichts als "nicht installiert" gelten.
     # Sonst bietet die Seite an, zwei Gigabyte neu zu laden, weil eine externe
-    # Platte nicht steckt.
-    assert runtime_state("1628350", {"1628350"}) in ("", "broken")
+    # Platte nicht steckt. Nur dort pruefbar, wo Steam die Umgebung wirklich
+    # liegen hat: ohne ihren Ordner sagt runtime_state zu Recht "missing", und
+    # auf einem Rechner ohne Steam gilt das immer.
+    if steam_game("1628350"):
+        assert runtime_state("1628350", {"1628350"}) in ("", "broken")
     assert runtime_state("9999999", set()) == ""
     # Zwei Ausfallgruende, zwei Dateien. Der Name des Einstiegspunkts kommt aus
     # der toolmanifest.vdf und wird nicht geraten: scout heisst dort
