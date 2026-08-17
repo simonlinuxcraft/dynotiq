@@ -1,0 +1,35 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: all
+Date: Mon, 17 Aug 2026 10:59:25 +0000
+Label: dynotiq
+Origin: dynotiq
+MD5Sum:
+ f0478bc1104ab3d1996dce6aa0947dee             1054 Packages
+ 641ffd6686a0cd562c43edd6b4f3e8c6              705 Packages.gz
+SHA1:
+ a6c91e45ded7e71c6c75098ecae3baad930f1a6d             1054 Packages
+ 0dcfe7f09dc741f3f804a4236588fc7a1fa9e8bb              705 Packages.gz
+SHA256:
+ 139e7b38db94e33b82c2f34ed88e1240d36b44b5da3ff4a473b70c5217af72b8             1054 Packages
+ b7bbd38d63aeb0125f52a9b59a90af34adc9c2e04a8ffcceb8589c569ce22040              705 Packages.gz
+SHA512:
+ c448e1f81e01ce5d5884cc64c81ea4aff75f20181cc60e47ec282e135c44e254f0a9f321a3ba91b360f5b46eee406436a6fdffef75eaa7b71fecc4463fe25fea             1054 Packages
+ 07b934fe744a258ae4640cc493ceb8729b9f7861e2b1ef55d6b3076489c8d4c5f19f3144c95213d66268f21dd48263c997aa50f39ee79991bfa2914c8128aace              705 Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEk6gk4BN+upUpmfb2nUIagtZ+FlYFAmqC6Y0ACgkQnUIagtZ+
+FlbpJQ//WGUMcWbUh1hUOOmjPo9Gh5j6CcTPZtSA9i8G452ChWWU6Q05cvn3txmr
+t1g+LkgdJb/0NPQuAdKWPlK0f8Iemaf0aqh7isu4alqu4fmGTNvQk0gEWuX3xS23
+mmgZpFpv9jIgzrq9bQevbIk1uYrCkiKDjWz+hKtGE0BlP1JGS/76x2mSfHL5Jm2c
+lw0kPBiKm5Qgixw+d6TmJIl2qQd7QT5I9apU4J1U4e0x/ZigKZdoyVBImFLjoCeP
+XVv35Lm4COMgzFYxMUfSsJrZuQRuutQPULmLEeg3tk0Lwh4DRyMmptYfjE2rE8wm
+kzXhyQxKugLBRSNf9sBq4QNoGdc/eoX9tAfV9w9XIypBoU6ngQmGXEspdiidYVK/
+Xxu0/N/meOuMIhSBEvvG/mnsRRo6dmPTaKwbKAOO/z3hhmGKT/CwyI9rafP5/oeI
+R2puySXYUaSrI5K59EY2bc+GrYsO/0kIigOA5INsWH1Bj06wXGy3/9XPN6kQPcq5
+YtfDEPhW/qRLIN4pJNalteFEsRsdYeg0CqiY45/+nfN51RakGjDUYPcCej1Yi0Un
+wBn3TAZ4m2e4l60pDlA5NcaRDl2VVm0mtuOFYWF+YOtcMDrZGOxEaO0Va+Frt4mz
+VwN24MXs824h7bdXznPGHxOJAsEQKChBK7xa+i2Ix8fGEFSlh8k=
+=3LA4
+-----END PGP SIGNATURE-----
