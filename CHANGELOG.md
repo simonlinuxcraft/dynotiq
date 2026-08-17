@@ -155,12 +155,12 @@
 - A title whose Windows store was built by a newer Proton than the one it is set
   to is the finding that would otherwise cost saved games, and it carries a
   button rather than a paragraph and a path, which is of no use to anyone who
-  does not know what a prefix is. It reads the versions and switches the title in
-  Steam to one the store already fits. That is the safe way out, because Proton
-  converts a store forwards by itself: any version that is not older than the
-  store will do, not only the one that built it. Versions in a
-  compatibilitytools.d that Steam does not read are left out of the choice, since
-  setting a title to one of those is worse than the finding
+  does not know what a prefix is. It reads the versions and switches the title
+  in Steam to one the store already fits. That is the safe way out, because
+  Proton converts a store forwards by itself: any version that is not older than
+  the store will do, not only the one that built it. Versions in a
+  compatibilitytools.d that Steam does not read are left out of the choice,
+  since setting a title to one of those is worse than the finding
 - Where no version fits, the button moves the prefix aside to
   `<appid>.vor-dynotiq` and Proton builds a fresh one on the next start. Saved
   games in it are not thrown away, the game just stops seeing them, and the
@@ -178,9 +178,9 @@
   them. Thirty lines of awk prove nothing to anybody and push the file being
   touched out of sight. The window that runs the command still shows it in full,
   so the record is complete where a record belongs
-- Descriptions across every page are readable. The grey they were drawn in sat at
-  4.3:1 against the card, under the accessibility floor for text that size, and
-  these pages are mostly text
+- Descriptions across every page are readable. The grey they were drawn in sat
+  at 4.3:1 against the card, under the accessibility floor for text that size,
+  and these pages are mostly text
 - A Steam runtime that is assigned a Proton version of its own is reported, and
   a button takes the assignment out. Steam lists its runtimes like games, so a
   tool that sets one Proton version for every entry at once assigns one to the
@@ -191,15 +191,15 @@
   outside the runtime just looks damaged
 - A runtime whose entry Steam holds as installed with no depots behind it can be
   fetched again, which is the state that looks most like nothing can be done.
-  Steam refuses both a repair and a fresh install there, because its own manifest
-  says the entry is complete: `steam://validate` runs through and finds nothing
-  to check, `steam://install` produces no download at all, and `steam://uninstall`
-  is refused for a runtime after the dialog has already been confirmed. So the
-  button closes Steam, takes out the assignment that blocks it, removes the false
-  entry and starts Steam with the job of fetching, keeping the old configuration
-  next to it as config.vdf.vor-dynotiq. Which of the three routes a runtime needs
-  is decided from its files, not guessed: no manifest, a manifest with no depots,
-  or files that are recorded and gone
+  Steam refuses both a repair and a fresh install there, because its own
+  manifest says the entry is complete: `steam://validate` runs through and finds
+  nothing to check, `steam://install` produces no download at all, and
+  `steam://uninstall` is refused for a runtime after the dialog has already been
+  confirmed. So the button closes Steam, takes out the assignment that blocks
+  it, removes the false entry and starts Steam with the job of fetching, keeping
+  the old configuration next to it as config.vdf.vor-dynotiq. Which of the three
+  routes a runtime needs is decided from its files, not guessed: no manifest, a
+  manifest with no depots, or files that are recorded and gone
 - Failed launches are read from Steam's own `compat_log.txt`, so a finding can
   name the titles that did not start and when. Entries older than a week are
   dropped, and one that predates the repair of the runtime it blamed drops out
