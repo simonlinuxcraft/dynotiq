@@ -16,6 +16,18 @@ OUT="build/repo"
 VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' dynotiq.py)
 REMOTE=$(git remote get-url origin)
 
+# Die Adresse landet in einem oeffentlichen Branch. Sie kommt aus git config,
+# und die Repo-Einstellung, die hier die Noreply-Adresse setzt, liegt in
+# .git/config und wird nicht mitversioniert: auf einem frischen Klon gilt wieder
+# die globale. Deshalb lieber abbrechen als die private Adresse pushen.
+MAIL=$(git config user.email)
+case "$MAIL" in
+  *@users.noreply.github.com|*@pm.me) ;;
+  *) echo "user.email ist $MAIL, das geht in einen oeffentlichen Branch."
+     echo "Setzen mit: git config user.email 245174420+simonlinuxcraft@users.noreply.github.com"
+     exit 1 ;;
+esac
+
 # Eigenes Repo im Wegwerfverzeichnis statt worktree: kein Zustand, der im
 # Hauptbaum haengen bleibt, wenn das Skript zwischendrin abbricht.
 TMP=$(mktemp -d)

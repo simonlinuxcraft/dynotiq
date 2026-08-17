@@ -2,6 +2,7 @@ build/
 locale/
 __pycache__/
 *.pyc
+.claude/
 dynotiq Logo Icon Design/
 Pruefstand-Dashboard.html
 IDEEN.md

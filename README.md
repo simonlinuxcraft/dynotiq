@@ -46,6 +46,15 @@ limits, the Proton build a title is set to, launch options, ntsync, Resizable
 BAR, titles pointing at a Proton build that is no longer installed, and prefixes
 left behind by games you uninstalled long ago.
 
+**Proton** is where a Windows game that stopped starting gets explained. Every
+Proton version from 5.13 on runs inside a container Steam downloads separately,
+and when that container is missing or damaged, no game starts on that version
+while Steam says nothing beyond "exited unexpectedly". The page reads Steam's
+own files, names the cause, and carries a button for it: fetch the runtime
+again, take out an assignment that breaks it, move a version Steam never looks
+at into the folder it does read, or switch a title to a Proton version its
+Windows store actually fits.
+
 **Dyno** records temperature, clock and waiting times over minutes under real
 load and answers what a snapshot cannot: at which point does it start
 throttling, and did the machine ever stand still waiting for a free core, for
@@ -55,8 +64,12 @@ looks like nothing at all in a temperature curve.
 **Benchmark** measures CPU, memory and disk against the median of your own
 earlier runs. A number without a baseline says nothing.
 
-Plus a live monitor, storage analysis with cleanup, autostart control including
-slow boot services, and a history of every scan.
+**Settings** keeps the background watcher on a leash: how often it looks, and
+whether it interrupts for anything below a critical incident. Everything can go
+back to the defaults in one step, and history and snoozed findings survive that.
+
+Plus a driver page, a live monitor, storage analysis with cleanup, autostart
+control including slow boot services, and a history of every scan.
 
 ## Ubuntu for now
 

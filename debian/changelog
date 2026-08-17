@@ -85,8 +85,24 @@ dynotiq (0.3~beta) noble; urgency=medium
   * Fix: clearing old snap revisions asks for the password once instead of once
     per revision. polkit grants pkexec as auth_admin without keep, so 29
     revisions meant 29 prompts.
+  * New Proton page. It reads Steam's own files for what stops a Windows game
+    from starting: whether every Proton version has the container runtime it
+    asks for, which title uses which version, what built a prefix, and the
+    launches that already failed in Steam's compat log.
+  * A missing or damaged Steam runtime is fetched again by a button, including
+    the case where Steam holds the entry as installed with no depots behind it
+    and answers every attempt with "Invalid platform".
+  * Every prefix finding carries an action: switch the title to a Proton
+    version its Windows store fits, which keeps saved games, or move the
+    prefix aside where no version fits, which says what it costs first.
+  * Versions Steam refuses to list, and versions unpacked into a
+    compatibilitytools.d Steam does not read, are found and can be repaired.
+  * Updates: packages already in the apt cache show a size, phased updates are
+    listed instead of silently missing, and a failed run says why in words.
+  * dynotiq is free software again, GPL-3.0-or-later for everything. The all
+    rights reserved step taken in 0.2~beta1 is withdrawn.
 
- -- simonlinuxcraft <simonlinuxcraft@pm.me>  Fri, 07 Aug 2026 23:35:00 +0200
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Mon, 17 Aug 2026 12:30:00 +0200
 
 dynotiq (0.2~beta1) noble; urgency=medium
 
