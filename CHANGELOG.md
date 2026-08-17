@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3~beta - Settings tidied up
+## 0.3~beta - Proton, and free again
 
 ### Settings
 
@@ -41,6 +41,33 @@
 - A dist-upgrade that would remove packages says so. The page cannot carry that
   out, `apt-get install --only-upgrade` has no way to, and it names the packages
   and the command that can instead of leaving the update stuck without a reason
+- Packages that are already downloaded show a size. apt reports no download size
+  for anything sitting in `/var/cache/apt/archives`, so those rows said nothing
+  and the total on the card came out too small. It reads the size out of the
+  cache instead
+- A flatpak update that fails because flatpak itself is too old says so, and
+  names the way out that actually exists on this machine. It asks apt first, and
+  only where Ubuntu has nothing newer does it offer the Flatpak project's own
+  package source for this release, saying plainly that this is a source from
+  outside Ubuntu and how to remove it again. Where neither has anything, it says
+  that too rather than offering a button that would change nothing
+- Updates apt is holding back by phasing are on the page instead of missing from
+  it. A phased upgrade is deliberately given to a fraction of machines first, so
+  apt lists it as kept back and installs nothing. The page said everything was
+  current while apt disagreed. They are listed separately, with the reason, and
+  they deliberately get no button: forcing one past its phase is a decision
+  about being an early tester, not a repair
+- A failed run says why in words rather than an exit code. The most common cause
+  by far is the automatic update holding the dpkg lock, which now reads as that.
+  A source that could not be asked at all no longer counts as a source with
+  nothing to update, which is what made a scan report "everything current" after
+  a failure
+- Anything that removes or overwrites runs the real command as a dry run first
+  and names what it would take, with the count on the button. The decision is
+  then made in front of the list rather than after the fact
+- Whether a release upgrade is offered at all comes from Ubuntu's own
+  `Prompt=` in `/etc/update-manager/release-upgrades` instead of a guess. Set to
+  `never`, nothing is offered, which is what the setting is for
 
 ### History
 
@@ -103,6 +130,81 @@
   while the recording still works. Fixed upstream in 0.8.2, which no Ubuntu
   ships yet
 
+### Proton
+
+- A page of its own, named the way Steam names it in the properties dialog.
+  Every Proton version from 5.13 on runs inside a container that Steam downloads
+  separately, and if that container is missing or the version was unpacked
+  half way, no game starts on it while Steam says nothing beyond "exited
+  unexpectedly". The page reads what is actually on the disk and states the
+  cause: `toolmanifest.vdf` for the container a version asks for, the `version`
+  file for what built a prefix, Steam's `config.vdf` for which title uses which
+  version, and Steam's own `compat_log.txt` for the launches that already
+  failed. Nothing on it is guessed, and every finding names the file it came
+  from
+- A version Steam refuses to list at all is reported, with the reason. A
+  half-unpacked folder with no `proton` file in it, or a symlink to a folder
+  that is gone: Steam drops both from its list without a word, so a title set to
+  one of them simply stops starting. The button clears it away, and for the
+  symlink it says outright that nothing is lost
+- Versions unpacked into the wrong `compatibilitytools.d` are found. Steam only
+  reads the one under its own installation, which on Ubuntu is
+  `~/.steam/debian-installation`, while guides and tools name
+  `~/.local/share/Steam`. Anything unpacked there never shows up in Steam's
+  list, and the button moves it over
+- A title whose Windows store was built by a newer Proton than the one it is set
+  to is the finding that would otherwise cost saved games, and it carries a
+  button rather than a paragraph and a path, which is of no use to anyone who
+  does not know what a prefix is. It reads the versions and switches the title in
+  Steam to one the store already fits. That is the safe way out, because Proton
+  converts a store forwards by itself: any version that is not older than the
+  store will do, not only the one that built it. Versions in a
+  compatibilitytools.d that Steam does not read are left out of the choice, since
+  setting a title to one of those is worse than the finding
+- Where no version fits, the button moves the prefix aside to
+  `<appid>.vor-dynotiq` and Proton builds a fresh one on the next start. Saved
+  games in it are not thrown away, the game just stops seeing them, and the
+  dialog says exactly that before anything happens. Deleting the prefix for good
+  is there too, one step further in, under the details
+- The row says what the action costs: safe, or saved games affected. And where
+  more than one title can be switched, one button in the card header does them
+  all in a single run, because each one on its own would close and restart Steam
+- The entry Steam writes for a per-title Proton version is created if it is not
+  there. Most titles have none and run on Steam's global default, so replacing a
+  value would have missed exactly the common case. Only that one line changes,
+  the previous file stays next to it as config.vdf.vor-dynotiq, and a run that
+  cannot do its work restores it and says so
+- Confirmation dialogs show the values a command works on, not the script around
+  them. Thirty lines of awk prove nothing to anybody and push the file being
+  touched out of sight. The window that runs the command still shows it in full,
+  so the record is complete where a record belongs
+- Descriptions across every page are readable. The grey they were drawn in sat at
+  4.3:1 against the card, under the accessibility floor for text that size, and
+  these pages are mostly text
+- A Steam runtime that is assigned a Proton version of its own is reported, and
+  a button takes the assignment out. Steam lists its runtimes like games, so a
+  tool that sets one Proton version for every entry at once assigns one to the
+  runtime as well, and it is then meant to run under a version that needs it.
+  Steam breaks the entry on that: it takes the files away from it, refuses to
+  remove it because the entry "depends on it" and names the entry itself, and
+  answers every attempt to fetch it again with "Invalid platform". From the
+  outside the runtime just looks damaged
+- A runtime whose entry Steam holds as installed with no depots behind it can be
+  fetched again, which is the state that looks most like nothing can be done.
+  Steam refuses both a repair and a fresh install there, because its own manifest
+  says the entry is complete: `steam://validate` runs through and finds nothing
+  to check, `steam://install` produces no download at all, and `steam://uninstall`
+  is refused for a runtime after the dialog has already been confirmed. So the
+  button closes Steam, takes out the assignment that blocks it, removes the false
+  entry and starts Steam with the job of fetching, keeping the old configuration
+  next to it as config.vdf.vor-dynotiq. Which of the three routes a runtime needs
+  is decided from its files, not guessed: no manifest, a manifest with no depots,
+  or files that are recorded and gone
+- Failed launches are read from Steam's own `compat_log.txt`, so a finding can
+  name the titles that did not start and when. Entries older than a week are
+  dropped, and one that predates the repair of the runtime it blamed drops out
+  too, rather than standing red for days after the fix worked
+
 ### Notifications
 
 - The background service can remind about pending updates once a week. Ubuntu
@@ -127,6 +229,16 @@
 - A config file edited by hand, or half written when a disk filled up, could
   feed a timer a string or a value the interface never offers. Every value is
   checked against what the interface can produce, and unknown keys are dropped
+- Menu entries with no program behind them are found and can be removed. Steam
+  writes a launcher into the home directory for every title and leaves it there
+  when the title is uninstalled, and AppImages leave the same thing behind.
+  Clicking one does nothing at all, which looks like the machine being broken
+- The navigation gave itself a scroll area and could shrink below its own
+  content, cutting off the wordmark at the top and the machine block at the
+  bottom. It sets the window's minimum height now
+- A release lookup that could not reach the network was remembered for a day as
+  "nothing new", so a machine that was offline once said nothing for the next
+  24 hours even back online. Only a lookup that actually answered is cached
 - Resetting the settings left the dyno page showing the old state of the same
   switch it carries a second time
 - One damaged line in the history file took the history page down with it, and
@@ -137,7 +249,7 @@
 - Old snap revisions were never reported on a German desktop. Commands run with
   `LC_ALL=C`, but snap takes its language from `LANG` and ignores both `LC_ALL`
   and `LANGUAGE`, so the parser looked for "disabled" in a line that said
-  "deaktiviert". On this machine that hid 29 revisions
+  "deaktiviert". On the machine this was found on, that hid 29 revisions
 - The journal check only ever measured the user journal, which misses the most
   common cause by far: a system service in a loop. It also named the process,
   and for anything written in Python that is "python3". It reads the whole
@@ -223,6 +335,21 @@
   in the middle left the job half done. The finding also names the setting that
   keeps them from piling up again, `snap set system refresh.retain=2`, as text
   rather than a button, because it changes a system setting
+
+### Licence
+
+- dynotiq is free software again, GPL-3.0-or-later, one licence for everything.
+  Version 0.2~beta1 was published as all rights reserved and that step is
+  withdrawn. The sentence in the 0.2~beta1 release notes saying the source
+  grants no permission to use it no longer applies to any version. LICENSE,
+  `debian/copyright`, the module header and the repository page all say the same
+  thing now
+- Pull requests are welcome again. The clause that treated code posted in an
+  issue as handed over unconditionally is gone, and no contributor agreement is
+  needed: under GPLv3 every contribution carries the same licence as the rest.
+  README says what is expected of one, which is an issue first for anything
+  larger, a green selftest, the style of the surrounding code, and new strings
+  that can be translated
 
 ## 0.2~beta1 - Waiting, not just heat
 

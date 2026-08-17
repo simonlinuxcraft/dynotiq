@@ -1157,6 +1157,26 @@ def cmd_steps(cmd):
     return cmd if cmd and isinstance(cmd[0], list) else [cmd]
 
 
+def cmd_preview(steps, limit=70):
+    """Die Befehle für eine Rückfrage, lange Teile durch … ersetzt.
+
+    Ein Skripttext mit dreißig Zeilen awk darin beweist niemandem etwas, er
+    schiebt nur die Angaben aus dem Blick, auf die es ankommt: welche Datei
+    angefasst wird und mit welchem Wert. Vollständig steht der Befehl im
+    Fenster, das ihn ausführt.
+    """
+    out = []
+    for s in steps:
+        teile = []
+        for t in s:
+            kurz = " ".join(str(t).split())
+            kurz = "…" if len(kurz) > limit else kurz
+            if kurz != "…" or teile[-1:] != ["…"]:
+                teile.append(kurz)
+        out.append("  " + " ".join(teile))
+    return out
+
+
 def desktop_icon(text):
     """Icon-Name aus einer .desktop-Datei. Der Paketname taugt selten als
     Icon-Name, der Eintrag in der Startdatei dagegen fast immer."""
@@ -2182,6 +2202,18 @@ def runtime_manifest(appid):
     return ""
 
 
+def runtime_fetched_when(appid):
+    """Wann Steam diese Umgebung zuletzt geholt hat, 0.0 wenn unbekannt.
+
+    Ein Startabbruch von davor sagt ueber heute nichts mehr: woran er lag, hat
+    Steam seitdem ersetzt. Ohne das bliebe der Befund nach einer geglueckten
+    Reparatur noch tagelang rot stehen, denn Steams Protokoll wird sieben Tage
+    weit gelesen.
+    """
+    v = vdf_value(read(runtime_manifest(appid)) or "", "LastUpdated")
+    return float(v) if v.isdigit() else 0.0
+
+
 def runtime_state(appid, installed=None):
     """"" wenn brauchbar, sonst "missing", "empty" oder "broken".
 
@@ -2394,39 +2426,299 @@ def runtime_repair_argv(appid):
 # Steam nimmt weder install noch validate an, solange sein eigenes Manifest
 # StateFlags 4 meldet: der Eintrag gilt ihm als vollstaendig, auch wenn kein
 # Depot dahinter steht. Im Log stand zu 'steam://install' deshalb nur
-# ExecuteSteamURL und danach nichts, keine GameAction, kein Download. Erst die
-# Deinstallation raeumt den Eintrag weg, danach greift install.
-# Der Pfad des Manifests ist die Probe: solange es dasteht, hat Steam die
-# Deinstallation nicht ausgefuehrt, und dann wird auch nichts nachgeholt.
-RUNTIME_RESET_SH = (
-    'echo "$4"\n'
-    '"$1" "steam://uninstall/$2" >/dev/null 2>&1 &\n'
-    'n=0\n'
-    'while [ -e "$3" ] && [ "$n" -lt 180 ]; do sleep 2; n=$((n + 2)); done\n'
-    'if [ -e "$3" ]; then echo "$5"; exit 1; fi\n'
-    'echo "$6"\n'
+# ExecuteSteamURL und danach nichts, keine GameAction, kein Download.
+# 'steam://uninstall' hilft dabei nicht: bei einer Laufzeitumgebung lehnt Steam
+# das nach dem Nachfragedialog wieder ab, im Log mit "Cannot uninstall
+# compatibility tool ... because the following application(s) depend on it" und
+# dann der Umgebung selbst. Der Eintrag haengt an sich, und wer bestaetigt,
+# sieht nichts weiter passieren.
+# Bleibt der Weg an Steam vorbei: Client beenden, Manifest loeschen, neu
+# starten. Beenden ist Bedingung, denn Steam haelt seine Manifeste im Speicher
+# und schreibt sie beim Beenden zurueck.
+# Vorher muss aber die Zuordnung weg, sonst laedt Steam trotzdem nichts und
+# antwortet auf install mit "Ungueltige Plattform".
+STEAM_STOP_SH = (
+    'if pgrep -x steam >/dev/null 2>&1; then\n'
+    '  echo "$5"\n'
+    '  "$1" -shutdown >/dev/null 2>&1\n'
+    '  n=0\n'
+    '  while pgrep -x steam >/dev/null 2>&1 && [ "$n" -lt 120 ]; do\n'
+    '    sleep 2; n=$((n + 2))\n'
+    '  done\n'
+    '  if pgrep -x steam >/dev/null 2>&1; then echo "$6"; exit 1; fi\n'
+    'fi\n'
+)
+
+STRIP_MAPPING_SH = (
+    'weg=0\n'
+    'if [ -f "$4" ] && awk -v id="$2" "$9" "$4" > "$4.dynotiq"; then\n'
+    # Eine Konfiguration, in der Steam alle Bibliothekspfade und Konten fuehrt,
+    # wird nicht auf Verdacht ueberschrieben: die neue Fassung muss kuerzer
+    # sein als die alte, sonst war nichts zu entfernen, und sie darf nur um
+    # den einen Block kuerzer sein.
+    '  alt=$(wc -l < "$4"); neu=$(wc -l < "$4.dynotiq")\n'
+    '  if [ "$neu" -lt "$alt" ] && [ "$neu" -ge $((alt - 12)) ]; then\n'
+    '    cp -p "$4" "$4.vor-dynotiq" && mv "$4.dynotiq" "$4" && weg=1\n'
+    '  fi\n'
+    '  rm -f "$4.dynotiq"\n'
+    'fi\n'
+)
+
+RUNTIME_RESET_SH = STEAM_STOP_SH + STRIP_MAPPING_SH + (
+    'case "$3" in *"/steamapps/appmanifest_$2.acf") rm -f "$3" ;;\n'
+    '  *) echo "$8"; exit 1 ;; esac\n'
+    'if [ -e "$3" ]; then echo "$8"; exit 1; fi\n'
+    'echo "$7"\n'
     '"$1" "steam://install/$2" >/dev/null 2>&1 &\n'
-    'sleep 3\n'
+    'sleep 5\n'
+)
+
+# Dasselbe ohne das Loeschen: solange die Umgebung noch laeuft, reicht es, die
+# Zuordnung wegzunehmen. Hier zaehlt, ob wirklich etwas entfernt wurde, sonst
+# meldete der Knopf Erfolg und die Zuordnung stuende weiter da.
+MAPPING_RESET_SH = STEAM_STOP_SH + STRIP_MAPPING_SH + (
+    'if [ "$weg" != 1 ]; then echo "$8"; exit 1; fi\n'
+    'echo "$7"\n'
+    '"$1" >/dev/null 2>&1 &\n'
+    'sleep 5\n'
 )
 
 
-def runtime_reset_argv(appid):
+# Der Block in Steams config.vdf, der die Umgebung sich selbst als
+# Kompatibilitaetswerkzeug zuordnet. Der Eintrag ist ein Block und kein Wort,
+# und dieselbe AppID steht in derselben Datei noch einmal als
+# Shader-Cache-Eintrag, deshalb awk statt sed: erst ab "CompatToolMapping"
+# zaehlt ein Treffer, und nach dem ersten ist Schluss.
+STRIP_MAPPING_AWK = (
+    'inmap && $1 == "\\"" id "\\"" { skip = 1; next } '
+    '$1 == "\\"CompatToolMapping\\"" { inmap = 1 } '
+    'skip && /^[[:space:]]*\\{/ { depth++; next } '
+    'skip && /^[[:space:]]*\\}/ { if (--depth <= 0) { skip = 0; inmap = 0 } '
+    'next } '
+    'skip { next } '
+    '{ print }'
+)
+
+
+def runtime_reset_argv(appid, config=None):
     """Steams falschen Eintrag wegraeumen und die Umgebung neu holen.
 
     Nur fuer den Zustand "empty". Kein pkexec: alles darunter gehoert dem
-    angemeldeten Nutzer, und Steam laeuft ohnehin unter ihm.
+    angemeldeten Nutzer, und Steam laeuft ohnehin unter ihm. Die Pfade gehen
+    als Argumente hinein, und die Shell prueft sie noch einmal selbst:
+    geloescht wird nur ein appmanifest genau dieser AppID.
     """
     steam = shutil.which("steam")
     mf = runtime_manifest(appid)
     if not steam or not mf:
         return None
-    return ["sh", "-c", RUNTIME_RESET_SH, "sh", steam, str(appid), mf,
-            _("Steam fragt gleich, ob es entfernt werden soll. Bestätige das "
-              "dort, hier läuft es dann weiter."),
-            _("Steam hat den Eintrag nicht entfernt. Es bleibt alles, wie es "
+    cfg = config if config is not None else steam_config_vdf()
+    return ["sh", "-c", RUNTIME_RESET_SH, "sh", steam, str(appid), mf, cfg,
+            _("Steam wird beendet. Der falsche Eintrag lässt sich nur bei "
+              "geschlossenem Steam entfernen, sonst schreibt Steam ihn beim "
+              "Beenden wieder hin."),
+            _("Steam läuft noch. Es bleibt alles, wie es war."),
+            _("Der Eintrag ist weg. Steam startet gerade neu und holt die "
+              "Umgebung danach selbst, das dauert einige Minuten. Falls Steam "
+              "beim Start nach der Anmeldung fragt, melde dich dort an, "
+              "vorher lädt es nichts. Danach hier 'Neu einlesen' drücken."),
+            _("Der Eintrag ließ sich nicht entfernen. Es bleibt alles, wie es "
               "war."),
-            _("Der Eintrag ist weg. Steam holt die Umgebung jetzt neu, das "
-              "dauert einige Minuten. Danach hier 'Neu einlesen' drücken.")]
+            STRIP_MAPPING_AWK]
+
+
+def mapping_reset_argv(appid, config=None):
+    """Nur die Zuordnung der Umgebung auf sich selbst wegnehmen.
+
+    Fuer den Fall, dass die Umgebung noch brauchbar ist: dann waere Loeschen
+    und Neuladen ein Gigabyte fuer nichts, es reicht, die Zuordnung zu
+    entfernen, bevor Steam den Eintrag daran zerlegt.
+    """
+    steam = shutil.which("steam")
+    cfg = config if config is not None else steam_config_vdf()
+    if not steam or not cfg:
+        return None
+    return ["sh", "-c", MAPPING_RESET_SH, "sh", steam, str(appid), "", cfg,
+            _("Steam wird beendet. Die Zuordnung lässt sich nur bei "
+              "geschlossenem Steam ändern, sonst schreibt Steam sie beim "
+              "Beenden wieder hin."),
+            _("Steam läuft noch. Es bleibt alles, wie es war."),
+            _("Die Zuordnung ist weg, Steam startet gerade neu. Die alte "
+              "Fassung der Datei liegt daneben als config.vdf.vor-dynotiq."),
+            _("In der Konfiguration stand nichts, das zu entfernen war. Es "
+              "bleibt alles, wie es war."),
+            STRIP_MAPPING_AWK]
+
+
+# Nur die eine "name"-Zeile im Block dieser AppID neu schreiben, Einrueckung
+# und alles daneben bleibt stehen. Kein sub(): dessen Ersatztext liest ein &
+# als Rueckverweis, und ein Fassungsname darf eins enthalten.
+SET_MAPPING_AWK = (
+    'inmap && $1 == "\\"" id "\\"" { inblock = 1 } '
+    '$1 == "\\"CompatToolMapping\\"" { inmap = 1 } '
+    'inblock && $1 == "\\"name\\"" { match($0, /^[[:space:]]*/); '
+    'print substr($0, 1, RLENGTH) "\\"name\\"\\t\\t\\"" neu "\\""; '
+    'hit = 1; inblock = 0; inmap = 0; next } '
+    'inblock && /^[[:space:]]*\\}/ { inblock = 0 } '
+    '{ print } '
+    'END { exit !hit }'
+)
+
+# Der haeufigere Fall, und der, an dem der erste Versuch scheiterte: der Titel
+# hat gar keinen Eintrag. Er laeuft dann auf dem Schluessel "0", Steams
+# Voreinstellung fuer alle Titel, und die darf kein Knopf umstellen. Also einen
+# eigenen Block anlegen, direkt hinter die geschweifte Klammer von
+# CompatToolMapping. Die Einrueckung kommt aus der Datei selbst, die Felder
+# sind die, die Steam auch schreibt.
+ADD_MAPPING_AWK = (
+    '{ print } '
+    '!inmap && $1 == "\\"CompatToolMapping\\"" { '
+    'match($0, /^[[:space:]]*/); tab = substr($0, 1, RLENGTH); inmap = 1; next } '
+    'inmap && !hit && /^[[:space:]]*\\{/ { '
+    'print tab "\\t\\"" id "\\""; '
+    'print tab "\\t{"; '
+    'print tab "\\t\\t\\"name\\"\\t\\t\\"" neu "\\""; '
+    'print tab "\\t\\t\\"config\\"\\t\\t\\"\\""; '
+    'print tab "\\t\\t\\"priority\\"\\t\\t\\"250\\""; '
+    'print tab "\\t}"; '
+    'hit = 1 } '
+    'END { exit !hit }'
+)
+
+# Ein Lauf fuer alle Titel: jeder einzelne muesste Steam beenden und wieder
+# starten. Uebernommen wird nur, was genau so lang bleibt wie erwartet und wo
+# awk wirklich getroffen hat, sonst steht am Ende wieder die Sicherung an ihrem
+# Platz. Erst ersetzen, dann anlegen: hat der Titel schon einen Eintrag, waere
+# ein zweiter einer zu viel.
+SET_MAPPING_SH = STEAM_STOP_SH + (
+    'steam="$1"; cfg="$2"; ers="$3"; anl="$4"; gut="$7"; schlecht="$8"\n'
+    'shift 8\n'
+    'cp -p "$cfg" "$cfg.vor-dynotiq" || exit 1\n'
+    'while [ "$#" -ge 2 ]; do\n'
+    '  a=$(wc -l < "$cfg")\n'
+    '  if awk -v id="$1" -v neu="$2" "$ers" "$cfg" > "$cfg.dynotiq" \\\n'
+    '      && [ "$(wc -l < "$cfg.dynotiq")" -eq "$a" ]; then\n'
+    '    if mv "$cfg.dynotiq" "$cfg"; then shift 2; continue; fi\n'
+    '  fi\n'
+    '  if awk -v id="$1" -v neu="$2" "$anl" "$cfg" > "$cfg.dynotiq" \\\n'
+    '      && [ "$(wc -l < "$cfg.dynotiq")" -eq "$((a + 6))" ]; then\n'
+    '    if mv "$cfg.dynotiq" "$cfg"; then shift 2; continue; fi\n'
+    '  fi\n'
+    '  rm -f "$cfg.dynotiq"\n'
+    '  cp -p "$cfg.vor-dynotiq" "$cfg"\n'
+    '  echo "$schlecht"\n'
+    '  exit 1\n'
+    'done\n'
+    'echo "$gut"\n'
+    '"$steam" >/dev/null 2>&1 &\n'
+    'sleep 5\n'
+)
+
+
+def set_mappings_argv(pairs, config=None):
+    """Fuer mehrere Titel auf einmal die eingestellte Fassung umschreiben.
+
+    pairs ist [(AppID, Name für die Zuordnung)], und der Name muss der sein,
+    den Steam selbst führt, siehe mapping_name(). Was ein Anführungszeichen
+    oder einen Umbruch enthält, geht gar nicht erst in die Datei: in derselben
+    stehen auch Steams Bibliothekspfade und Konten.
+    """
+    steam = shutil.which("steam")
+    cfg = config if config is not None else steam_config_vdf()
+    if not steam or not cfg or not pairs:
+        return None
+    flach = []
+    for appid, name in pairs:
+        if not str(appid).isdigit() or not name \
+                or any(c in name for c in '"\\\n'):
+            return None
+        flach += [str(appid), name]
+    return ["sh", "-c", SET_MAPPING_SH, "sh", steam, cfg, SET_MAPPING_AWK,
+            ADD_MAPPING_AWK,
+            _("Steam wird beendet. Die Zuordnung lässt sich nur bei "
+              "geschlossenem Steam ändern, sonst schreibt Steam sie beim "
+              "Beenden wieder hin."),
+            _("Steam läuft noch. Es bleibt alles, wie es war."),
+            _("Die Fassung ist umgestellt, Steam startet gerade neu. Die alte "
+              "Fassung der Datei liegt daneben als config.vdf.vor-dynotiq."),
+            _("Der Eintrag ließ sich nicht ändern. Es bleibt alles, wie es "
+              "war."), *flach]
+
+
+# Im Prefix liegt der Windows-Teil eines Titels: Registry, Systemordner und die
+# Spielstaende, die nicht in die Cloud gehen. Der Pfad geht als Argument in die
+# Shell, und die Shell prueft ihn noch einmal selbst: angefasst wird nur ein
+# Ordner unter compatdata, dessen Name eine AppID ist.
+PREFIX_GUARD_SH = (
+    'case "$1" in */steamapps/compatdata/*) ;; '
+    '*) echo "Nicht unter steamapps/compatdata, abgebrochen" >&2; exit 1 ;; '
+    'esac; '
+    'case "${1##*/}" in ""|*[!0-9]*) '
+    'echo "Kein Prefix einer AppID, abgebrochen" >&2; exit 1 ;; esac; '
+    '[ -d "$1" ] || { echo "Den Ordner gibt es nicht mehr" >&2; exit 1; }; '
+)
+
+
+def prefix_move_argv(prefix):
+    """Den Prefix beiseite schieben statt ihn zu löschen.
+
+    Umbenennen kostet nichts und ist der einzige Weg, der die Spielstände darin
+    nicht wegwirft: Proton legt beim nächsten Start einen frischen an, der alte
+    liegt daneben. Steht dort schon einer, bricht es ab, sonst wäre der weg.
+    """
+    return ["sh", "-c", PREFIX_GUARD_SH +
+            'if [ -e "$1.vor-dynotiq" ]; then '
+            'echo "Daneben liegt schon ein beiseite geschobener Prefix, '
+            'abgebrochen" >&2; exit 1; fi; '
+            'mv -v -- "$1" "$1.vor-dynotiq"', "sh", prefix]
+
+
+def prefix_remove_argv(prefix):
+    """Den Prefix löschen, wie Steams eigenes Proton-Dateien löschen."""
+    return ["sh", "-c", PREFIX_GUARD_SH + 'rm -rfv -- "$1"', "sh", prefix]
+
+
+# Die Folge in einfacher Sprache, in der Rueckfrage vor dem Befehl. Wer nicht
+# weiss, was ein Prefix ist, entscheidet sonst ueber etwas, das er nicht sieht.
+# N_, weil sie hier als Konstante stehen: uebersetzt wird bei der Anzeige.
+PREFIX_SWITCH_NOTE = N_("Der Titel läuft danach unter einer anderen "
+                        "Proton-Fassung. Spielstände bleiben, wo sie sind. "
+                        "Steam wird dafür beendet und neu gestartet, beende "
+                        "vorher ein laufendes Spiel.")
+
+PREFIX_MOVE_NOTE = N_("Das Spiel sieht danach die Spielstände nicht mehr, die "
+                      "in diesem Prefix liegen statt in der Steam-Cloud. Weg "
+                      "sind sie nicht: der Ordner bleibt daneben liegen mit dem "
+                      "Zusatz .vor-dynotiq. Beende vorher das Spiel.")
+
+PREFIX_REMOVE_NOTE = N_("Spielstände, die in diesem Prefix liegen statt in der "
+                        "Steam-Cloud, sind danach endgültig weg. Das lässt sich "
+                        "nicht rückgängig machen. Beende vorher das Spiel.")
+
+
+def steam_config_vdf():
+    """Steams config.vdf, "" wenn sie nicht dasteht."""
+    root = steam_root()
+    p = os.path.join(root, "config", "config.vdf") if root else ""
+    return p if p and os.path.exists(p) else ""
+
+
+def self_mapped_runtime(appid, text=None):
+    """Ist diese Laufzeitumgebung sich selbst als Proton-Fassung zugeordnet?
+
+    Dann dreht sich Steam im Kreis: die Umgebung soll unter einer Fassung
+    laufen, die selbst diese Umgebung braucht. Steam weigert sich daraufhin,
+    sie zu entfernen ("because the following application(s) depend on it" und
+    nennt dann sie selbst), und auf install antwortet es mit "Ungueltige
+    Plattform". Programme, die eine Fassung fuer alle Eintraege auf einmal
+    setzen, tragen sie auch hier ein, denn Steam fuehrt die Umgebung wie ein
+    Spiel.
+    """
+    if text is None:
+        text = read(steam_config_vdf()) or ""
+    block = vdf_block(text, "CompatToolMapping") or ""
+    eintrag = vdf_block(block, str(appid))
+    return vdf_value(eintrag or "", "name") if eintrag else ""
 
 
 def remove_tool_argv(path):
@@ -2549,6 +2841,7 @@ def proton_check():
     have = steam_installed_ids()
     managers = proton_managers()
     mgr = managers[0][0] if managers else ""
+    cfg = read(steam_config_vdf()) or ""
 
     for name, path, why in broken_compat_tools():
         link = os.path.islink(path)
@@ -2588,6 +2881,7 @@ def proton_check():
         argv = (runtime_reset_argv(appid) if state == "empty" else
                 (runtime_install_argv if fehlt else runtime_repair_argv)(appid))
         entzogen = depot_removed_when(appid) if state == "empty" else 0.0
+        zugeordnet = self_mapped_runtime(appid, cfg)
         g = steam_game(appid)
         out.append({
             "sev": "crit",
@@ -2615,7 +2909,16 @@ def proton_check():
                         "Seite rät es nicht.").format(
                             date=time.strftime("%d.%m.%Y um %H:%M",
                                                time.localtime(entzogen)))
-                       if entzogen else "")) if state == "empty" else
+                       if entzogen else "")
+                    + (_(" Warum, steht in Steams config.vdf: dort ist die "
+                         "Umgebung sich selbst als Kompatibilitätswerkzeug "
+                         "zugewiesen, auf {tool}. Sie soll also unter einer "
+                         "Fassung laufen, die selbst sie braucht. Daran "
+                         "zerlegt Steam den Eintrag, verweigert das Entfernen "
+                         "in der Bibliothek und antwortet auf jeden Versuch, "
+                         "sie zu holen, mit \"Ungültige Plattform\".").format(
+                             tool=zugeordnet) if zugeordnet else "")
+                    ) if state == "empty" else
                    _(" Steam hat ihn zwar heruntergeladen und führt ihn als "
                      "vollständig, aber in seinem Ordner fehlt die Datei "
                      "toolmanifest.vdf. Ohne die kann Steam ihn nicht laden. "
@@ -2626,11 +2929,13 @@ def proton_check():
                     "\"Kompatibilitätswerkzeug fehlgeschlagen\" beim "
                     "Spielstart, mit jeder dieser Fassungen und bei jedem "
                     "Spiel. Die Fassungen selbst sind in Ordnung.")
-                + (_(" Der Knopf lässt Steam den falschen Eintrag entfernen "
-                     "und die Umgebung danach neu holen. Steam fragt beim "
-                     "Entfernen nach, das musst du dort bestätigen. Verloren "
-                     "geht nichts: es steht ja nichts drin. Danach lädt Steam "
-                     "je nach Fassung ein bis zwei Gigabyte.")
+                + (_(" Der Knopf beendet Steam, nimmt die Zuweisung weg, "
+                     "entfernt den falschen Eintrag und startet Steam mit dem "
+                     "Auftrag, die Umgebung zu holen. Beende vorher ein "
+                     "laufendes Spiel. Verloren geht nichts: es steht ja "
+                     "nichts drin. Danach lädt Steam je nach Fassung ein bis "
+                     "zwei Gigabyte. Die alte Fassung der Konfiguration bleibt "
+                     "daneben als config.vdf.vor-dynotiq stehen.")
                    if state == "empty" else
                    _(" Der Knopf lässt Steam die Dateien prüfen und das "
                      "Fehlende nachladen. Der Ordner ist {path}.").format(
@@ -2643,6 +2948,40 @@ def proton_check():
                      _("{rt} installieren") if fehlt
                      else _("{rt} reparieren")).format(
                          rt=short_runtime(appid)), argv) if argv else None})
+
+    # Die Zuweisung ist die Ursache, aus der die Zustaende oben entstehen.
+    # Steht dort schon ein Befund zu derselben Umgebung, nimmt dessen Knopf sie
+    # mit weg, und ein zweiter Befund waere derselbe Fall ein zweites Mal.
+    kaputt = {a for (a, _s) in broke}
+    for appid in sorted(RUNTIME_NAMES):
+        tool = self_mapped_runtime(appid, cfg)
+        if not tool or appid in kaputt:
+            continue
+        argv = mapping_reset_argv(appid)
+        out.append({
+            "sev": "warn",
+            "title": _("{rt} ist einer Proton-Fassung zugewiesen").format(
+                rt=runtime_name(appid)),
+            "short": _("Steam soll die Laufzeitumgebung selbst mit {tool} "
+                       "starten.").format(tool=tool),
+            "long": _("In Steams config.vdf steht unter CompatToolMapping ein "
+                      "Eintrag für {rt} auf {tool}. Eine Laufzeitumgebung ist "
+                      "aber kein Windows-Spiel: sie soll damit unter einer "
+                      "Fassung laufen, die selbst sie braucht. Steam führt sie "
+                      "in seiner Liste wie ein Spiel, deshalb tragen Programme, "
+                      "die eine Fassung für alle Einträge auf einmal setzen, "
+                      "sie auch hier ein. Noch läuft alles. Sobald Steam den "
+                      "Eintrag aber anfasst, entzieht es ihm die Dateien, "
+                      "weigert sich, ihn zu entfernen, und antwortet auf jeden "
+                      "Versuch, ihn neu zu holen, mit \"Ungültige Plattform\". "
+                      "Von außen sieht das dann so aus, als sei die Umgebung "
+                      "beschädigt.\n\nDer Knopf beendet Steam, nimmt die "
+                      "Zuweisung heraus und startet Steam wieder. Die alte "
+                      "Fassung der Datei bleibt daneben als "
+                      "config.vdf.vor-dynotiq stehen. In Steam selbst geht das "
+                      "über Eigenschaften, Kompatibilität, Haken "
+                      "weg.").format(rt=runtime_name(appid), tool=tool),
+            "fix": (_("Zuweisung entfernen"), argv) if argv else None})
 
     # Was Steam selbst zuletzt abgebrochen hat. Steht schon oben ein Befund zu
     # derselben Umgebung, ist das nur die Bestaetigung und bleibt draussen.
@@ -2665,8 +3004,11 @@ def proton_check():
                                  spiel=treffer[0][1],
                                  wann=time.strftime("%d.%m. um %H:%M",
                                                     time.localtime(treffer[0][0])))
+    # Und was vor der letzten Reparatur schiefging, ist erledigt: hat Steam die
+    # Umgebung seitdem geholt, faellt der Abbruch raus. Sonst stuende er nach
+    # einer geglueckten Reparatur noch tagelang rot auf der Seite.
     for when, game, tool, appid in compat_log_failures()[:3]:
-        if appid in genannt:
+        if appid in genannt or when < runtime_fetched_when(appid):
             continue
         out.append({
             "sev": "crit",
@@ -2769,21 +3111,38 @@ def proton_check():
                           "'{prog} {cmd}'.").format(cmd=STEAM_CMD, prog=prog),
                 "fix": None})
 
-    for game, tool, built, prefix in prefix_mismatches(tools):
+    for game, appid, tool, built, prefix in prefix_mismatches(tools):
         # Vorwaerts zieht Proton die Ablage selbst nach, das ist keine Warnung
         # wert. Bricht es, dann beim Rueckschritt. Nur wo beide Namen aus
         # demselben Projekt kommen, laesst sich das ueberhaupt vergleichen.
         pfad = dict(tools).get(tool) or valve_tool_dir(tool, dict(tools))
         zurueck = proton_older(tool_build(pfad)[0] or tool, built, pfad)
+        ziel, key = prefix_fix_choice(built, tools) if zurueck else ("", "")
+        stellen = set_mappings_argv([(appid, key)]) if key else None
+        # Der Prefix ist der Notnagel. Beiseite schieben laesst sich
+        # rueckgaengig machen, loeschen nicht, deshalb steht es davor.
+        mehr = []
+        if zurueck:
+            if stellen:
+                mehr.append((_("Prefix beiseite schieben"),
+                             prefix_move_argv(prefix), PREFIX_MOVE_NOTE))
+            mehr.append((_("Prefix löschen"), prefix_remove_argv(prefix),
+                         PREFIX_REMOVE_NOTE))
+        mehr.append((_("Ordner öffnen"), prefix, ""))
         out.append({"sev": "warn" if zurueck else "info", "title": game,
                     "short": (_("Zurück auf {tool}, die Windows-Ablage stammt "
                                 "aber von der neueren {built}.") if zurueck else
                               _("Eingestellt ist {tool}, die Windows-Ablage "
                                 "stammt noch von {built}.")).format(
                                     tool=tool, built=built),
-                    "long": prefix_advice(zurueck, tool, built, prefix,
-                                          builds_to_tools(tools)),
-                    "fix": None})
+                    "long": prefix_advice(zurueck, tool, built, prefix, ziel),
+                    "risk": "loss" if zurueck and not stellen else "",
+                    "pair": (appid, key) if stellen else None,
+                    "more": mehr,
+                    "fix": (_("Auf {name} umstellen").format(name=ziel),
+                            stellen, PREFIX_SWITCH_NOTE) if stellen else
+                    (_("Prefix beiseite schieben"), prefix_move_argv(prefix),
+                     PREFIX_MOVE_NOTE) if zurueck else None})
     return out
 
 
@@ -2908,6 +3267,39 @@ def valve_tool_dir(name, paths):
     return ""
 
 
+def mapping_name(name, path):
+    """Der Name, unter dem Steam diese Fassung in der Zuordnung führt.
+
+    Die Umkehr von valve_tool_dir(), und ohne sie schreibt jeder Knopf, der
+    eine Fassung einstellt, den falschen Namen hinein: eigene Fassungen stehen
+    dort unter ihrem internen Namen, Valves unter 'proton_11', während der
+    Ordner 'Proton 11.0' heisst. "" heisst: dafuer laesst sich kein Eintrag
+    schreiben, also auch kein Knopf anbieten.
+    """
+    if "compatibilitytools.d" in path:
+        return name
+    for wort in ("experimental", "hotfix"):
+        if wort in name.lower():
+            return "proton_" + wort
+    m = re.match(r"Proton (\d+)\.", name)
+    return "proton_" + m.group(1) if m else ""
+
+
+def steam_sees(path):
+    """Liest Steam diese Fassung ueberhaupt?
+
+    Es kann mehrere compatibilitytools.d geben, und nur das unter Steams
+    eigener Installation zaehlt. Eine Fassung im anderen kennt Steam nicht:
+    einen Titel darauf zu stellen, macht es schlimmer statt besser.
+    """
+    if "compatibilitytools.d" not in path:
+        return True
+    root = steam_root()
+    gut = os.path.realpath(os.path.join(root, "compatibilitytools.d")) \
+        if root else ""
+    return bool(gut) and os.path.realpath(path).startswith(gut + os.sep)
+
+
 def game_exe_present(path):
     """Liegt im Spielordner ueberhaupt eine Windows-Programmdatei?
 
@@ -2991,7 +3383,7 @@ def proton_game_rows(tools=None):
 
 
 def prefix_mismatches(tools=None):
-    """[(Titel, eingestellte Fassung, Fassung des Prefix, Ordner)].
+    """[(Titel, AppID, eingestellte Fassung, Fassung des Prefix, Ordner)].
 
     Nur wo beide Namen vergleichbar sind, also bei selbst installierten
     Fassungen: Valve schreibt in die version-Datei eine Buildnummer, in die
@@ -3016,7 +3408,7 @@ def prefix_mismatches(tools=None):
         # damit weg: genau dort kam der Rueckschritt vor.
         if built and built != tool_prefix_version(pfad) \
                 and built not in prefix_names(tool, pfad):
-            out.append((g["name"] or appid, tool, built, g["prefix"]))
+            out.append((g["name"] or appid, appid, tool, built, g["prefix"]))
     return sorted(out)
 
 
@@ -3063,31 +3455,45 @@ def proton_older(tool_build_name, prefix_build, tool_path=""):
     return bool(hier) and proton_major(prefix_build) > hier
 
 
-def builds_to_tools(tools):
-    """{Buildnummer: Name der Fassung} ueber alle vorhandenen Fassungen.
+def prefix_fix_choice(built, tools):
+    """(Anzeigename, Name für die Zuordnung) der Fassung, unter der dieser
+    Prefix ohne Umbau weiterläuft, sonst ("", "").
 
-    In die version-Datei eines Prefix schreibt Proton die Buildnummer, nicht
-    den Namen: '11.0-100' statt 'Proton 11.0'. Wer die gegen die Namen haelt,
-    behauptet, eine installierte Fassung gaebe es nicht mehr.
+    Nach vorn baut Proton die Ablage beim nächsten Start selbst um. Es taugt
+    also jede Fassung, die nicht älter ist als der Prefix, nicht nur die, die
+    ihn gebaut hat. Genau das ist der Unterschied zwischen einem Knopf und dem
+    Rat, die Spielstände wegzuwerfen.
+
+    Die Reihenfolge: genau die Fassung, die den Prefix gebaut hat, dann eine
+    aus demselben Projekt, dann eine stabile vor Experimental oder Hotfix, dann
+    die höhere Nummer.
     """
-    out = {}
-    # Stabile Fassungen zuerst: Proton 11.0 und Proton - Experimental tragen
-    # dieselbe Buildnummer, und zum Zurueckstellen ist die stabile die bessere.
-    for name, pfad in sorted(tools, key=lambda t: any(
-            w in t[0] for w in ("Experimental", "Hotfix", "Beta", "Latest"))):
-        for wert in (tool_prefix_version(pfad), tool_build(pfad)[0], name):
-            if wert:
-                out.setdefault(wert, name)
-    return out
+    beste = None
+    for name, pfad in tools:
+        key = mapping_name(name, pfad)
+        eigen = tool_build(pfad)[0] or name
+        if not key or not steam_sees(pfad) or proton_older(eigen, built, pfad):
+            continue
+        # ponytail: der Nummernvergleich ueber Projektgrenzen ist grob,
+        # entscheidet aber nur zwischen gleich gueltigen Kandidaten.
+        rang = (built in prefix_names(name, pfad)
+                or built == tool_prefix_version(pfad),
+                bool(proton_project(built))
+                and proton_project(built) == proton_project(eigen),
+                not any(w in name for w in ("Experimental", "Hotfix", "Beta",
+                                            "Latest")),
+                nums(tool_prefix_version(pfad) or eigen, 3))
+        if beste is None or rang > beste[0]:
+            beste = (rang, name, key)
+    return (beste[1], beste[2]) if beste else ("", "")
 
 
-def prefix_advice(zurueck, tool, built, prefix, vorhanden):
+def prefix_advice(zurueck, tool, built, prefix, ziel):
     """Der lange Text zum Prefix-Befund.
 
-    vorhanden ist {Buildnummer: Name}. Der Rat haengt daran, ob es die Fassung,
-    die den Prefix gebaut hat, noch gibt: dann ist Zurueckstellen der einfache
-    Weg, und das Zuruecksetzen mit dem Verlust der Spielstaende bleibt der
-    Notnagel.
+    ziel ist die Fassung, auf die der Knopf umstellt, oder "". Der Text sagt,
+    was die Knoepfe tun, nicht den Weg durch Steams Menues: den geht dieselbe
+    Seite jetzt selbst.
     """
     if not zurueck:
         text = _("Nach vorn zieht Proton die Ablage beim nächsten Start selbst "
@@ -3097,15 +3503,24 @@ def prefix_advice(zurueck, tool, built, prefix, vorhanden):
         text = _("Zurück auf eine ältere Fassung kann Proton die Ablage nicht "
                  "umbauen. Das Spiel hängt dann im Ladebildschirm oder startet "
                  "gar nicht.")
-        if built in vorhanden:
-            text += _(" Am einfachsten stellst du den Titel in Steam wieder auf "
-                      "{name}, die ist noch da.").format(name=vorhanden[built])
+        if ziel:
+            text += _(" Der Knopf stellt den Titel in Steam auf {name}. Damit "
+                      "passt die Ablage wieder zur Fassung, und alles darin "
+                      "bleibt liegen, auch die Spielstände. Dafür wird Steam "
+                      "beendet und neu gestartet, die alte Fassung der "
+                      "Konfiguration bleibt daneben als config.vdf.vor-dynotiq "
+                      "stehen. Willst du bei {tool} bleiben, hilft nur das "
+                      "Zurücksetzen des Prefix, und das steht hier "
+                      "aufgeklappt.").format(name=ziel, tool=tool)
         else:
-            text += _(" {built} gibt es hier nicht mehr, zurückstellen geht "
-                      "also nicht. Hilft nur das Zurücksetzen, in Steam unter "
-                      "Eigenschaften, Installierte Dateien, Proton-Dateien "
-                      "löschen. Spielstände, die im Prefix liegen statt in der "
-                      "Cloud, sind danach weg.").format(built=built)
+            text += _(" {built} gibt es hier nicht mehr, und keine vorhandene "
+                      "Fassung ist neu genug, um die Ablage zu übernehmen. "
+                      "Bleibt das Zurücksetzen: der Knopf schiebt den Prefix "
+                      "beiseite, Proton legt beim nächsten Start einen frischen "
+                      "an. Spielstände, die darin liegen statt in der Cloud, "
+                      "sieht das Spiel danach nicht mehr. Weg sind sie nicht, "
+                      "der alte Ordner bleibt daneben mit dem Zusatz "
+                      ".vor-dynotiq.").format(built=built)
     return text + _(" Der Ordner ist {prefix}.").format(prefix=prefix)
 
 
@@ -3988,7 +4403,7 @@ RELEASE_NOTES = {
         _("App-Check: die Suche findet jetzt auch mitten im Namen, und "
           "Journalzeilen werden gedeutet statt nur abgedruckt"),
     ]),
-    "0.3~beta": (_("Einstellungen aufgeräumt"), [
+    "0.3~beta": (_("Proton, und wieder frei"), [
         _("Die Hintergrundüberwachung lässt sich einstellen: wie oft sie "
           "nachsieht, und ob sie nur bei kritischen Vorfällen eine "
           "Benachrichtigung schickt"),
@@ -4023,6 +4438,25 @@ RELEASE_NOTES = {
         _("Bildrate und Bildzeiten im Bericht. Messen kann die nur ein Overlay "
           "im Spiel selbst, deshalb richtet dynotiq MangoHud in seinen Farben "
           "ein und liest dessen Aufzeichnung aus"),
+        _("Neue Seite Proton. Sie sieht in Steams Dateien nach, woran ein "
+          "Windows-Spiel hängt: ob jede Proton-Fassung die Laufzeitumgebung "
+          "hat, die sie braucht, und welcher Titel auf welche Fassung zeigt. "
+          "Fehlt die Umgebung, startet mit dieser Fassung kein einziges Spiel, "
+          "und Steam sagt dazu nur, es sei gleich wieder beendet worden"),
+        _("Eine fehlende oder beschädigte Laufzeitumgebung holt ein Knopf neu, "
+          "auch in dem Fall, in dem Steam sich selbst im Weg steht und jeden "
+          "Versuch mit \"Ungültige Plattform\" abweist"),
+        _("Zeigt die Windows-Ablage eines Titels auf eine neuere Fassung als "
+          "die eingestellte, stellt ein Knopf den Titel auf eine Fassung um, "
+          "die dazu passt. Spielstände bleiben, wo sie sind. Geht das nicht, "
+          "schiebt er die Ablage beiseite und sagt vorher, was das kostet"),
+        _("Alte Snap-Revisionen aufräumen fragt einmal nach dem Passwort statt "
+          "bei jeder einzelnen"),
+        _("Updates: schon heruntergeladene Pakete zeigen ihre Größe, und wenn "
+          "flatpak selbst zu alt für ein Update ist, steht der Grund da"),
+        _("dynotiq ist wieder freie Software, GPLv3 oder später, für alles. Der "
+          "Schritt zu \"alle Rechte vorbehalten\" aus 0.2~beta1 ist "
+          "zurückgenommen"),
     ]),
 }
 
@@ -7604,7 +8038,9 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .cardhead { font: 600 12.5px @SANS@; color: #E6E8EA; }
 .rowsep { background: rgba(255,255,255,.05); min-height: 1px; }
 .row-title { font: 500 13px @SANS@; color: #EDEEF0; }
-.row-detail { font: 11.5px @SANS@; color: #767C85; }
+/* 5,8:1 gegen den Kartengrund. Mit #767C85 waren es 4,3:1, und darunter wird
+   ein langer Absatz zur Zumutung. */
+.row-detail { font: 11.5px @SANS@; color: #8B929B; }
 .mono { font: 11.5px @SANS@; color: #9AA1AA; }
 .mono-dim { font: 11px @SANS@; color: #6F757E; }
 .pill { font: 600 11px @SANS@; border-radius: 6px; padding: 5px 9px;
@@ -10599,7 +11035,8 @@ class App(Gtk.Application):
         self.app_box.append(c)
         return False
 
-    def _appcheck_fix(self, _b, title, label, argv, after=None, preview=None):
+    def _appcheck_fix(self, _b, title, label, argv, after=None, preview=None,
+                      note=""):
         """Rückfrage mit dem Befehl im Klartext, dann ausführen.
 
         after sagt, welche Seite sich danach neu einliest. Ohne das lief nach
@@ -10609,6 +11046,9 @@ class App(Gtk.Application):
         preview ist (Funktion, Bezeichnung) für Befehle, die etwas wegnehmen.
         Dann kommt vor dem Ausführen eine zweite Rückfrage mit der Liste aus
         dem Trockenlauf.
+
+        note steht vor dem Befehl und sagt in einfacher Sprache, was der Knopf
+        kostet. Der Befehl darunter ist der Beleg, nicht die Erklärung.
         """
         steps = cmd_steps(argv)
         lauf = (lambda: self.work(lambda: GLib.idle_add(
@@ -10616,8 +11056,9 @@ class App(Gtk.Application):
             preview[0](), preview[1]), None)) if preview else (
                 lambda: self._run_log(title, argv, after or self._appcheck_run))
         self._confirm(_("{action}?").format(action=label),
-                      _("{title}\n\nAusgeführt wird:\n").format(title=title)
-                      + "\n".join("  " + " ".join(s) for s in steps),
+                      (note + "\n\n" if note else "")
+                      + _("{title}\n\nAusgeführt wird:\n").format(title=title)
+                      + "\n".join(cmd_preview(steps)),
                       [_("Abbrechen"), label], lauf, default=1)
 
     def _confirm_appcheck_removal(self, title, argv, after, items, was):
@@ -10667,10 +11108,7 @@ class App(Gtk.Application):
         # Wer die Seite öffnet, will wissen ob etwas klemmt, nicht was Proton ist.
         c = box()
         c.add_css_class("card")
-        c.append(card_head(
-            _("Was zu klären ist"),
-            lbl(_("{n} Punkt(e)").format(n=len(bad)) if bad
-                else _("nichts"), "sub")))
+        c.append(card_head(_("Was zu klären ist"), self._pro_bulk(results, bad)))
         if not results:
             c.append(self._pro_note(_("Kein Steam gefunden. Diese Seite prüft "
                                       "Proton, und das gehört zu Steam.")))
@@ -10687,21 +11125,59 @@ class App(Gtk.Application):
             row.append(dot)
             txt = box(spacing=3, hexpand=True)
             txt.append(lbl(r["title"], "row-title", wrap=True, chars=56))
-            txt.append(lbl(r["short"], "row-detail", wrap=True, chars=72))
+            # Problem und Preis der Aktion in einer Zeile: was der Knopf kostet,
+            # gehoert neben das Problem, nicht in den aufgeklappten Text.
+            zeile = box(True, 8)
+            zeile.append(lbl(r["short"], "row-detail", wrap=True, chars=66))
+            if r["fix"]:
+                verlust = r.get("risk") == "loss"
+                pill = lbl(_("Spielstände betroffen") if verlust
+                           else _("sicher"), "pill", xalign=0.5)
+                pill.add_css_class("warn" if verlust else "ok")
+                pill.set_valign(Gtk.Align.START)
+                zeile.append(pill)
+            txt.append(zeile)
             exp = Gtk.Expander(margin_top=4)
             exp.set_label_widget(lbl(_("Warum, und was es bewirkt"), "row-detail"))
-            exp.set_child(lbl(r["long"], "row-detail", wrap=True, chars=76))
+            innen = box(spacing=10)
+            innen.append(lbl(r["long"], "row-detail", wrap=True, chars=76))
+            weitere = [m for m in r.get("more") or () if m[1]]
+            if weitere:
+                reihe = box(True, 8, halign=Gtk.Align.START, margin_bottom=4)
+                for label, ziel, note in weitere:
+                    b = Gtk.Button(label=label)
+                    b.add_css_class("btn-quiet")
+                    if isinstance(ziel, str):
+                        # Ein Ordner braucht keine Rueckfrage, er nimmt nichts weg.
+                        b.connect("clicked", lambda _b, p=ziel:
+                                  Gio.AppInfo.launch_default_for_uri(
+                                      Gio.File.new_for_path(p).get_uri(), None))
+                    else:
+                        b.connect("clicked", self._appcheck_fix, r["title"],
+                                  label, ziel, self._proton_reload, None,
+                                  _(note) if note else "")
+                    reihe.append(b)
+                innen.append(reihe)
+            exp.set_child(innen)
             txt.append(exp)
             row.append(txt)
             if r["fix"]:
-                label, argv = r["fix"]
+                label, argv = r["fix"][0], r["fix"][1]
+                note = r["fix"][2] if len(r["fix"]) > 2 else ""
                 b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
                 b.add_css_class("btn-fix")
                 b.connect("clicked", self._appcheck_fix, r["title"], label, argv,
-                          self._proton_reload)
+                          self._proton_reload, None, _(note) if note else "")
                 row.append(b)
             c.append(sep_row(row))
         self.pro_box.append(c)
+
+        # Seit in der ersten Karte Knoepfe stehen, zieht GTK die Ansicht beim
+        # Aufbau dorthin und der Seitenkopf war weg. Nach dem Neueinlesen
+        # gehoert der Anfang der Seite nach oben.
+        oben = self.pro_box.get_ancestor(Gtk.ScrolledWindow)
+        if oben:
+            GLib.idle_add(oben.get_vadjustment().set_value, 0.0)
 
         for title, rows, note in (
                 (_("Selbst installierte Fassungen"), eigen,
@@ -10798,6 +11274,32 @@ class App(Gtk.Application):
               "Diese Seite sieht in den Dateien nach, woran es liegt.")))
         self.pro_box.append(e)
         return False
+
+    def _pro_bulk(self, results, bad):
+        """Die rechte Seite des Kartenkopfs: Zahl, und wo es lohnt ein Knopf.
+
+        Gesammelt wird nur das Umstellen der Fassung. Jeder dieser Knöpfe
+        beendet Steam und startet es wieder, und dreimal hintereinander wäre
+        das dreimal dieselbe Wartezeit. Alles andere bleibt einzeln, weil es
+        nichts teilt.
+        """
+        zahl = lbl(_("{n} Punkt(e)").format(n=len(bad)) if bad
+                   else _("nichts"), "sub")
+        paare = [r["pair"] for r in results if r.get("pair")]
+        argv = set_mappings_argv(paare) if len(paare) > 1 else None
+        if not argv:
+            return zahl
+        b = Gtk.Button(label=_("Alle {n} Titel umstellen").format(n=len(paare)),
+                       valign=Gtk.Align.CENTER)
+        b.add_css_class("btn-fix")
+        b.connect("clicked", self._appcheck_fix, _("Fassungen umstellen"),
+                  b.get_label(), argv, self._proton_reload, None,
+                  _(PREFIX_SWITCH_NOTE))
+        r = box(True, 12, halign=Gtk.Align.END)
+        zahl.set_valign(Gtk.Align.CENTER)
+        r.append(zahl)
+        r.append(b)
+        return r
 
     def _pro_note(self, text, small=False):
         t = lbl(text, "row-detail" if small else "lede", wrap=True, chars=88)
@@ -12736,31 +13238,61 @@ def selftest():
     # den Namen. Wer die gegen Namen haelt, behauptet, eine installierte
     # Fassung gaebe es nicht mehr.
     with tempfile.TemporaryDirectory() as td:
-        def fassung(name, build):
-            p = os.path.join(td, name)
+        def fassung(name, build, unter=""):
+            p = os.path.join(td, unter, name) if unter else os.path.join(td, name)
             os.makedirs(p, exist_ok=True)
             with open(os.path.join(p, "proton"), "w") as fh:
                 fh.write(f'CURRENT_PREFIX_VERSION="{build}"\n')
             return (name, p)
 
+        eigene = "compatibilitytools.d"
         werkzeuge = [fassung("Proton - Experimental", "11.0-100"),
                      fassung("Proton 11.0", "11.0-100"),
-                     fassung("GE-Proton11-5", "GE-Proton11-5")]
-        karte = builds_to_tools(werkzeuge)
-        assert karte["11.0-100"] == "Proton 11.0", karte
-        assert karte["GE-Proton11-5"] == "GE-Proton11-5"
-        # Der Rat haengt daran, ob es die Fassung noch gibt
+                     fassung("GE-Proton11-5", "GE-Proton11-5", eigene)]
+        # Steam fuehrt Valves Fassungen unter einem anderen Namen als die
+        # Platte. Wer den falschen in die Zuordnung schreibt, stellt den Titel
+        # auf eine Fassung, die es fuer Steam nicht gibt.
+        for intern, ordner in (("proton_11", "Proton 11.0"),
+                               ("proton_experimental", "Proton - Experimental")):
+            assert mapping_name(ordner, os.path.join(td, ordner)) == intern
+            assert valve_tool_dir(intern, dict(werkzeuge)) == \
+                os.path.join(td, ordner)
+        assert mapping_name("GE-Proton11-5", "/x/compatibilitytools.d/irgendwas") \
+            == "GE-Proton11-5", "eigene Fassungen stehen unter ihrem Namen"
+        assert mapping_name("Proton EasyAntiCheat Runtime", "/x/common/y") == "", \
+            "ohne Nummer und ohne bekanntes Wort kein Eintrag"
+        wurzel = steam_root
+        globals()["steam_root"] = lambda: td
+        try:
+            # Die Fassung, die den Prefix gebaut hat, ist die erste Wahl. Danach
+            # eine neuere, denn nach vorn baut Proton selbst um.
+            assert prefix_fix_choice("11.0-100", werkzeuge) == \
+                ("Proton 11.0", "proton_11"), "stabil vor Experimental"
+            assert prefix_fix_choice("GE-Proton11-5", werkzeuge) == \
+                ("GE-Proton11-5", "GE-Proton11-5")
+            assert prefix_fix_choice("GE-Proton11-1", werkzeuge)[0] \
+                == "GE-Proton11-5", "dieselbe Herkunft, neuere Nummer"
+            assert prefix_fix_choice("GE-Proton12-1", werkzeuge) == ("", ""), \
+                "keine Fassung ist neu genug"
+            # Was im falschen compatibilitytools.d liegt, sieht Steam nie.
+            # Einen Titel darauf zu stellen, macht es schlimmer als vorher.
+            falsch = fassung("GE-Proton11-9", "GE-Proton11-9",
+                             os.path.join("woanders", eigene))
+            assert steam_sees(werkzeuge[2][1]) and not steam_sees(falsch[1])
+            assert prefix_fix_choice("GE-Proton11-1", werkzeuge + [falsch])[0] \
+                == "GE-Proton11-5", "die neuere zaehlt nicht, Steam kennt sie nicht"
+        finally:
+            globals()["steam_root"] = wurzel
+        # Der Rat haengt daran, ob der Knopf eine Fassung anbieten kann
         # Gegen die vollstaendigen _()-Aufrufe vergleichen, nie gegen deutsche
         # Woerter: unter LANGUAGE=en steht dort etwas anderes.
-        zurueck_da = _(" Am einfachsten stellst du den Titel in Steam wieder "
-                       "auf {name}, die ist noch da.").format(name="Proton 11.0")
-        da = prefix_advice(True, "proton_10", "11.0-100", "/p", karte)
-        assert zurueck_da in da, da
-        weg = prefix_advice(True, "proton_10", "GE-Proton11-1", "/p", karte)
-        assert zurueck_da not in weg and "GE-Proton11-1" in weg, weg
+        da = prefix_advice(True, "proton_10", "11.0-100", "/p", "Proton 11.0")
+        assert "Proton 11.0" in da, da
+        weg = prefix_advice(True, "proton_10", "GE-Proton11-1", "/p", "")
+        assert "Proton 11.0" not in weg and "GE-Proton11-1" in weg, weg
         # Vorwaerts ist kein Problem und liest sich auch nicht so
-        vor = prefix_advice(False, "proton_11", "10.1000-105", "/p", karte)
-        assert vor != da and vor != weg and zurueck_da not in vor
+        vor = prefix_advice(False, "proton_11", "10.1000-105", "/p", "")
+        assert vor != da and vor != weg
 
     juni = datetime.date(2026, 6, 1)
     assert point_release_month("2026-04-23", today=juni) == _(MONTHS[7])
@@ -13380,36 +13912,193 @@ def selftest():
     # Und der Knopf muss etwas tun, das Steam auch annimmt. install lehnt es
     # ebenso ab wie validate, solange sein Manifest StateFlags 4 meldet: im
     # Log stand zu 'steam://install/4183110' nur ExecuteSteamURL und danach
-    # nichts, keine GameAction, kein Download. Erst die Deinstallation raeumt
-    # den Eintrag weg.
+    # nichts, keine GameAction, kein Download. 'steam://uninstall' fuehrt Steam
+    # bei einer Laufzeitumgebung ebenfalls nicht aus, es antwortet mit "Cannot
+    # uninstall compatibility tool ... because the following application(s)
+    # depend on it" und nennt dann sie selbst. Bleibt das Manifest von aussen.
+    # Und die Ursache dahinter steht in Steams config.vdf: die Umgebung ist
+    # sich selbst als Kompatibilitaetswerkzeug zugewiesen. Dieselbe AppID steht
+    # in derselben Datei noch einmal harmlos als Shader-Cache-Eintrag, und der
+    # muss stehen bleiben.
+    CFG = ('"InstallConfigStore"\n{\n\t"Software"\n\t{\n'
+           '\t\t"ShaderCacheManager"\n\t\t{\n'
+           '\t\t\t"4183110"\n\t\t\t{\n\t\t\t\t"ShaderCacheSize"\t\t"0"\n'
+           '\t\t\t}\n\t\t}\n'
+           '\t\t"CompatToolMapping"\n\t\t{\n'
+           '\t\t\t"1363080"\n\t\t\t{\n\t\t\t\t"name"\t\t"GE-Proton11-5"\n'
+           '\t\t\t}\n'
+           '\t\t\t"4183110"\n\t\t\t{\n\t\t\t\t"name"\t\t"Proton-GE Latest"\n'
+           '\t\t\t\t"config"\t\t""\n\t\t\t\t"priority"\t\t"250"\n'
+           '\t\t\t}\n\t\t}\n\t}\n}\n')
+    assert self_mapped_runtime("4183110", CFG) == "Proton-GE Latest"
+    assert self_mapped_runtime("1628350", CFG) == "", "nur was dasteht"
+    assert self_mapped_runtime("4183110", "") == ""
     with tempfile.TemporaryDirectory() as lib:
         os.makedirs(os.path.join(lib, "steamapps"))
         mf = os.path.join(lib, "steamapps", "appmanifest_4183110.acf")
+        cfg = os.path.join(lib, "config.vdf")
         libs, which = steam_libraries, shutil.which
         globals()["steam_libraries"] = lambda: [lib]
         shutil.which = lambda n: "/usr/games/steam" if n == "steam" else None
         try:
             assert runtime_manifest("4183110") == ""
-            assert runtime_reset_argv("4183110") is None, \
+            assert runtime_reset_argv("4183110", cfg) is None, \
                 "ohne Manifest gibt es nichts zurueckzusetzen"
             open(mf, "w").close()
             assert runtime_manifest("4183110") == mf
-            argv = runtime_reset_argv("4183110")
+            # Nach dem Holen steht der Zeitpunkt im Manifest. Startabbrueche
+            # von davor gehoeren nicht mehr auf die Seite.
+            assert runtime_fetched_when("4183110") == 0.0, "leeres Manifest"
+            with open(mf, "w") as fh:
+                fh.write('"AppState"\n{\n\t"LastUpdated"\t\t"1786824180"\n}\n')
+            assert runtime_fetched_when("4183110") == 1786824180.0
+            assert runtime_fetched_when("9999999") == 0.0
+            argv = runtime_reset_argv("4183110", cfg)
             assert argv[:2] == ["sh", "-c"] and argv[3] == "sh", argv
             # Alles Veraenderliche geht als Argument, nichts in den Skripttext
             assert "4183110" not in argv[2] and mf not in argv[2], argv[2]
-            assert argv[4:7] == ["/usr/games/steam", "4183110", mf], argv
-            # Erst entfernen, dann holen. Andersherum passiert wieder nichts.
-            assert argv[2].index("steam://uninstall/$2") \
+            assert argv[4:8] == ["/usr/games/steam", "4183110", mf, cfg], argv
+            # Erst Steam beenden, dann die Zuweisung, dann das Manifest, dann
+            # holen. Andersherum schreibt Steam beides beim Beenden zurueck und
+            # der ganze Lauf war umsonst.
+            assert argv[2].index("-shutdown") < argv[2].index('"$4.dynotiq"') \
+                < argv[2].index('rm -f "$3"') \
                 < argv[2].index("steam://install/$2"), argv[2]
-            # Und das Manifest ist die Probe: liegt es noch da, hat Steam die
-            # Deinstallation nicht ausgefuehrt, dann wird nichts nachgeholt.
-            assert '[ -e "$3" ]' in argv[2], argv[2]
+            # Der Lauf selbst, mit Attrappen fuer steam, pgrep und sleep.
+            fake = os.path.join(lib, "bin")
+            os.makedirs(fake)
+            for name, code in (("pgrep", "exit ${PGREP_RC:-1}"),
+                               ("sleep", "exit 0"), ("steam", "exit 0")):
+                p = os.path.join(fake, name)
+                with open(p, "w") as f:
+                    f.write("#!/bin/sh\n" + code + "\n")
+                os.chmod(p, 0o755)
+            argv[4] = os.path.join(fake, "steam")
+            env = dict(os.environ, PATH=fake + os.pathsep + os.environ["PATH"])
+            with open(cfg, "w") as fh:
+                fh.write(CFG)
+            r = subprocess.run(argv, env=env, capture_output=True, text=True)
+            assert r.returncode == 0 and not os.path.exists(mf), (r, mf)
+            neu = read(cfg) or ""
+            assert self_mapped_runtime("4183110", neu) == "", neu
+            # Die Nachbarschaft bleibt stehen, sonst waere Steams halbe
+            # Konfiguration weg: der Shader-Eintrag derselben AppID und die
+            # Zuweisung des Spiels daneben.
+            assert "ShaderCacheSize" in neu and "GE-Proton11-5" in neu, neu
+            assert read(cfg + ".vor-dynotiq") == CFG.strip(), \
+                "ohne Sicherung wird an dieser Datei nichts geaendert"
+            # Geht Steam nicht zu, bleibt alles stehen und der Lauf sagt es.
+            open(mf, "w").close()
+            with open(cfg, "w") as fh:
+                fh.write(CFG)
+            r = subprocess.run(argv, env=dict(env, PGREP_RC="0"),
+                               capture_output=True, text=True)
+            assert r.returncode == 1 and os.path.exists(mf), (r, mf)
+            assert read(cfg) == CFG.strip(), \
+                "bei laufendem Steam wird nichts geaendert"
+            # Und weg kommt nur ein appmanifest genau dieser AppID, egal was
+            # als Pfad hereingereicht wird.
+            fremd = os.path.join(lib, "steamapps", "config.vdf")
+            open(fremd, "w").close()
+            argv[6] = fremd
+            r = subprocess.run(argv, env=env, capture_output=True, text=True)
+            assert r.returncode == 1 and os.path.exists(fremd), (r, fremd)
+            # Ist die Umgebung selbst noch brauchbar, reicht die Zuweisung.
+            with open(cfg, "w") as fh:
+                fh.write(CFG)
+            nur = mapping_reset_argv("4183110", cfg)
+            nur[4] = os.path.join(fake, "steam")
+            r = subprocess.run(nur, env=env, capture_output=True, text=True)
+            assert r.returncode == 0, r
+            assert self_mapped_runtime("4183110", read(cfg) or "") == ""
+            # Steht dort nichts, meldet der Knopf keinen Erfolg. Sonst haette
+            # der Nutzer Steam fuer nichts beendet und glaubte es erledigt.
+            r = subprocess.run(nur, env=env, capture_output=True, text=True)
+            assert r.returncode == 1, r
+            # Und der Knopf, der einen Titel auf eine andere Fassung stellt.
+            # Zwei Wege in einem Lauf: 1363080 hat einen Eintrag, der wird
+            # ersetzt, 9999 hat keinen, fuer den wird einer angelegt.
+            with open(cfg, "w") as fh:
+                fh.write(CFG)
+            zeilen = len(CFG.splitlines())
+            stellen = set_mappings_argv([("1363080", "Proton 11.0"),
+                                         ("9999", "GE-Proton11-5")], cfg)
+            stellen[4] = os.path.join(fake, "steam")
+            r = subprocess.run(stellen, env=env, capture_output=True, text=True)
+            assert r.returncode == 0, r
+            neu = read(cfg) or ""
+            karte = vdf_block(neu, "CompatToolMapping") or ""
+            assert vdf_value(vdf_block(karte, "1363080") or "", "name") \
+                == "Proton 11.0", karte
+            assert vdf_value(vdf_block(karte, "9999") or "", "name") \
+                == "GE-Proton11-5", karte
+            # Ersetzen kostet keine Zeile, Anlegen genau sechs. Alles andere
+            # waere ein Eingriff, den niemand bestellt hat: in derselben Datei
+            # stehen Steams Bibliothekspfade und Konten.
+            assert len(neu.splitlines()) == zeilen + 6, neu
+            assert "ShaderCacheSize" in neu and "4183110" in neu, neu
+            assert read(cfg + ".vor-dynotiq") == CFG.strip()
+            # Laeuft Steam, bleibt die Datei, wie sie ist.
+            with open(cfg, "w") as fh:
+                fh.write(CFG)
+            r = subprocess.run(stellen, env=dict(env, PGREP_RC="0"),
+                               capture_output=True, text=True)
+            assert r.returncode == 1 and read(cfg) == CFG.strip(), r
+            # Ohne CompatToolMapping wird nichts erfunden, und der Rueckweg
+            # stellt die Datei wieder her.
+            fremd_cfg = os.path.join(lib, "ohne.vdf")
+            with open(fremd_cfg, "w") as fh:
+                fh.write('"InstallConfigStore"\n{\n\t"x"\t\t"1"\n}\n')
+            ohne = set_mappings_argv([("123", "Proton 11.0")], fremd_cfg)
+            ohne[4] = os.path.join(fake, "steam")
+            r = subprocess.run(ohne, env=env, capture_output=True, text=True)
+            assert r.returncode == 1, r
+            assert read(fremd_cfg) == '"InstallConfigStore"\n{\n\t"x"\t\t"1"\n}'
+            # Was in Steams Konfiguration Anfuehrungszeichen oeffnen wuerde,
+            # kommt gar nicht bis zur Datei.
+            assert set_mappings_argv([("1", 'a"b')], cfg) is None
+            assert set_mappings_argv([("1", "a\\b")], cfg) is None
+            assert set_mappings_argv([("keine-zahl", "x")], cfg) is None
+            assert set_mappings_argv([], cfg) is None
             shutil.which = lambda n: None
-            assert runtime_reset_argv("4183110") is None, "ohne Steam kein Knopf"
+            assert runtime_reset_argv("4183110", cfg) is None, \
+                "ohne Steam kein Knopf"
+            assert mapping_reset_argv("4183110", cfg) is None
+            assert set_mappings_argv([("1363080", "Proton 11.0")], cfg) is None
         finally:
             globals()["steam_libraries"] = libs
             shutil.which = which
+    # Der Prefix ist der einzige Ort, an dem Spielstaende liegen koennen. Was
+    # ihn anfasst, prueft den Pfad in der Shell noch einmal selbst. Ohne sh im
+    # PATH bleibt das ungeprueft statt zu scheitern, sonst braeche der
+    # Haertetest ohne jedes externe Programm.
+    with tempfile.TemporaryDirectory() as td:
+        gut = os.path.join(td, "steamapps", "compatdata", "1234")
+        os.makedirs(os.path.join(gut, "pfx"))
+        os.makedirs(os.path.join(td, "steamapps", "compatdata", "abc"))
+        os.makedirs(os.path.join(td, "anderswo", "1234"))
+
+        def rc(argv):
+            if not shutil.which("sh"):
+                return None
+            return subprocess.run(argv, capture_output=True, text=True).returncode
+
+        for weg in (os.path.join(td, "anderswo", "1234"),
+                    os.path.join(td, "steamapps", "compatdata", "abc"),
+                    os.path.join(td, "steamapps", "compatdata", "9999"),
+                    os.path.join(gut, "pfx")):
+            assert rc(prefix_move_argv(weg)) in (1, None), weg
+            assert rc(prefix_remove_argv(weg)) in (1, None), weg
+        assert os.path.isdir(os.path.join(gut, "pfx")), "nichts angefasst"
+        if shutil.which("sh"):
+            assert rc(prefix_move_argv(gut)) == 0
+            assert os.path.isdir(gut + ".vor-dynotiq") \
+                and not os.path.exists(gut)
+            # Ein zweites Mal wuerde die erste Sicherung ueberschreiben.
+            os.makedirs(gut)
+            assert rc(prefix_move_argv(gut)) == 1
+            assert rc(prefix_remove_argv(gut)) == 0 and not os.path.exists(gut)
+            assert os.path.isdir(gut + ".vor-dynotiq"), "nur der eine Ordner"
     # systemd schreibt zu jedem Fehlschlag dieselben Zeilen. Sie sagen nur,
     # DASS es schiefging, und verdecken die eine, auf die es ankommt.
     lauf = ("vboxdrv.sh: Building VirtualBox kernel modules.\n"
