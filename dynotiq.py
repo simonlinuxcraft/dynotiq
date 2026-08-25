@@ -390,7 +390,12 @@ def sh_rc(args, timeout=15):
                            # LANG mit: snap holt seine Sprache von dort und
                            # ignoriert LC_ALL. Sonst sucht parse_disabled_snaps
                            # auf einem deutschen Desktop ewig nach "disabled".
-                           env={**os.environ, "LC_ALL": "C", "LANG": "C"})
+                           # LANGUAGE leer: Pythons gettext liest das vor
+                           # LC_ALL, und GNOME setzt es. Sonst meldet
+                           # do-release-upgrade "Neue Freigabe" statt "New
+                           # release" und parse_release_upgrade findet nichts.
+                           env={**os.environ, "LC_ALL": "C", "LANG": "C",
+                                "LANGUAGE": ""})
         return r.returncode, r.stdout
     except (OSError, subprocess.SubprocessError):
         return None, ""
@@ -13133,6 +13138,10 @@ def selftest():
         == "26.04.1 LTS"
     assert parse_release_upgrade("There is no development version of an LTS "
                                  "available.") == ""
+    # Der Satz kommt nur auf Englisch, wenn kein LANGUAGE mehr durchschlaegt.
+    # GNOME setzt es, Pythons gettext liest es vor LC_ALL, und dann meldet
+    # do-release-upgrade "Neue Freigabe" und die Freigabe faellt hier durch.
+    assert sh(["bash", "-c", 'printf "%s|%s" "$LANGUAGE" "$LC_ALL"']) == "|C"
     assert os_release("VERSION_ID")
     # In einer Bauumgebung ist kein Terminal-Emulator installiert, dann ist die
     # Liste leer. Wo einer da ist, muss das Argument hinten stehen.
