@@ -1441,9 +1441,15 @@ def app_source(entry):
     return ("lokal", binary)
 
 
-def desktop_apps():
-    """{Anzeigename: Eintrag} aller sichtbaren Anwendungen."""
-    apps = {}
+def desktop_entries():
+    """{Dateiname: Eintrag} aller sichtbaren Anwendungen.
+
+    Nach dem Dateinamen, nicht nach dem Anzeigenamen: gleiche Datei in einem
+    Verzeichnis hoeherer Ordnung ersetzt den Systemeintrag, so ueberschreibt
+    man einen Starter im Home. Zwei verschiedene Dateien mit demselben Namen
+    sind dagegen zwei Eintraege, und genau die gehen sonst verloren.
+    """
+    out = {}
     for d in DESKTOP_DIRS:
         for path in sorted(glob.glob(os.path.join(d, "*.desktop"))):
             text = read(path)
@@ -1452,14 +1458,115 @@ def desktop_apps():
             e = parse_desktop(text)
             if e.get("NoDisplay") == "true" or e.get("Hidden") == "true":
                 continue
-            name = e.get("Name") or os.path.basename(path)
             if e.get("Exec"):
                 e["Path"] = path
-                apps[name] = e
+                e["Name"] = e.get("Name") or os.path.basename(path)
+                out[os.path.basename(path)] = e
+    return out
+
+
+def desktop_apps():
+    """{Anzeigename: Eintrag} aller sichtbaren Anwendungen.
+
+    Bei gleichem Namen bekommt jeder Eintrag seinen Kanal dahinter, und wo
+    auch der gleich ist, den Dateinamen. Ohne das faellt bei zwei
+    Installationen derselben Anwendung eine aus der Auswahl, und ausgerechnet
+    die, um die es geht, laesst sich nicht pruefen.
+    """
+    entries = list(desktop_entries().values())
+    zahl = {}
+    for e in entries:
+        zahl[e["Name"]] = zahl.get(e["Name"], 0) + 1
+    owners = deb_owners([e["Path"] for e in entries if zahl[e["Name"]] > 1])
+    apps = {}
+    for e in entries:
+        name = e["Name"]
+        if zahl[name] > 1:
+            kanal = app_channel(e["Path"], owners)[0]
+            name = f"{name} ({APP_KIND_LABEL.get(kanal, kanal)})"
+        if name in apps:
+            name = f"{e['Name']} ({os.path.basename(e['Path'])[:-len('.desktop')]})"
+        apps[name] = e
     return apps
 
 
 USER_APPS = os.path.expanduser("~/.local/share/applications")
+
+
+def deb_owners(paths):
+    """{Pfad: Paket} fuer die, die dpkg kennt.
+
+    Eine Abfrage fuer alle: dpkg -S braucht gut 190 ms, und zwar unabhaengig
+    davon, wie viele Pfade darin stehen. Der Rueckgabewert zaehlt hier nicht,
+    denn ein einziger Pfad ohne Paket setzt ihn auf 1, waehrend die gefundenen
+    trotzdem dastehen.
+    """
+    if not paths:
+        return {}
+    out = {}
+    for line in sh_rc(["dpkg", "-S"] + list(paths), timeout=30)[1].splitlines():
+        pkg, _sep, datei = line.partition(": ")
+        if datei:
+            out[datei.strip()] = pkg.split(":")[0]
+    return out
+
+
+def app_channel(path, owners=None):
+    """(Kanal, Kennung) eines Menueeintrags, abgelesen an seinem Ort.
+
+    Der Ort ist verlaesslicher als die Exec-Zeile: Chromium legt als Snap zwei
+    Startdateien an, die zweite startet ueber env, und app_source haelt sie
+    danach fuer ein Debianpaket.
+    """
+    base = os.path.basename(path)[:-len(".desktop")]
+    if "/snapd/desktop/" in path:
+        return ("snap", base.split("_")[0])
+    if "/flatpak/exports/" in path:
+        return ("flatpak", base)
+    if not path.startswith(USER_APPS):
+        pkg = (deb_owners([path]) if owners is None else owners).get(path, "")
+        if pkg:
+            return ("deb", pkg)
+    return ("lokal", base)
+
+
+def duplicate_apps(entries=None):
+    """[(Name, [(Kanal, Kennung)])] fuer Anwendungen aus mehr als einem Kanal.
+
+    Zwei Eintraege desselben Kanals sind keine zweite Installation: Chromium
+    bringt als Snap zwei mit, hplip als Paket ebenfalls. Erst zwei Kanaele
+    heissen, dass wirklich alles doppelt auf der Platte liegt.
+    """
+    nach_name = {}
+    for e in (desktop_entries() if entries is None else entries).values():
+        nach_name.setdefault(e["Name"], []).append(e["Path"])
+    owners = deb_owners([p for pfade in nach_name.values() if len(pfade) > 1
+                         for p in pfade])
+    out = []
+    for name, pfade in sorted(nach_name.items()):
+        if len(pfade) < 2:
+            continue
+        quellen = list(dict.fromkeys(app_channel(p, owners) for p in pfade))
+        if len({k for k, _i in quellen}) > 1:
+            out.append((name, quellen))
+    return out
+
+
+def app_version(kanal, ident):
+    """Installierte Fassung, leer wo der Kanal keine nennt."""
+    if kanal == "deb":
+        return sh(["dpkg-query", "-W", "-f=${Version}", ident], timeout=20).strip()
+    if kanal == "snap":
+        zeilen = sh(["snap", "list", ident], timeout=30).splitlines()[1:]
+        f = zeilen[0].split() if zeilen else []
+        return f[1] if len(f) > 1 else ""
+    if kanal == "flatpak":
+        for line in sh(["flatpak", "list", "--columns=application,version"],
+                       timeout=30).splitlines():
+            f = line.split("\t")
+            if f[0] == ident:
+                return f[1] if len(f) > 1 else ""
+    return ""
 
 
 def steam_installed_ids():
@@ -6914,6 +7021,63 @@ def check_dead_launchers(ctx):
                    actions=[(_("Einträge entfernen"), "_remove_launchers", None)])
 
 
+APP_REMOVE = {"deb": "sudo apt remove {id}", "snap": "sudo snap remove {id}",
+              "flatpak": "flatpak uninstall {id}"}
+
+
+def older_install(stand):
+    """Die aeltere von zwei Installationen, sonst None.
+
+    Nur wo beide Fassungen sich als Zahlen lesen lassen und sich im
+    Hauptversionsteil unterscheiden. 1.39.0 gegen 1.39.1 ist eindeutig,
+    1.39.0 gegen 1.39.0-2 ist dieselbe Fassung mit Paketstand dahinter, und
+    'stable' gegen '2024-06' sagt gar nichts. In den beiden Faellen nennt der
+    Befund keine aeltere, sonst schickt er jemanden zum Falschen.
+    """
+    if len(stand) != 2 or not all(version_parts(v) for _k, _i, v in stand):
+        return None
+    a, b = sorted(stand, key=lambda t: version_parts(t[2]))
+    return a if version_parts(a[2]) < version_parts(b[2]) else None
+
+
+def check_duplicate_apps(ctx):
+    """Dieselbe Anwendung aus zwei Kanaelen, etwa als Paket und als Snap.
+
+    Kaputt ist daran nichts, deshalb "Zur Kenntnis". Sie belegt zweimal Platz,
+    steht zweimal im Menue, und gepflegt wird nur die, deren Quelle Updates
+    liefert: die andere bleibt stehen, wo sie war, und wer den falschen
+    Eintrag anklickt, arbeitet ab da in der alten Fassung.
+    """
+    lines = []
+    dupes = duplicate_apps()
+    for name, quellen in dupes:
+        stand = [(k, i, app_version(k, i)) for k, i in quellen]
+        lines.append(("package-x-generic-symbolic", "dim",
+                      name + ": " + ", ".join(
+                          " ".join(t for t in (APP_KIND_LABEL.get(k, k), v) if t)
+                          for k, _i, v in stand)))
+        alt = older_install(stand)
+        if alt and alt[0] in APP_REMOVE:
+            lines.append(("user-trash-symbolic", "dim",
+                          _("Älter ist {was}. Entfernen: {cmd}").format(
+                              was=APP_KIND_LABEL.get(alt[0], alt[0]) + " " + alt[2],
+                              cmd=APP_REMOVE[alt[0]].format(id=alt[1]))))
+    if not dupes:
+        return None
+    return Finding("info",
+                   _("1 Anwendung ist doppelt installiert") if len(dupes) == 1
+                   else _("{n} Anwendungen sind doppelt installiert").format(
+                       n=len(dupes)),
+                   _("Sie liegt aus zwei Quellen auf dem Rechner. Beide starten, "
+                     "aber jede bekommt ihre Updates nur aus ihrer eigenen "
+                     "Quelle, und im Menü stehen zwei Einträge mit demselben "
+                     "Namen. Welche du behältst, entscheidest du."),
+                   dupes[0][0] if len(dupes) == 1
+                   else _("{n} Anwendungen").format(n=len(dupes)), False,
+                   key="duplicate_apps", lines=lines,
+                   actions=[(_("App-Check öffnen"), "_goto_page", "App-Check")])
+
+
 def check_swap(ctx):
     """Belegter Swap allein sagt nichts: ausgelagerte Seiten, die niemand mehr
     anfasst, kosten nichts. Erst zusammen mit knappem Arbeitsspeicher wird
@@ -7137,7 +7301,8 @@ def check_self_update(ctx):
 CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_driver,
           check_cpu_temp,
           check_filesystems, check_gpu_throttle, check_governor, check_journal,
-          check_old_snaps, check_autostart, check_dead_launchers, check_swap,
+          check_old_snaps, check_autostart, check_dead_launchers,
+          check_duplicate_apps, check_swap,
           check_failed_units,
           check_proton, check_updates,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
@@ -14295,6 +14460,44 @@ def selftest():
                                "--command=rustdesk com.rustdesk.RustDesk @@u %u @@"}) \
         == ("flatpak", "com.rustdesk.RustDesk")
     assert app_source({"Exec": "/snap/bin/localsend"}) == ("snap", "localsend")
+    # Der Ort sagt den Kanal, die Exec-Zeile taeuscht: Chromium legt als Snap
+    # zwei Startdateien an, die zweite laeuft ueber env und saehe danach wie
+    # ein Debianpaket aus.
+    snapdir = "/var/lib/snapd/desktop/applications/"
+    assert app_channel(snapdir + "chromium_daemon.desktop") == ("snap", "chromium")
+    assert app_channel("/var/lib/flatpak/exports/share/applications/"
+                       "com.rustdesk.RustDesk.desktop") \
+        == ("flatpak", "com.rustdesk.RustDesk")
+    assert app_channel(os.path.join(USER_APPS, "eigen.desktop")) == ("lokal", "eigen")
+    # Zwei Startdateien desselben Kanals sind keine zweite Installation, sonst
+    # stuende Chromium als doppelt installiert da. Zwei Kanaele sind eine.
+    zwei = {"a": {"Name": "Chromium", "Exec": "x",
+                  "Path": snapdir + "chromium_chromium.desktop"},
+            "b": {"Name": "Chromium", "Exec": "x",
+                  "Path": snapdir + "chromium_daemon.desktop"}}
+    assert duplicate_apps(zwei) == []
+    zwei["c"] = {"Name": "Chromium", "Exec": "x",
+                 "Path": os.path.join(USER_APPS, "chromium.desktop")}
+    assert duplicate_apps(zwei) == [("Chromium", [("snap", "chromium"),
+                                                  ("lokal", "chromium")])]
+    # Eine aeltere nennt der Befund nur, wo die Zahlen es hergeben. Der
+    # Paketstand hinter dem Bindestrich ist keine neuere Fassung.
+    assert older_install([("snap", "x", "1.39.0"), ("deb", "x", "1.39.1")]) \
+        == ("snap", "x", "1.39.0")
+    assert older_install([("snap", "x", "1.39.0"), ("deb", "x", "1.39.0-2")]) is None
+    assert older_install([("snap", "x", "stable"), ("deb", "x", "2024-06")]) is None
+    # Und beide muessen waehlbar bleiben: vorher fiel die zweite Anwendung
+    # gleichen Namens aus der Auswahl des App-Checks.
+    with tempfile.TemporaryDirectory() as td:
+        for datei in ("eins.desktop", "zwei.desktop"):
+            with open(os.path.join(td, datei), "w") as fh:
+                fh.write("[Desktop Entry]\nName=Doppelt\nExec=" + datei + "\n")
+        alt_dirs = DESKTOP_DIRS
+        try:
+            globals()["DESKTOP_DIRS"] = [td]
+            assert len(desktop_apps()) == 2, desktop_apps()
+        finally:
+            globals()["DESKTOP_DIRS"] = alt_dirs
     assert parse_snap_connections(
         "Interface  Plug              Slot   Notes\n"
         "alsa       firefox:alsa      -      -\n"
