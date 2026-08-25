@@ -1,4 +1,4 @@
-<!-- @dsCard group="Foundations" name="Type" subtitle="Inter scale, weights, tabular figures, mono" -->
+<!-- @dsCard group="Foundations" name="Type" subtitle="IBM Plex scale, weights, tabular figures, mono" -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,8 +11,8 @@
   --text:#F2F3F5; --strong:#EDEEF0; --title:#E6E8EA; --dim:#9AA1AA;
   --faint:#767C85; --label:#5E656E; --crit:#FF4747;
   --line:rgba(255,255,255,.07);
-  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
-  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Ubuntu Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
@@ -39,14 +39,14 @@ code{font:11.5px var(--mono);color:var(--dim)}
 <body>
 
 <h1>Type</h1>
-<p class="lede">Inter for the interface, JetBrains Mono for anything a machine wrote. Sizes are half-step values because the app is dense and a full 2 px jump would push a card off a 1366 px screen. Weight does the ranking, size only sets the scale.</p>
+<p class="lede">IBM Plex Sans for the interface, IBM Plex Mono for anything a machine measured or wrote: readings, timestamps, axis labels, paths. Sizes are half-step values because the app is dense and a full 2 px jump would push a card off a 1366 px screen. Weight does the ranking, size only sets the scale.</p>
 
 <h2>Families</h2>
 <div class="stack">
-  <p><b>Sans</b>: Inter, Ubuntu, "Noto Sans", sans-serif</p>
-  <p><b>Mono</b>: "JetBrains Mono", "Ubuntu Mono", monospace</p>
+  <p><b>Sans</b>: "IBM Plex Sans", Ubuntu, "Noto Sans", sans-serif</p>
+  <p><b>Mono</b>: "IBM Plex Mono", "Ubuntu Mono", monospace</p>
 </div>
-<p class="note" style="margin-top:12px">Inter is the interface face, Ubuntu is the guaranteed fallback on the target system. Both are OFL or Ubuntu Font Licence, so they can ship with the package.</p>
+<p class="note" style="margin-top:12px">IBM Plex carries the interface and ships as fonts-ibm-plex, a Recommends of the package. Ubuntu is the guaranteed fallback where that package is missing, which is why it sits second in the stack and not "Noto Sans". Both are OFL or Ubuntu Font Licence.</p>
 
 <h2>Scale</h2>
 <div class="row"><div class="spec" style="font:600 29px var(--sans);color:#F2F3F5;letter-spacing:-.4px">Nothing runs without asking</div><div class="tag">600 · 29px · headline</div></div>

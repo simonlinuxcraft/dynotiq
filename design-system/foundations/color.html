@@ -11,8 +11,8 @@
   --text:#F2F3F5; --title:#E6E8EA; --dim:#9AA1AA; --faint:#767C85; --label:#5E656E;
   --accent:#F5C242; --ok:#2ED27A; --warn:#FF8A3D; --crit:#FF4747;
   --line:rgba(255,255,255,.07); --line-strong:rgba(255,255,255,.12);
-  --sans:Inter,Ubuntu,"Noto Sans",system-ui,sans-serif;
-  --mono:"JetBrains Mono","Ubuntu Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",Ubuntu,"Noto Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Ubuntu Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);padding:36px 32px 48px;line-height:1.45}
@@ -79,29 +79,30 @@ code{font:11.5px var(--mono);color:var(--dim)}
   <div class="sw"><div class="chip" style="background:#A78BFA;display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);color:#100D18">Aa button label</div><div class="meta"><span class="nm">Violet</span><span class="hx">#A78BFA</span><span class="use">on #100D18</span></div></div>
 </div>
 
-<h2>Status palettes</h2>
-<p class="note">Three sets, one meaning. Warn stays in the orange band on purpose, otherwise it reads as the accent. Backgrounds are always the same colour at 12 % alpha.</p>
+<h2>Status</h2>
+<p class="note">No traffic light. Green and orange said the same thing as grey and yellow, only louder, so the set shrank to three steps that differ in urgency, not in hue. Warn follows the accent, which means it changes with the user's choice. Backgrounds are always the same colour at 12 % alpha.</p>
 <table>
-  <tr><th></th><th>Ampel (default)</th><th></th><th>Warm</th><th></th><th>Mono</th></tr>
+  <tr><th></th><th>Dark</th><th></th><th>Light</th><th></th><th>Means</th></tr>
   <tr>
     <td>OK</td>
-    <td class="c"><span class="dot" style="background:#2ED27A"></span></td><td><code>#2ED27A</code></td>
-    <td class="c"><span class="dot" style="background:#9BD44F"></span></td><td><code>#9BD44F</code></td>
-    <td class="c"><span class="dot" style="background:#9EA4AC"></span></td><td><code>#9EA4AC</code></td>
+    <td class="c"><span class="dot" style="background:#6F757E"></span></td><td><code>#6F757E</code></td>
+    <td class="c"><span class="dot" style="background:#8A9099"></span></td><td><code>#8A9099</code></td>
+    <td>nothing to do, recorded for context</td>
   </tr>
   <tr>
     <td>Warn</td>
-    <td class="c"><span class="dot" style="background:#FF8A3D"></span></td><td><code>#FF8A3D</code></td>
-    <td class="c"><span class="dot" style="background:#FF9F1C"></span></td><td><code>#FF9F1C</code></td>
-    <td class="c"><span class="dot" style="background:#D8DDE3"></span></td><td><code>#D8DDE3</code></td>
+    <td class="c"><span class="dot" style="background:#F5C242"></span></td><td><code>accent</code></td>
+    <td class="c"><span class="dot" style="background:#F5C242"></span></td><td><code>accent</code></td>
+    <td>waiting for a decision</td>
   </tr>
   <tr>
     <td>Critical</td>
     <td class="c"><span class="dot" style="background:#FF4747"></span></td><td><code>#FF4747</code></td>
-    <td class="c"><span class="dot" style="background:#FF4D3D"></span></td><td><code>#FF4D3D</code></td>
-    <td class="c"><span class="dot" style="background:#FFFFFF"></span></td><td><code>#FFFFFF</code></td>
+    <td class="c"><span class="dot" style="background:#C4362A"></span></td><td><code>#C4362A</code></td>
+    <td>something is broken</td>
   </tr>
 </table>
+<p class="note" style="margin-top:12px">Carried by a 2 px bar down the left edge of a row, not by a round dot: it runs the height of what it belongs to and stays legible at a glance without shouting.</p>
 
 <h2>Lines and overlays</h2>
 <p class="note">White alpha only. A hover is the same overlay everywhere, which is why nothing needs a hover colour of its own.</p>

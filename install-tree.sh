@@ -12,8 +12,15 @@ install -Dm644 dynotiq.py "$DEST/usr/lib/dynotiq/dynotiq.py"
 for f in app-icon/svg/dynotiq-app-dark.svg \
          app-icon/svg/dynotiq-icon-mono-white.svg \
          app-icon/svg/dynotiq-icon-light.svg \
-         wordmark/png/dynotiq-wordmark-dark-w1200.png; do
+         wordmark/png/dynotiq-wordmark-dark-w1200.png \
+         wordmark/png/dynotiq-wordmark-light-w1200.png; do
   install -Dm644 "icons/$f" "$DEST/usr/lib/dynotiq/icons/$f"
+done
+
+# Die Symbole der Navigation. Der hicolor-Zwischenschritt muss bleiben, sonst
+# erkennt GTK sie nicht als symbolisch und faerbt sie nicht mit ein.
+for f in icons/ui/hicolor/scalable/actions/*.svg; do
+  install -Dm644 "$f" "$DEST/usr/lib/dynotiq/$f"
 done
 for s in 16 24 32 48 64 128 256 512; do
   install -Dm644 "icons/app-icon/png/dynotiq-app-dark-$s.png" \

@@ -44,7 +44,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
-VERSION = "0.3~beta"
+VERSION = "0.4~beta"
 APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -86,26 +86,84 @@ REPO_URL = "https://simonlinuxcraft.github.io/dynotiq"
 REPO_SOURCES = "/etc/apt/sources.list.d/dynotiq.sources"
 REPO_KEYRING = "/usr/share/keyrings/dynotiq.gpg"
 
-# Aus dem Logo: Ink als Basis, Gelb als Marke. Warn liegt bewusst im Orange,
-# sonst wäre es vom Akzent nicht zu unterscheiden.
-INK = "#12161B"
+# Aus dem Logo: Gelb als Marke, der Rest ist neutral, damit die Farbe etwas
+# bedeutet, wo sie auftaucht.
 ACCENTS = ["#F5C242", "#E95420", "#58C6E8", "#A78BFA"]
-PALETTES = {
-    "Ampel": {"ok": "#2ED27A", "warn": "#FF8A3D", "crit": "#FF4747"},
-    "Warm": {"ok": "#9BD44F", "warn": "#FF9F1C", "crit": "#FF4D3D"},
-    "Mono": {"ok": "#9EA4AC", "warn": "#D8DDE3", "crit": "#FFFFFF"},
+
+# Jeder Ton der Oberfläche steht hier und nirgends sonst. Beide Sätze tragen
+# dieselben Schlüssel, der Selftest besteht darauf: ein nur im Hellzweig
+# vergessener Ton fiele sonst erst beim Umschalten auf.
+THEMES = {
+    "dark": {
+        "bg": "#0E1116", "ink": "#12161B", "surface": "#161A20",
+        "raised": "#1B2027", "surface-disabled": "#272E38",
+        "chrome-top": "#232932", "chrome-bottom": "#1A1F26",
+        "control": "#2C333D", "control-hover": "#222933",
+        "text": "#F2F3F5", "strong": "#EDEEF0", "title": "#E6E8EA",
+        "body": "#D6DAE0", "muted": "#C8CDD3", "text-icon": "#B9BEC5",
+        "dim": "#9AA1AA", "text-arrow": "#8A9099", "faint": "#767C85",
+        "fainter": "#6F757E", "label": "#5E656E", "disabled": "#5A6069",
+        # Fließtext hat eine eigene Stufe: mit faint kommt ein langer Absatz
+        # auf 4,3:1 gegen die Karte, und darunter wird er zur Zumutung.
+        "detail": "#8B929B",
+        "crit": "#FF4747", "track": "rgba(255,255,255,.09)",
+        "line": "rgba(255,255,255,.07)", "line-soft": "rgba(255,255,255,.06)",
+        "line-strong": "rgba(255,255,255,.12)",
+        "line-faint": "rgba(255,255,255,.05)",
+        "hover": "rgba(255,255,255,.05)", "hover-row": "rgba(255,255,255,.04)",
+        "hover-ghost": "rgba(255,255,255,.06)",
+        "neutral-a": "rgba(255,255,255,.07)", "jump": "rgba(255,255,255,.045)",
+        "scroll": "rgba(255,255,255,.16)", "chrome-edge": "rgba(0,0,0,.6)",
+    },
+    "light": {
+        "bg": "#F4F1EC", "ink": "#EAE6DE", "surface": "#FFFDFA",
+        "raised": "#F5F2ED", "surface-disabled": "#DDD8CE",
+        "chrome-top": "#EFEBE4", "chrome-bottom": "#E4DFD6",
+        "control": "#D6D0C5", "control-hover": "#C9C2B5",
+        "text": "#12161B", "strong": "#1A1F26", "title": "#232932",
+        "body": "#2E353E", "muted": "#454D57", "text-icon": "#5E656E",
+        "dim": "#5E656E", "text-arrow": "#767C85", "faint": "#767C85",
+        "fainter": "#8A9099", "label": "#9AA1AA", "disabled": "#A8AEB6",
+        "detail": "#5A626C",
+        "crit": "#C4362A", "track": "rgba(0,0,0,.10)",
+        "line": "rgba(0,0,0,.09)", "line-soft": "rgba(0,0,0,.07)",
+        "line-strong": "rgba(0,0,0,.14)",
+        "line-faint": "rgba(0,0,0,.06)",
+        "hover": "rgba(0,0,0,.04)", "hover-row": "rgba(0,0,0,.03)",
+        "hover-ghost": "rgba(0,0,0,.05)",
+        "neutral-a": "rgba(0,0,0,.06)", "jump": "rgba(0,0,0,.035)",
+        "scroll": "rgba(0,0,0,.20)", "chrome-edge": "rgba(0,0,0,.14)",
+    },
 }
+
+
+def status_colors(theme, accent):
+    """ok, warn und crit als Farbe.
+
+    Die Ampel ist raus: Gruen und Orange sagten dasselbe wie Grau und Gelb,
+    nur lauter. Die drei Schluessel bleiben trotzdem, weil record_state und
+    die Zeilen jedes Befunds sie als Datenwert weiterreichen, bis in die
+    Cairo-Widgets. Wer sie hier entfernt, bekommt einen KeyError beim
+    Zeichnen, keinen Fehler beim Start.
+    """
+    return {"ok": THEMES[theme]["fainter"], "warn": accent,
+            "crit": THEMES[theme]["crit"]}
+
+
 WATCH_INTERVALS = [15, 30, 60, 300]
 # Ubuntu 26.04 hat die eigene Update-Meldung ohne Schalter abgeschaltet. Wer
 # nichts davon weiss, erfaehrt gar nicht mehr, dass etwas ansteht. Einmal die
 # Woche ist die Grenze, ab der eine Erinnerung zum Genoergel wird.
 UPDATE_REMIND_SECS = 7 * 86400
-DEFAULTS = {"accent": ACCENTS[0], "palette": "Ampel", "interval": 2, "tray": True,
+DEFAULTS = {"accent": ACCENTS[0], "theme": "dark", "interval": 2, "tray": True,
             "firmware": True, "snapshot": False, "notify_crit": False,
-            "watch_interval": 30, "notify_updates": True, "auto_record": True}
+            "watch_interval": 30, "notify_updates": True, "auto_record": True,
+            "rig": True}
 
 # Von build_css und den Cairo-Widgets gelesen, wechselt mit der Einstellung.
-COLORS = {"acc": ACCENTS[0], **PALETTES["Ampel"]}
+THEME = "dark"
+COLORS = {"acc": ACCENTS[0], **THEMES[THEME],
+          **status_colors(THEME, ACCENTS[0])}
 
 
 def load_config():
@@ -117,8 +175,8 @@ def load_config():
         pass
     if cfg["accent"] not in ACCENTS:
         cfg["accent"] = DEFAULTS["accent"]
-    if cfg["palette"] not in PALETTES:
-        cfg["palette"] = DEFAULTS["palette"]
+    if cfg["theme"] not in THEMES:
+        cfg["theme"] = DEFAULTS["theme"]
     # Beide Intervalle landen in einem Timer. Eine von Hand verbogene oder halb
     # geschriebene Datei darf den Timer nicht mit Text oder einer Null fuettern.
     if cfg["interval"] not in (1, 2, 5, 10):
@@ -126,7 +184,7 @@ def load_config():
     if cfg["watch_interval"] not in WATCH_INTERVALS:
         cfg["watch_interval"] = DEFAULTS["watch_interval"]
     for k in ("tray", "firmware", "snapshot", "notify_crit", "notify_updates",
-              "auto_record"):
+              "auto_record", "rig"):
         cfg[k] = bool(cfg[k])
     return cfg
 
@@ -161,10 +219,16 @@ def save_config(cfg):
 
 
 def apply_colors(cfg):
-    COLORS.update(PALETTES[cfg["palette"]])
+    """COLORS und THEME auf Einstellung bringen.
+
+    Eine Quelle für beides: das CSS liest hier, und die Cairo-Widgets
+    ebenso, weil sie an keinem Stilblatt hängen.
+    """
+    global THEME
+    THEME = cfg["theme"]
+    COLORS.update(THEMES[THEME])
+    COLORS.update(status_colors(THEME, cfg["accent"]))
     COLORS["acc"] = cfg["accent"]
-    if cfg["palette"] == "Mono":
-        COLORS["warn"] = cfg["accent"]
 
 
 HISTORY_MAX = 4000
@@ -4570,6 +4634,20 @@ RELEASE_NOTES = {
           "Schritt zu \"alle Rechte vorbehalten\" aus 0.2~beta1 ist "
           "zurückgenommen"),
     ]),
+    "0.4~beta": (_("Hell und dunkel"), [
+        _("Die Oberfläche gibt es jetzt auch hell. Umschalten in den "
+          "Einstellungen, es gilt sofort und ohne Neustart"),
+        _("Jede Seite hat ein eigenes Symbol in der Navigation, und ein "
+          "Suchfeld darüber springt zu der Seite, die du tippst"),
+        _("Die Ampel ist weg. Grün und Orange sagten dasselbe wie Grau und "
+          "Gelb, nur lauter: ein grauer Balken heißt \"nichts zu tun\", ein "
+          "gelber \"warten auf deine Entscheidung\", ein roter \"kaputt\""),
+        _("Befunde tragen den Balken links an der ganzen Zeile statt eines "
+          "Punktes daneben"),
+        _("Neue Schrift: IBM Plex, mit der Monospace für alles Gemessene, "
+          "damit Zahlen untereinander stehen"),
+        _("Der Rechnerblock in der Seitenleiste lässt sich abschalten"),
+    ]),
 }
 
 
@@ -4838,13 +4916,15 @@ def mangohud_conf(cfg, font="", height=1080):
 
     Farben kommen aus derselben Quelle wie die Oberflaeche, damit das Overlay
     nicht wie ein Fremdkoerper ueber dem Spiel liegt: Akzent fuer die Werte,
-    die Ampel fuer Last und Bildrate, Kartenfarbe als Hintergrund.
+    Grau, Akzent und Rot fuer Last und Bildrate, Kartenfarbe als Hintergrund.
 
     Die Schriftgroesse waechst mit der Bildschirmhoehe, sonst ist das Overlay
     auf einem 4K-Schirm nicht mehr zu lesen.
     """
     acc = cfg["accent"].lstrip("#")
-    pal = PALETTES[cfg["palette"]]
+    # Immer die dunklen Toene, auch wenn die App hell laeuft: das Overlay
+    # liegt ueber dem Spiel auf eigenem dunklem Grund, nicht in der App.
+    pal = status_colors("dark", cfg["accent"])
     ok, warn, crit = (pal[k].lstrip("#") for k in ("ok", "warn", "crit"))
     lines = [
         "# Von dynotiq geschrieben, Aenderungen hier gehen beim naechsten",
@@ -8132,101 +8212,115 @@ def bench_disk(mib=256):
 # CSS
 
 CSS_TEMPLATE = """
-window, .page { background: #0E1116; }
-headerbar { background-image: linear-gradient(#232932, #1A1F26); border: none;
-            box-shadow: inset 0 -1px rgba(0,0,0,.6); min-height: 46px; padding: 0 8px; }
+window, .page { background: @BG@; }
+headerbar { background-image: linear-gradient(@CHROMETOP@, @CHROMEBOTTOM@); border: none;
+            box-shadow: inset 0 -1px @CHROMEEDGE@; min-height: 46px; padding: 0 8px; }
 /* Systemthemes malen Buttons per background-image, das muss überall mit weg. */
-headerbar windowcontrols button { background-color: #2C333D; background-image: none;
-            border: none; box-shadow: none; border-radius: 50%; color: #B9BEC5;
+headerbar windowcontrols button { background-color: @CONTROL@; background-image: none;
+            border: none; box-shadow: none; border-radius: 50%; color: @TEXTICON@;
             min-width: 22px; min-height: 22px; padding: 0; margin: 0 2px; }
 headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; }
-.dot { min-width: 9px; min-height: 9px; border-radius: 2px; background: @ACC@; }
-.hb-title { font: 600 12.5px @SANS@; color: #E6E8EA; }
-.hb-sub { font: 11px @SANS@; color: #767C85; }
+.hb-title { font: 600 12.5px @SANS@; color: @TITLE@; }
+.hb-sub { font: 11px @SANS@; color: @FAINT@; }
 
-.sidebar { background: #12161B; box-shadow: inset -1px 0 rgba(255,255,255,.06);
-           padding: 18px 12px 14px; }
-.brand { font: 700 15px @SANS@; color: #EDEEF0; letter-spacing: -0.3px; }
-.brandsub { font: 9.5px @SANS@; color: #6F757E; letter-spacing: 0.6px; }
-.nav { font: 12.5px @SANS@; color: #9AA1AA; background-color: transparent;
-       background-image: none; border: none; box-shadow: none; min-height: 0;
-       border-radius: 7px; padding: 8px 10px 8px 22px; }
-.nav:hover { background-color: rgba(255,255,255,.05); color: #D6DAE0; }
-.nav.active { background-color: @ACC@; background-image: none; color: @ACCTXT@;
-              font-weight: 600; box-shadow: none; }
-.nav.active:hover { background-color: @ACCHI@; color: @ACCTXT@; }
-.navgroup { font: 600 9.5px @SANS@; color: #5E656E; letter-spacing: 1px;
+.sidebar { background: @INK@; box-shadow: inset -1px 0 @LINESOFT@;
+           padding: 16px 12px 12px; }
+.brand { font: 700 15px @SANS@; color: @STRONG@; letter-spacing: -0.3px; }
+.brandsub { font: 500 9.5px @SANS@; color: @FAINTER@; letter-spacing: 0.7px; }
+/* Sprungfeld ueber der Navigation. Flach und randlos, damit es die Leiste
+   nicht in zwei Haelften teilt. */
+.jump { background: @JUMP@; background-image: none; color: @BODY@;
+        border: 1px solid @LINEFAINT@; border-radius: 7px; box-shadow: none;
+        min-height: 29px; padding: 0 4px; font: 11.5px @SANS@;
+        margin-bottom: 12px; caret-color: @BODY@; }
+.jump:focus-within { border-color: @LINESTRONG@; }
+.jump image { color: @TEXTARROW@; }
+.nav { font: 12.5px @SANS@; color: @DIM@; background-color: transparent;
+       background-image: none; border: none; box-shadow: none; min-height: 32px;
+       border-radius: 7px; padding: 0 10px; }
+.nav:hover { background-color: @HOVER@; color: @BODY@; }
+/* Weicher Akzentgrund statt voller Flaeche, dazu der Balken links: die
+   Navigation soll die Seite zeigen, nicht um Aufmerksamkeit werben. */
+.nav.active { background-color: @TINT@; background-image: none; color: @STRONG@;
+              font-weight: 500; box-shadow: inset 2px 0 @ACC@; }
+.nav.active:hover { background-color: @TINT@; color: @STRONG@; }
+.navgroup { font: 600 9.5px @SANS@; color: @LABEL@; letter-spacing: 1px;
             padding: 14px 0 5px 12px; }
-.navbadge { font: 600 10px @SANS@; background: @CRIT@; color: #2A0F0F;
-            border-radius: 9px; padding: 2px 7px; }
-.rig { background: #1B2027; border: 1px solid rgba(255,255,255,.06);
-       border-radius: 9px; padding: 12px; }
-.rig-key { font: 600 9.5px @SANS@; color: #6F757E; letter-spacing: 0.7px; }
-.rig-val { font: 500 11px @SANS@; color: #C8CDD3; }
-.rig-sub { font: 10px @SANS@; color: #6F757E; }
+.navbadge { font: 600 10.5px @SANS@; color: @FAINT@; background: none;
+            padding: 0 2px; }
+.rig { background: @RAISED@; border: 1px solid @LINESOFT@;
+       border-radius: 9px; padding: 11px 12px; }
+.rig-key { font: 9.5px @SANS@; color: @FAINTER@; letter-spacing: 0.7px; }
+.rig-val { font: 500 11px @SANS@; color: @MUTED@; }
+.rig-sub { font: 10px @MONO@; color: @FAINTER@; }
 
-.card { background: #161A20; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; }
-.h1 { font: 600 22px @SANS@; color: #F2F3F5; }
-.sub { font: 11px @SANS@; color: #767C85; }
-.btn-ghost { font: 500 12px @SANS@; color: #C8CDD3; background-color: transparent;
+.card { background: @SURFACE@; border: 1px solid @LINE@; border-radius: 12px; }
+.h1 { font: 600 22px @SANS@; color: @TEXT@; letter-spacing: -0.25px; }
+.sub { font: 11.5px @MONO@; color: @FAINT@; }
+.btn-ghost { font: 500 11.5px @SANS@; color: @MUTED@; background-color: transparent;
              background-image: none; box-shadow: none; min-height: 0;
-             border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 9px 14px; }
-.btn-ghost:hover { background-color: rgba(255,255,255,.06); }
-.btn-ghost:disabled { color: #5A6069; }
+             border: 1px solid @LINESTRONG@; border-radius: 7px; padding: 8px 14px; }
+.btn-ghost:hover { background-color: @HOVERGHOST@; }
+.btn-ghost:disabled { color: @DISABLED@; }
 /* Fuer den leisesten Weg aus einem Befund heraus: gleiche Groesse wie
    btn-ghost, aber ohne Rahmen, damit er nicht als Empfehlung gelesen wird. */
-.btn-quiet { font: 500 12px @SANS@; color: #767C85; background-color: transparent;
+.btn-quiet { font: 500 11.5px @SANS@; color: @FAINT@; background-color: transparent;
              background-image: none; box-shadow: none; min-height: 0;
-             border: none; border-radius: 8px; padding: 9px 14px; }
-.btn-quiet:hover { background-color: rgba(255,255,255,.05); color: #C8CDD3; }
+             border: none; border-radius: 7px; padding: 9px 14px; }
+.btn-quiet:hover { background-color: @HOVER@; color: @MUTED@; }
 /* Eine ganze Listenzeile als Knopf: Rahmen und Polster weg, damit sie wie
    eine Zeile aussieht, aber Tastatur und Fokus mitbringt. */
 .row-open { background: transparent; background-image: none; box-shadow: none;
             border: none; border-radius: 0; padding: 0; min-height: 0; }
-.row-open:hover { background-color: rgba(255,255,255,.04); }
+.row-open:hover { background-color: @HOVERROW@; }
 .btn-accent, .btn-fix { color: @ACCTXT@; background-color: @ACC@; background-image: none;
               border: none; box-shadow: none; min-height: 0; }
-.btn-accent { font: 600 12px @SANS@; border-radius: 8px; padding: 9px 16px; }
+.btn-accent { font: 600 11.5px @SANS@; border-radius: 7px; padding: 8px 16px; }
 .btn-fix { font: 600 11.5px @SANS@; border-radius: 7px; padding: 8px 14px; }
 .btn-accent:hover, .btn-fix:hover { background-color: @ACCHI@; }
-.btn-accent:disabled, .btn-fix:disabled { background-color: #272E38; color: #767C85; }
-.swatch { border-radius: 8px; border: 1px solid rgba(255,255,255,.12);
+.btn-accent:disabled, .btn-fix:disabled { background-color: @SURFACEDISABLED@;
+              color: @FAINT@; }
+.swatch { border-radius: 8px; border: 1px solid @LINESTRONG@;
           background-color: transparent; background-image: none; box-shadow: none;
           padding: 3px; min-height: 0; }
-.swatch.active { border: 2px solid #F2F3F5; padding: 2px; }
+.swatch.active { border: 2px solid @STRONG@; padding: 2px; }
 
-.eyebrow { font: 600 10px @SANS@; color: @CRIT@; letter-spacing: 1px; }
-.headline { font: 600 29px @SANS@; color: #F2F3F5; }
-.lede { font: 12.5px @SANS@; color: #9AA1AA; }
-.kpi { background: #1B2027; border-radius: 9px; padding: 11px 12px; }
-.kpi-key { font: 9.5px @SANS@; color: #767C85; letter-spacing: 0.7px; }
-.kpi-val { font: 700 21px @SANS@; color: #EDEEF0; }
-.kpi-unit { font: 12px @SANS@; color: #767C85; }
+.eyebrow { font: 600 10px @SANS@; color: @ACCTEXT@; letter-spacing: 1px; }
+.headline { font: 600 29px @SANS@; color: @TEXT@; letter-spacing: -0.3px; }
+.lede { font: 12.5px @SANS@; color: @DIM@; }
+.kpi { background: @RAISED@; border-radius: 9px; padding: 11px 12px; }
+.kpi-key { font: 10px @SANS@; color: @LABEL@; letter-spacing: 0.7px; }
+.kpi-val { font: 700 21px @MONO@; color: @STRONG@; }
+.kpi-unit { font: 12px @SANS@; color: @FAINT@; }
 .state-ok { color: @OK@; } .state-warn { color: @WARN@; } .state-crit { color: @CRIT@; }
-.state-dim { color: #767C85; }
+.state-dim { color: @FAINT@; }
 
-.cardhead { font: 600 12.5px @SANS@; color: #E6E8EA; }
-.rowsep { background: rgba(255,255,255,.05); min-height: 1px; }
-.row-title { font: 500 13px @SANS@; color: #EDEEF0; }
-/* 5,8:1 gegen den Kartengrund. Mit #767C85 waren es 4,3:1, und darunter wird
-   ein langer Absatz zur Zumutung. */
-.row-detail { font: 11.5px @SANS@; color: #8B929B; }
-.mono { font: 11.5px @SANS@; color: #9AA1AA; }
-.mono-dim { font: 11px @SANS@; color: #6F757E; }
-.pill { font: 600 11px @SANS@; border-radius: 6px; padding: 5px 9px;
-        background: rgba(255,255,255,.07); color: #C8CDD3; }
-.pill.ok { background: @OK12@; color: @OK@; }
-.pill.warn { background: @WARN12@; color: @WARN@; }
+.cardhead { font: 600 12.5px @SANS@; color: @TITLE@; }
+.rowsep { background: @LINEFAINT@; min-height: 1px; }
+.row-title { font: 500 13px @SANS@; color: @STRONG@; }
+/* Eigene Stufe, nicht @FAINT@: 5,8:1 gegen den Kartengrund. Mit @FAINT@
+   waren es 4,3:1, und darunter wird ein langer Absatz zur Zumutung. */
+.row-detail { font: 11.5px @SANS@; color: @DETAIL@; }
+.mono { font: 11.5px @MONO@; color: @DIM@; }
+.mono-dim { font: 11px @MONO@; color: @LABEL@; }
+.pill { font: 500 10.5px @SANS@; border-radius: 5px; padding: 4px 8px;
+        background: @NEUTRALA@; color: @DIM@; }
+.pill.accent { background: @ACC13@; color: @ACCTEXT@; }
 .pill.crit { background: @CRIT12@; color: @CRIT@; }
-.bullet-crit { min-width: 8px; min-height: 8px; border-radius: 50%; background: @CRIT@; }
-.bullet-warn { min-width: 8px; min-height: 8px; border-radius: 50%; background: @WARN@; }
-.bullet-ok { min-width: 8px; min-height: 8px; border-radius: 50%; background: @OK@; }
-.bullet-info { min-width: 8px; min-height: 8px; border-radius: 50%; background: #6F757E; }
-.tile-key { font: 500 10.5px @SANS@; color: #767C85; letter-spacing: 0.6px; }
-.tile-val { font: 700 15px @SANS@; color: #EDEEF0; }
-.big-val { font: 700 27px @SANS@; color: #EDEEF0; }
-.empty { font: 13px @SANS@; color: #767C85; }
-switch { background-color: #272E38; background-image: none; border: none;
+/* Balken statt Punkt: er laeuft neben der ganzen Zeile mit und traegt die
+   Dringlichkeit, ohne sie wie eine Ampel auszurufen. */
+.bullet-crit, .bullet-warn, .bullet-ok, .bullet-info {
+        min-width: 2px; border-radius: 2px; }
+.bullet-crit { background: @CRIT@; }
+.bullet-warn { background: @WARN@; }
+.bullet-ok { background: @OK@; }
+.bullet-info { background: @FAINTER@; }
+.tile-key { font: 500 10.5px @SANS@; color: @LABEL@; letter-spacing: 0.6px; }
+.tile-val { font: 700 15px @MONO@; color: @STRONG@; }
+.big-val { font: 700 27px @MONO@; color: @STRONG@; }
+.empty { font: 13px @SANS@; color: @FAINT@; }
+.grouphead { font: 600 9.5px @SANS@; color: @LABEL@; letter-spacing: 1px; }
+switch { background-color: @SURFACEDISABLED@; background-image: none; border: none;
          box-shadow: none; border-radius: 12px; }
 switch:checked { background-color: @ACC@; background-image: none; }
 switch > slider { background-color: #E8EBEE; background-image: none; border: none;
@@ -8234,25 +8328,39 @@ switch > slider { background-color: #E8EBEE; background-image: none; border: non
                   border-radius: 50%; margin: 1px; }
 /* Gleicher Rahmen wie btn-ghost. Ohne ihn liest sich ein Dropdown neben den
    Knoepfen derselben Zeile wie ein Statuslabel und wird nicht angefasst. */
-dropdown > button { background-color: #1B2027; background-image: none;
-                    border: 1px solid rgba(255,255,255,.12);
-                    box-shadow: none; color: #D6DAE0; border-radius: 7px; min-height: 0;
+dropdown > button { background-color: @RAISED@; background-image: none;
+                    border: 1px solid @LINESTRONG@;
+                    box-shadow: none; color: @BODY@; border-radius: 7px; min-height: 0;
                     padding: 7px 10px; font: 12px @SANS@; }
-dropdown > button:hover { background-color: #222933; }
+dropdown > button:hover { background-color: @CONTROLHOVER@; }
 /* Der Pfeil kommt bei diesem Theme nicht von selbst. Ohne ihn bleibt auch die
    umrandete Fassung als Textfeld lesbar statt als Auswahl. */
 dropdown > button > box > arrow, dropdown > button arrow {
     -gtk-icon-source: -gtk-icontheme("pan-down-symbolic");
-    color: #8A9099; min-width: 15px; min-height: 15px; margin-left: 6px; }
-popover contents { background-color: #1B2027; color: #D6DAE0; border-radius: 9px; }
+    color: @TEXTARROW@; min-width: 15px; min-height: 15px; margin-left: 6px; }
+popover contents { background-color: @RAISED@; color: @BODY@; border-radius: 9px; }
 scrollbar { background: transparent; }
-scrollbar slider { background: rgba(255,255,255,.16); border-radius: 8px; min-width: 7px; }
-tooltip { background: #1B2027; color: #D6DAE0; }
+scrollbar slider { background: @SCROLL@; border-radius: 8px; min-width: 7px; }
+tooltip { background: @RAISED@; color: @BODY@; }
+/* Ohne diese vier holt sich das Systemtheme die Farbe, und im Hellmodus
+   steht dann ein dunkler Kasten auf heller Karte. */
+entry { background-color: @RAISED@; background-image: none; color: @BODY@;
+        border: 1px solid @LINESTRONG@; border-radius: 7px; box-shadow: none;
+        caret-color: @BODY@; }
+entry > text > placeholder { color: @LABEL@; }
+textview, textview text { font-family: @MONO@; background-color: @SURFACE@;
+        color: @BODY@; }
+expander title { color: @DETAIL@; }
+expander title > arrow { color: @TEXTARROW@; min-width: 14px; min-height: 14px; }
+progressbar { color: @FAINT@; font: 11px @SANS@; }
+progressbar > trough { background-color: @TRACK@; background-image: none;
+        border: none; border-radius: 5px; min-height: 8px; }
+progressbar > trough > progress { background-color: @ACC@; background-image: none;
+        border: none; border-radius: 5px; min-height: 8px; }
 /* Gleich breite Ziffern, sonst zappeln die Live-Werte bei jeder Aktualisierung
    und Spalten stehen nicht untereinander. */
 .kpi-val, .kpi-unit, .tile-val, .big-val, .mono, .mono-dim, .pill, .navbadge,
 .rig-sub, .sub { font-feature-settings: "tnum" 1; }
-textview { font-family: @MONO@; }
 """
 
 
@@ -8278,10 +8386,11 @@ def darken(hexcol, f=0.90):
     return "#%02X%02X%02X" % tuple(int(c * (1 - f)) for c in rgb255(hexcol))
 
 
-# Inter ist die modernste freie Oberflaechenschrift, Ubuntu liegt auf dem
-# Zielsystem immer bereit. Beide OFL beziehungsweise Ubuntu Font Licence.
-SANS = "Inter, Ubuntu, 'Noto Sans', sans-serif"
-MONO = "'JetBrains Mono', 'Ubuntu Mono', monospace"
+# IBM Plex traegt die Oberflaeche, Ubuntu faengt auf, wo das Paket fehlt.
+# Beide OFL beziehungsweise Ubuntu Font Licence. Mono steht ueberall, wo
+# Zahlen untereinander stehen muessen: Messwerte, Zeitstempel, Achsen.
+SANS = "'IBM Plex Sans', Ubuntu, 'Noto Sans', sans-serif"
+MONO = "'IBM Plex Mono', 'Ubuntu Mono', monospace"
 
 
 def fc_family_file(name):
@@ -8303,7 +8412,9 @@ def first_font(*names):
     return "sans-serif"
 
 
-CAIRO_SANS = first_font("Inter", "Ubuntu", "Noto Sans")
+CAIRO_SANS = first_font("IBM Plex Sans", "Inter", "Ubuntu", "Noto Sans")
+CAIRO_MONO = first_font("IBM Plex Mono", "JetBrains Mono", "Ubuntu Mono",
+                        "Noto Sans Mono")
 
 
 def font_path():
@@ -8313,27 +8424,37 @@ def font_path():
     etwas, deshalb wird die gelieferte Familie gegengeprüft: sonst trägt das
     Overlay die Ersatzschrift und sieht nicht aus wie die App.
     """
-    for name in ("Inter", "Ubuntu"):
+    for name in ("IBM Plex Sans", "Inter", "Ubuntu"):
         fam, path = fc_family_file(name)
         if name.lower() in fam.lower() and path and os.path.exists(path):
             return path
     return ""
 
 
+def css_tokens():
+    """Platzhalter zu Wert, passend zum gerade gesetzten Theme."""
+    acc = COLORS["acc"]
+    dark = THEME == "dark"
+    tint = alpha(acc, .13 if dark else .16)
+    out = {"SANS": SANS, "MONO": MONO,
+           "ACC": acc, "ACCHI": lighten(acc), "ACCTXT": darken(acc),
+           # Der Akzent als Schrift: auf hellem Grund traegt das Gelb aus
+           # dem Logo nicht, dort muss es abgedunkelt werden.
+           "ACCTEXT": acc if dark else darken(acc, .30),
+           "ACC13": tint, "TINT": tint,
+           "CRIT12": alpha(COLORS["crit"], .12),
+           "OK": COLORS["ok"], "WARN": COLORS["warn"], "CRIT": COLORS["crit"]}
+    # Jeder Ton des Themes wird zum Platzhalter: aus "line-strong" wird
+    # @LINESTRONG@. So muss keine Farbe zweimal geschrieben werden.
+    for key, value in THEMES[THEME].items():
+        out.setdefault(key.replace("-", "").upper(), value)
+    return out
+
+
 def build_css():
     css = CSS_TEMPLATE
-    for token, value in (("@SANS@", SANS), ("@MONO@", MONO),
-                         ("@ACC13@", alpha(COLORS["acc"], .13)),
-                         ("@ACCHI@", lighten(COLORS["acc"])),
-                         ("@ACCTXT@", darken(COLORS["acc"])),
-                         ("@ACC@", COLORS["acc"]),
-                         ("@OK12@", alpha(COLORS["ok"], .12)),
-                         ("@OK@", COLORS["ok"]),
-                         ("@WARN12@", alpha(COLORS["warn"], .12)),
-                         ("@WARN@", COLORS["warn"]),
-                         ("@CRIT12@", alpha(COLORS["crit"], .12)),
-                         ("@CRIT@", COLORS["crit"])):
-        css = css.replace(token, value)
+    for token, value in css_tokens().items():
+        css = css.replace(f"@{token}@", value)
     return css
 
 
@@ -8350,6 +8471,17 @@ NAV_GROUPS = [
                   N_("Einstellungen")]),
 ]
 NAV = [name for _g, names in NAV_GROUPS for name in names]
+# Genau ein Symbol je Seite, aus icons/ui. Der Selftest prueft, dass die
+# Zuordnung vollstaendig ist und jede Datei wirklich daliegt.
+NAV_ICONS = {
+    "Übersicht": "dq-gauge-symbolic", "Probleme": "dq-alert-symbolic",
+    "Vorfälle": "dq-pulse-symbolic", "Treiber": "dq-chip-symbolic",
+    "Updates": "dq-update-symbolic", "App-Check": "dq-app-symbolic",
+    "Proton": "dq-proton-symbolic", "Autostart": "dq-power-symbolic",
+    "Live-Monitor": "dq-monitor-symbolic", "Speicher": "dq-disk-symbolic",
+    "Prüfstand": "dq-dyno-symbolic", "Benchmark": "dq-bars-symbolic",
+    "Verlauf": "dq-history-symbolic", "Einstellungen": "dq-sliders-symbolic",
+}
 
 
 def lbl(text, css="", xalign=0.0, wrap=False, chars=52):
@@ -8359,6 +8491,11 @@ def lbl(text, css="", xalign=0.0, wrap=False, chars=52):
     if wrap:
         w.set_wrap(True)
         w.set_max_width_chars(chars)
+        # Ohne das fuellt ein umbrechendes Label die ganze Zuteilung und
+        # max_width_chars wirkt nur als Mindestbreite. Auf einem breiten
+        # Fenster wurden aus 64 Zeichen dann 120 und der Absatz unlesbar.
+        if xalign == 0.0:
+            w.set_halign(Gtk.Align.START)
     return w
 
 
@@ -8379,19 +8516,121 @@ def card(child, pad=16):
 
 
 def card_head(title, right=None):
-    h = box(True, margin_top=12, margin_bottom=12, margin_start=18, margin_end=18)
+    """Kartenkopf samt Trennlinie darunter.
+
+    Die Linie gehoert dazu, nicht an die Aufrufer: ohne sie klebt die erste
+    Zeile am Titel und die Karte liest sich als ein Block statt als Kopf mit
+    Inhalt. Sie laeuft ueber die volle Breite, waehrend die Linien zwischen
+    den Zeilen eingerueckt sind, damit man Kopf und Zeile auseinanderhaelt.
+    """
+    w = box()
+    h = box(True, margin_top=13, margin_bottom=13, margin_start=16, margin_end=16)
     h.append(lbl(title, "cardhead"))
     r = right if isinstance(right, Gtk.Widget) else lbl(right or "", "sub", xalign=1.0)
     r.set_hexpand(True)
     r.set_halign(Gtk.Align.END)
     h.append(r)
-    return h
+    w.append(h)
+    line = Gtk.Box()
+    line.add_css_class("rowsep")
+    w.append(line)
+    return w
 
 
 def sep():
-    s = Gtk.Box()
+    s = Gtk.Box(margin_start=16, margin_end=16)
     s.add_css_class("rowsep")
     return s
+
+
+def bar(css="bullet-info"):
+    """Der senkrechte Statusbalken links an einer Zeile.
+
+    Laeuft ueber die ganze Zeilenhoehe mit, deshalb FILL und kein valign je
+    Aufrufer. Die Breite von 2 px steht im CSS, die Farbe kommt ueber
+    bullet-crit, bullet-warn, bullet-ok oder bullet-info dazu.
+    """
+    b = Gtk.Box(valign=Gtk.Align.FILL, margin_top=1, margin_bottom=1)
+    b.add_css_class(css)
+    return b
+
+
+def grouphead(title, right=None):
+    """Versalienzeile mit auslaufender Linie, steht ueber einer Karte.
+
+    Ordnet mehrere Karten, ohne selbst wie eine Karte auszusehen. Rechts
+    steht die Anzahl, wenn es eine gibt.
+    """
+    h = box(True, 8, margin_bottom=9)
+    h.append(lbl(title.upper(), "grouphead"))
+    line = Gtk.Box(hexpand=True, valign=Gtk.Align.CENTER)
+    line.add_css_class("rowsep")
+    h.append(line)
+    if right is not None:
+        h.append(right if isinstance(right, Gtk.Widget)
+                 else lbl(str(right), "grouphead"))
+    return h
+
+
+def group(title, body, right=None):
+    """Gruppentitel und Karte als ein Block."""
+    w = box()
+    w.append(grouphead(title, right))
+    c = box()
+    c.add_css_class("card")
+    c.append(body)
+    w.append(c)
+    return w
+
+
+def listrow(title, detail="", pill=None, action=None, sev="", mono="",
+            chars=76):
+    """Eine Listenzeile im Muster des Entwurfs.
+
+    Balken links, Titel und Marke nebeneinander, Erklaerung darunter, die
+    Handlung rechts auf Hoehe des Titels. Vorher stand die Marke ganz aussen
+    und der Knopf darunter, das riss Titel und Handlung auseinander.
+    """
+    r = box(True, 13, margin_top=12, margin_bottom=12, margin_start=16,
+            margin_end=16)
+    r.append(bar({"crit": "bullet-crit", "warn": "bullet-warn",
+                  "ok": "bullet-ok"}.get(sev, "bullet-info")))
+    t = box(spacing=3, hexpand=True)
+    head = box(True, 8)
+    head.append(lbl(title, "row-title"))
+    if pill is not None:
+        p = pill if isinstance(pill, Gtk.Widget) else lbl(str(pill), "pill")
+        p.set_valign(Gtk.Align.CENTER)
+        head.append(p)
+    t.append(head)
+    if detail:
+        t.append(lbl(detail, "row-detail", wrap=True, chars=chars))
+    if mono:
+        t.append(lbl(mono, "mono-dim", wrap=True, chars=chars))
+    r.append(t)
+    if action is not None:
+        action.set_valign(Gtk.Align.CENTER)
+        r.append(action)
+    return r
+
+
+class HeadedCard(Gtk.Box):
+    """Gruppentitel ueber einer Karte, angehaengt wird in die Karte.
+
+    Der Entwurf setzt die Ueberschrift einer Liste auf den Seitengrund und
+    laesst die Karte darunter nur die Zeilen tragen. Als Widget gebaut, damit
+    die Aufrufer weiter schlicht append() rufen koennen.
+    """
+
+    def __init__(self, title, right=None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        super().append(grouphead(title, right))
+        self._card = box()
+        self._card.add_css_class("card")
+        super().append(self._card)
+
+    def append(self, widget):
+        self._card.append(widget)
 
 
 def sep_row(child):
@@ -8421,20 +8660,41 @@ def srow(title, detail="", control=None, tip="", css="row-detail"):
 
 
 def scard(title, rows):
+    wrap = box(spacing=10)
+    head = box(True, 8, margin_bottom=0)
+    head.append(lbl(title, "grouphead"))
+    line = Gtk.Box(hexpand=True, valign=Gtk.Align.CENTER)
+    line.add_css_class("rowsep")
+    head.append(line)
+    wrap.append(head)
     c = box()
     c.add_css_class("card")
-    c.append(card_head(title))
     for i, r in enumerate(rows):
         if i:
             c.append(sep())
-        r.set_margin_top(6 if i == 0 else 12)
-        r.set_margin_bottom(16 if i == len(rows) - 1 else 12)
+        r.set_margin_top(14 if i == 0 else 12)
+        r.set_margin_bottom(14 if i == len(rows) - 1 else 12)
         c.append(r)
-    return c
+    wrap.append(c)
+    return wrap
 
 
 def rgb(h):
     return tuple(c / 255 for c in rgb255(h))
+
+
+def rgba(spec):
+    """(r, g, b, a) fuer Cairo, aus '#RRGGBB' oder 'rgba(r,g,b,a)'.
+
+    Die Linien- und Trogfarben sind durchscheinend notiert, damit dieselbe
+    Angabe auf Karte und Seitenleiste sitzt. Cairo bekommt sie hier in der
+    Form, die es kennt."""
+    spec = spec.strip()
+    if spec.startswith("#"):
+        return rgb(spec) + (1.0,)
+    nums = spec[spec.index("(") + 1:spec.rindex(")")].split(",")
+    r, g, b = (int(n) / 255 for n in nums[:3])
+    return r, g, b, float(nums[3]) if len(nums) > 3 else 1.0
 
 
 def fmt_bytes(n):
@@ -8490,59 +8750,36 @@ class Ring(Gtk.DrawingArea):
         self.queue_draw()
         return True
 
-    def _neon(self, cr, cx, cy, r, start, end, hexcol, fade=1.0):
-        """Bogen mit Leuchten: weiche breite Lagen aussen, harter Kern innen.
+    # Offener Bogen statt Vollkreis: er beginnt links unten bei 135 Grad und
+    # laeuft ueber 270 Grad. Die Luecke unten gibt der Zahl einen Boden.
+    START = 2.3562
+    SWEEP = 4.7124
 
-        Cairo kann nicht weichzeichnen, deshalb von Hand gestapelt. Die
-        Radien sind so gewaehlt, dass das Leuchten innerhalb der Flaeche
-        bleibt, sonst schneidet die DrawingArea es ab.
-        """
-        base = rgb(hexcol)
+    def _arc(self, cr, cx, cy, r, anteil, spec, width=12):
         cr.set_line_cap(1)
-        for width, a in ((28, .06), (21, .10), (15, .16)):
-            cr.set_line_width(width)
-            cr.set_source_rgba(*base, a * fade)
-            cr.arc(cx, cy, r, start, end)
-            cr.stroke()
-        cr.set_line_width(12)
-        cr.set_source_rgba(*base, fade)
-        cr.arc(cx, cy, r, start, end)
-        cr.stroke()
-        # Aufgehellter Kern, erst der macht aus dem Bogen eine Leuchtroehre.
-        cr.set_line_width(3.5)
-        cr.set_source_rgba(*rgb(lighten(hexcol, .6)), .85 * fade)
-        cr.arc(cx, cy, r, start, end)
+        cr.set_line_width(width)
+        cr.set_source_rgba(*rgba(spec))
+        cr.arc(cx, cy, r, self.START, self.START + self.SWEEP * anteil)
         cr.stroke()
 
     def _draw(self, _a, cr, w, h):
         cx, cy = w / 2, h / 2
-        # Farbe aus der gewaehlten Palette, damit der Ring die Ampel bleibt.
-        col = COLORS["ok"] if self.value >= 85 else COLORS["warn"] if self.value >= 60 \
-            else COLORS["crit"]
-        cr.set_source_rgba(1, 1, 1, .06)
-        cr.set_line_width(1)
-        cr.set_dash([1, 5])
-        cr.arc(cx, cy, w / 2 - 11, 0, 6.2832)
-        cr.stroke()
-        cr.set_dash([])
-        cr.set_line_width(12)
-        cr.set_source_rgb(*rgb("#232830"))
-        cr.arc(cx, cy, w / 2 - 22, 0, 6.2832)
-        cr.stroke()
         r = w / 2 - 22
+        self._arc(cr, cx, cy, r, 1.0, COLORS["track"])
         if self.busy:
             # Gefüllter Teil ist der echte Fortschritt, der laufende Bogen zeigt,
             # dass gerade wirklich etwas passiert.
             if self.steps:
-                self._neon(cr, cx, cy, r, -1.5708,
-                           -1.5708 + 6.2832 * self.step / self.steps,
-                           COLORS["acc"], .35)
-            self._neon(cr, cx, cy, r, self.angle, self.angle + 1.1, COLORS["acc"])
+                self._arc(cr, cx, cy, r, self.step / self.steps, COLORS["acc"])
+            cr.set_line_cap(1)
+            cr.set_line_width(12)
+            cr.set_source_rgba(*rgb(COLORS["acc"]), .45)
+            cr.arc(cx, cy, r, self.angle, self.angle + 1.1)
+            cr.stroke()
         elif self.value > 0:
-            self._neon(cr, cx, cy, r, -1.5708,
-                       -1.5708 + 6.2832 * self.value / 100, col)
+            self._arc(cr, cx, cy, r, self.value / 100, COLORS["acc"])
         cr.select_font_face(CAIRO_SANS, 0, 1)
-        cr.set_source_rgb(*rgb("#F2F3F5"))
+        cr.set_source_rgb(*rgb(COLORS["text"]))
         cr.set_font_size(54)
         t = f"{self.step}/{self.steps}" if self.busy and self.steps else str(int(self.value))
         if self.busy and self.steps:
@@ -8551,7 +8788,7 @@ class Ring(Gtk.DrawingArea):
         cr.move_to(cx - e.width / 2 - e.x_bearing, cy + 8)
         cr.show_text(t)
         cr.select_font_face(CAIRO_SANS, 0, 0)
-        cr.set_source_rgb(*rgb("#767C85"))
+        cr.set_source_rgb(*rgb(COLORS["faint"]))
         cr.set_font_size(11)
         t = "P R Ü F U N G E N" if self.busy and self.steps else "V O N  1 0 0"
         e = cr.text_extents(t)
@@ -8630,17 +8867,17 @@ class Chart(Gtk.DrawingArea):
         # Ohne Messwerte bleibt die Achse unbeschriftet: eine erfundene Skala
         # neben einem leeren Diagramm liest sich wie ein Messergebnis.
         scale = any(v > 0 for d in self.data.values() for v in d)
-        cr.select_font_face(CAIRO_SANS, 0, 0)
+        cr.select_font_face(CAIRO_MONO, 0, 0)
         cr.set_font_size(9)
         for i in range(5):
             y = 6 + (h - 20) * i / 4
-            cr.set_source_rgba(1, 1, 1, .05)
+            cr.set_source_rgba(*rgba(COLORS["line-faint"]))
             cr.set_line_width(1)
             cr.move_to(34, y)
             cr.line_to(w, y)
             cr.stroke()
             if scale:
-                cr.set_source_rgb(*rgb("#6F757E"))
+                cr.set_source_rgb(*rgb(COLORS["label"]))
                 cr.move_to(2, y + 3)
                 cr.show_text(f"{lo + span * (4 - i) / 4:.0f}")
         for key, color_key in self.series:
@@ -8673,10 +8910,11 @@ class Bar(Gtk.DrawingArea):
         self.queue_draw()
 
     def _draw(self, _a, cr, w, h):
-        col = COLORS["ok"] if self.fraction < .75 else COLORS["warn"] \
-            if self.fraction < .9 else COLORS["crit"]
+        # Ein Fuellstand ist eine Messung, keine Bewertung: er traegt den
+        # Akzent, bis er wirklich eng wird. Grau hiesse hier "abgeschaltet".
+        col = COLORS["acc"] if self.fraction < .9 else COLORS["crit"]
         f = min(max(self.fraction, 0), 1)
-        cr.set_source_rgb(*rgb("#232830"))
+        cr.set_source_rgba(*rgba(COLORS["track"]))
         cr.rectangle(0, 0, w, h)
         cr.fill()
         cr.set_source_rgb(*rgb(col))
@@ -8705,7 +8943,7 @@ class Span(Gtk.DrawingArea):
 
     def _draw(self, _a, cr, w, h):
         r = h / 2
-        cr.set_source_rgb(*rgb("#232830"))
+        cr.set_source_rgba(*rgba(COLORS["track"]))
         cr.rectangle(0, r - 1.5, w, 3)
         cr.fill()
         col = rgb(COLORS[self.color_key])
@@ -8981,6 +9219,12 @@ class App(Gtk.Application):
             return
         ensure_icons()
         ensure_desktop()
+        # Eigene Symbole. Der Ordner traegt die hicolor-Struktur, weil GTK ein
+        # SVG nur darin als symbolisch erkennt und in der Textfarbe zeichnet.
+        # Flach im Suchpfad abgelegt kaeme es in seiner eigenen Farbe an.
+        Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(
+            os.path.join(APP_DIR, "icons", "ui"))
+        self.prefer_dark()
         self.provider = Gtk.CssProvider()
         # 900 > PRIORITY_USER (800): eigene Themes im Home dürfen das Design nicht kippen.
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(),
@@ -9046,7 +9290,7 @@ class App(Gtk.Application):
         threading.Thread(target=guarded, daemon=True).start()
 
     def _wordmark(self, width):
-        """Wortmarke in der Fassung für dunkle Flächen, None wenn sie fehlt.
+        """Wortmarke passend zum Theme, None wenn sie fehlt.
 
         Selbst gezeichnet, weil beide fertigen Widgets die Groesse verfehlen:
         Gtk.Picture nimmt immer die volle Breite des Elternelements, egal was
@@ -9056,22 +9300,34 @@ class App(Gtk.Application):
         set_content_width/height dagegen ist genau die natuerliche Groesse.
 
         Die Vorlage wird doppelt so gross geladen wie die Anzeige, damit sie
-        auf Bildschirmen mit doppelter Aufloesung scharf bleibt.
+        auf Bildschirmen mit doppelter Aufloesung scharf bleibt. Die Fassung
+        heisst nach dem Grund, auf dem sie liegt: "dark" traegt helle
+        Schrift. Gelesen wird sie erst beim Zeichnen, deshalb genuegt nach
+        einem Themewechsel ein queue_draw.
         """
-        path = os.path.join(APP_DIR, "icons", "wordmark", "png",
-                            "dynotiq-wordmark-dark-w1200.png")
-        if not os.path.exists(path):
-            return None
-        try:
-            pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width * 2, -1, True)
-        except GLib.Error:
+        cache = {}
+
+        def pixbuf():
+            name = f"dynotiq-wordmark-{THEME}-w1200.png"
+            if name not in cache:
+                path = os.path.join(APP_DIR, "icons", "wordmark", "png", name)
+                try:
+                    cache[name] = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        path, width * 2, -1, True)
+                except GLib.Error:
+                    cache[name] = None
+            return cache[name]
+
+        first = pixbuf()
+        if first is None:
             return None
         area = Gtk.DrawingArea()
         area.set_content_width(width)
-        area.set_content_height(round(width * pix.get_height() / pix.get_width()))
+        area.set_content_height(round(width * first.get_height() / first.get_width()))
         area.set_halign(Gtk.Align.CENTER)
 
         def draw(_area, cr, w, h):
+            pix = pixbuf() or first
             cr.scale(w / pix.get_width(), h / pix.get_height())
             Gdk.cairo_set_source_pixbuf(cr, pix, 0, 0)
             cr.paint()
@@ -9159,13 +9415,17 @@ class App(Gtk.Application):
             row.append(txt)
             head.append(row)
         s.append(head)
+        s.append(self._jump())
         self.nav_buttons = {}
         for group, names in NAV_GROUPS:
             s.append(lbl(group, "navgroup"))
             for name in names:
                 b = Gtk.Button()
                 b.add_css_class("nav")
-                row = box(True, 8)
+                row = box(True, 10)
+                icon = Gtk.Image.new_from_icon_name(NAV_ICONS[name])
+                icon.set_pixel_size(16)
+                row.append(icon)
                 row.append(Gtk.Label(label=_(name), xalign=0.0, hexpand=True))
                 if name == "Probleme":
                     self.problem_badge = lbl("0", "navbadge")
@@ -9185,18 +9445,22 @@ class App(Gtk.Application):
                 s.append(b)
 
         s.append(Gtk.Box(vexpand=True))
-        rig = box(spacing=5, margin_top=12)
+        rig = box(spacing=3, margin_top=12)
         rig.add_css_class("rig")
-        rig.append(lbl("RIG", "rig-key"))
+        rig.append(lbl(_("RECHNER"), "rig-key"))
         total, _avail = meminfo()
         # gpu() startet nvidia-smi. Genau bei einer hängenden Karte, also im
         # Diagnosefall, gäbe es sonst minutenlang gar kein Fenster.
-        self.rig_val = lbl(_("{cpu}\nGrafik wird gelesen … · {gb:.0f} GB RAM"
-                             ).format(cpu=cpu_model(), gb=total),
+        self.rig_val = lbl(_("{cpu}\nGrafik wird gelesen …").format(cpu=cpu_model()),
                            "rig-val", wrap=True, chars=26)
         rig.append(self.rig_val)
-        rig.append(lbl(f"Kernel {os.uname().release} · {os.environ.get('XDG_SESSION_TYPE', '?')}",
-                       "rig-sub"))
+        sub = lbl(f"{total:.0f} GB · {os.uname().release} · "
+                  f"{os.environ.get('XDG_SESSION_TYPE', '?')}", "rig-sub",
+                  wrap=True, chars=26)
+        sub.set_margin_top(3)
+        rig.append(sub)
+        rig.set_visible(self.cfg["rig"])
+        self.rig = rig
         s.append(rig)
         self.work(self._rig_worker, None, total)
         # Fest 208 px breit: das hexpand der Nav-Labels schlägt sonst nach oben
@@ -9213,6 +9477,28 @@ class App(Gtk.Application):
         s.set_size_request(SIDEBAR_WIDTH, -1)
         return s
 
+    def _jump(self):
+        """Sprungfeld über der Navigation: tippen, Enter, Seite ist da."""
+        e = Gtk.SearchEntry(placeholder_text=_("Springe zu …"))
+        e.add_css_class("jump")
+        # Ohne das gibt GtkSearchEntry eine Mindestbreite von rund 190 px vor
+        # und schiebt die Seitenleiste ueber ihre 208 px hinaus.
+        e.set_width_chars(1)
+        e.set_max_width_chars(1)
+        e.connect("activate", self._jump_go)
+        return e
+
+    def _jump_go(self, entry):
+        q = entry.get_text().strip().lower()
+        if not q:
+            return
+        # Deutsch und uebersetzt, genau wie --page: wer die App auf Englisch
+        # benutzt, tippt "storage" und nicht "Speicher".
+        hit = next((n for n in NAV if q in n.lower() or q in _(n).lower()), None)
+        if hit:
+            entry.set_text("")
+            self._nav_clicked(self.nav_buttons[hit], hit)
+
     def _maybe_intro(self):
         """Beim ersten Start das Willkommen, nach einem Update die Neuerungen.
         Danach nie wieder, gemerkt wird die zuletzt gesehene Version."""
@@ -9224,74 +9510,84 @@ class App(Gtk.Application):
         return False
 
     def _show_intro(self, first=True):
-        win = Gtk.Window(transient_for=self.win, modal=True, default_width=560,
+        """Willkommen beim ersten Start, sonst die Neuerungen.
+
+        Aufgebaut wie eine Seite der App: Kopfzeile links, der Inhalt in
+        einer Karte, die Handlung unten rechts. Zentriert gesetzt sah es aus
+        wie eine Ankuendigung, nicht wie ein Teil des Programms.
+        """
+        win = Gtk.Window(transient_for=self.win, modal=True, default_width=620,
                          title="dynotiq")
         win.add_css_class("page")
-        inner = box(spacing=0, margin_top=30, margin_bottom=24,
-                    margin_start=32, margin_end=32)
-        mark = self._wordmark(210)
+        inner = box(spacing=0, margin_top=26, margin_bottom=22,
+                    margin_start=28, margin_end=28)
+        note = RELEASE_NOTES.get(VERSION, ("", []))
+
+        mark = self._wordmark(132)
         if mark:
-            mark.set_halign(Gtk.Align.CENTER)
-            mark.set_margin_bottom(10)
+            mark.set_halign(Gtk.Align.START)
             inner.append(mark)
         else:
-            logo = self._logo(56)
-            logo.set_halign(Gtk.Align.CENTER)
+            logo = self._logo(40)
+            logo.set_halign(Gtk.Align.START)
             inner.append(logo)
 
-        title = lbl(_("Willkommen") if first
-                    else _("Neu in Version {v}").format(v=VERSION),
-                    "h1", xalign=0.5)
-        title.set_margin_top(10)
+        eyebrow = lbl(_("WILLKOMMEN") if first
+                      else _("NEU IN {v}").format(v=VERSION).upper(), "eyebrow")
+        eyebrow.set_margin_top(20)
+        inner.append(eyebrow)
+        title = lbl(_("Systemdiagnose für Ubuntu") if first else note[0],
+                    "headline", wrap=True, chars=34)
+        title.set_margin_top(6)
         inner.append(title)
-        note = RELEASE_NOTES.get(VERSION, ("", []))
-        sub = lbl(_("Systemdiagnose für Ubuntu. Ein kurzer Überblick, dann kann es "
-                  "losgehen.") if first else note[0], "lede", xalign=0.5, wrap=True,
-                  chars=60)
-        sub.set_margin_top(6)
-        sub.set_margin_bottom(22)
-        inner.append(sub)
-
         if first:
-            for name, text in INTRO:
-                r = box(True, 14, margin_bottom=14)
-                dot = Gtk.Box(valign=Gtk.Align.START)
-                dot.add_css_class("bullet-ok")
-                dot.set_margin_top(6)
-                r.append(dot)
-                t = box(spacing=3, hexpand=True)
-                t.append(lbl(name, "row-title"))
-                t.append(lbl(text, "row-detail", wrap=True, chars=64))
-                r.append(t)
-                inner.append(r)
-            hint = lbl(_("Nichts davon greift von allein ein. Jeder Eingriff fragt "
-                       "vorher nach und zeigt, was er ausführt."), "mono-dim",
-                       xalign=0.5, wrap=True, chars=70)
-            hint.set_margin_top(8)
-            inner.append(hint)
-        else:
-            for line in note[1]:
-                r = box(True, 14, margin_bottom=11)
-                dot = Gtk.Box(valign=Gtk.Align.CENTER)
-                dot.add_css_class("bullet-ok")
-                r.append(dot)
-                r.append(lbl(line, "row-detail", wrap=True, chars=64))
-                inner.append(r)
+            lede = lbl(_("Ein kurzer Überblick, dann kann es losgehen."),
+                       "lede", wrap=True, chars=60)
+            lede.set_margin_top(7)
+            inner.append(lede)
 
+        card_box = box()
+        card_box.add_css_class("card")
+        card_box.set_margin_top(22)
+        rows = INTRO if first else [(None, line) for line in note[1]]
+        for i, (name, text) in enumerate(rows):
+            if i:
+                card_box.append(sep())
+            r = box(True, 13, margin_top=13, margin_bottom=13,
+                    margin_start=16, margin_end=16)
+            r.append(bar("bullet-warn" if first else "bullet-ok"))
+            t = box(spacing=3, hexpand=True)
+            if name:
+                t.append(lbl(name, "row-title"))
+            t.append(lbl(text, "row-detail", wrap=True, chars=62))
+            r.append(t)
+            card_box.append(r)
+        # Ein langes Release soll das Fenster nicht ueber den Schirm treiben.
+        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                    propagate_natural_height=True,
+                                    max_content_height=420)
+        scroll.set_child(card_box)
+        inner.append(scroll)
+
+        foot = box(True, 14, margin_top=20)
+        if first:
+            foot.append(lbl(_("Nichts davon greift von allein ein. Jeder Eingriff "
+                              "fragt vorher nach."), "row-detail", wrap=True,
+                            chars=48))
         go = Gtk.Button(label=_("Los geht's") if first else _("Weiter"),
-                        halign=Gtk.Align.CENTER)
+                        halign=Gtk.Align.END, hexpand=True)
         go.add_css_class("btn-accent")
-        go.set_margin_top(26)
         go.connect("clicked", lambda *_: win.close())
-        inner.append(go)
+        foot.append(go)
+        inner.append(foot)
         win.set_child(inner)
         win.present()
 
-    def _rig_worker(self, total):
+    def _rig_worker(self, _total):
         g = gpu()
         GLib.idle_add(self.rig_val.set_text,
-                      _("{cpu}\n{gpu} · {gb:.0f} GB RAM").format(
-                          cpu=cpu_model(), gb=total,
+                      "{cpu}\n{gpu}".format(
+                          cpu=cpu_model(),
                           gpu=g["name"] if g else _("Keine dGPU")))
 
     def _nav_clicked(self, btn, name):
@@ -9509,9 +9805,7 @@ class App(Gtk.Application):
                              (_("Zur Kenntnis"), info)):
             if not group:
                 continue
-            c = box()
-            c.add_css_class("card")
-            c.append(card_head(title, f"{len(group)}"))
+            c = HeadedCard(title, len(group))
             for f in group:
                 c.append(self._finding_row(f))
             self.prob_box.append(c)
@@ -9524,11 +9818,8 @@ class App(Gtk.Application):
         # steht der Punkt neben dem Aufklapper statt neben dem Titel.
         tall = bool(f.lines or f.actions)
         top = Gtk.Align.START if tall else Gtk.Align.CENTER
-        dot = Gtk.Box(valign=top)
-        if tall:
-            dot.set_margin_top(7)
-        dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn"}
-                          .get(f.sev, "bullet-info"))
+        dot = bar({"crit": "bullet-crit", "warn": "bullet-warn"}
+                  .get(f.sev, "bullet-info"))
         r.append(dot)
         txt = box(spacing=2, hexpand=True)
         txt.append(lbl(f.title, "row-title"))
@@ -9866,10 +10157,8 @@ class App(Gtk.Application):
                              cat=_(CAT_LABEL.get(choice, choice))), "empty"))
             self.inc_box.append(card(e, 40))
             return False
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Erkannte Vorfälle"),
-                           _("{n} angezeigt").format(n=len(shown))))
+        c = HeadedCard(_("Erkannte Vorfälle"),
+                       lbl(_("{n} angezeigt").format(n=len(shown)), "grouphead"))
         for i in shown[:80]:
             c.append(self._incident_row(i))
         self.inc_box.append(c)
@@ -9879,8 +10168,7 @@ class App(Gtk.Application):
         w = box()
         w.append(sep())
         r = box(True, 12, margin_top=12, margin_bottom=12, margin_start=18, margin_end=18)
-        dot = Gtk.Box(valign=Gtk.Align.CENTER)
-        dot.add_css_class("bullet-crit" if inc["sev"] == "crit" else "bullet-warn")
+        dot = bar("bullet-crit" if inc["sev"] == "crit" else "bullet-warn")
         r.append(dot)
         t = box(spacing=2, hexpand=True)
         t.append(lbl(_(inc["title"]), "row-title"))
@@ -10000,13 +10288,10 @@ class App(Gtk.Application):
             c.append(info)
             self.drv_box.append(c)
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Geräte"), f"{len(devs)}"))
+        c = HeadedCard(_("Geräte"), len(devs))
         for d in devs:
             r = box(True, 12, margin_top=11, margin_bottom=11, margin_start=18, margin_end=18)
-            dot = Gtk.Box(valign=Gtk.Align.CENTER)
-            dot.add_css_class("bullet-ok" if d["driver"] else "bullet-crit")
+            dot = bar("bullet-ok" if d["driver"] else "bullet-crit")
             r.append(dot)
             txt = box(spacing=2, hexpand=True)
             txt.append(lbl(d["name"], "row-title", wrap=True, chars=64))
@@ -10260,8 +10545,7 @@ class App(Gtk.Application):
         for art, name, origin, state, ok in sorted(rows,
                                                    key=lambda r: (r[4], r[0], r[1])):
             row = box(True, 11, margin_top=8, margin_bottom=8)
-            dot = Gtk.Box(valign=Gtk.Align.CENTER)
-            dot.add_css_class("bullet-ok" if ok else "bullet-crit")
+            dot = bar("bullet-ok" if ok else "bullet-crit")
             row.append(dot)
             txt = box(spacing=2, hexpand=True)
             txt.append(lbl(name, "row-title", wrap=True, chars=44))
@@ -10737,9 +11021,8 @@ class App(Gtk.Application):
         for sev, title, detail, act in advice:
             row = box(True, 14, margin_top=13, margin_bottom=13,
                       margin_start=18, margin_end=18)
-            dot = Gtk.Box(valign=Gtk.Align.START, margin_top=6)
-            dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn",
-                               "ok": "bullet-ok"}.get(sev, "bullet-info"))
+            dot = bar({"crit": "bullet-crit", "warn": "bullet-warn",
+                       "ok": "bullet-ok"}.get(sev, "bullet-info"))
             row.append(dot)
             txt = box(spacing=3, hexpand=True)
             txt.append(lbl(title, "row-title"))
@@ -10774,9 +11057,7 @@ class App(Gtk.Application):
         runs = history_read(6, kind="run")
         if not runs:
             return
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Frühere Läufe"), str(len(runs))))
+        c = HeadedCard(_("Frühere Läufe"), len(runs))
         for r in reversed(runs):
             s = r.get("summary", {})
             row = box(True, 12, margin_top=9, margin_bottom=9,
@@ -11186,9 +11467,8 @@ class App(Gtk.Application):
         for sev, title, detail, fix in results:
             r = box(True, 14, margin_top=13, margin_bottom=13,
                     margin_start=18, margin_end=18)
-            dot = Gtk.Box(valign=Gtk.Align.CENTER)
-            dot.add_css_class({"crit": "bullet-crit", "warn": "bullet-warn",
-                               "info": "bullet-info"}.get(sev, "bullet-ok"))
+            dot = bar({"crit": "bullet-crit", "warn": "bullet-warn",
+                       "info": "bullet-info"}.get(sev, "bullet-ok"))
             r.append(dot)
             t = box(spacing=2, hexpand=True)
             t.append(lbl(title, "row-title"))
@@ -11277,36 +11557,35 @@ class App(Gtk.Application):
         # Zuerst das Ergebnis, dann die Bestandsliste, dann die Erklärung.
         # Wer die Seite öffnet, will wissen ob etwas klemmt, nicht was Proton ist.
         c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Was zu klären ist"), self._pro_bulk(results, bad)))
+        inhalt = box()
         if not results:
-            c.append(self._pro_note(_("Kein Steam gefunden. Diese Seite prüft "
-                                      "Proton, und das gehört zu Steam.")))
+            inhalt.append(self._pro_note(_("Kein Steam gefunden. Diese Seite prüft "
+                                           "Proton, und das gehört zu Steam.")))
         elif not bad:
-            c.append(self._pro_note(
+            inhalt.append(self._pro_note(
                 _("Jede Fassung hat die Laufzeitumgebung, die sie verlangt, "
                   "und kein Titel zeigt auf eine Fassung, die es nicht gibt.")))
         for r in results:
-            row = box(True, 14, margin_top=12, margin_bottom=12,
-                      margin_start=18, margin_end=18)
-            dot = Gtk.Box(valign=Gtk.Align.CENTER)
-            dot.add_css_class({"crit": "bullet-crit",
-                               "warn": "bullet-warn"}.get(r["sev"], "bullet-ok"))
+            row = box(True, 13, margin_top=12, margin_bottom=12,
+                      margin_start=16, margin_end=16)
+            dot = bar({"crit": "bullet-crit",
+                       "warn": "bullet-warn"}.get(r["sev"], "bullet-ok"))
             row.append(dot)
             txt = box(spacing=3, hexpand=True)
-            txt.append(lbl(r["title"], "row-title", wrap=True, chars=56))
-            # Problem und Preis der Aktion in einer Zeile: was der Knopf kostet,
-            # gehoert neben das Problem, nicht in den aufgeklappten Text.
-            zeile = box(True, 8)
-            zeile.append(lbl(r["short"], "row-detail", wrap=True, chars=66))
+            # Was der Knopf kostet, gehoert neben den Titel, nicht in den
+            # aufgeklappten Text.
+            kopf = box(True, 8)
+            kopf.append(lbl(r["title"], "row-title", wrap=True, chars=56))
             if r["fix"]:
                 verlust = r.get("risk") == "loss"
                 pill = lbl(_("Spielstände betroffen") if verlust
                            else _("sicher"), "pill", xalign=0.5)
-                pill.add_css_class("warn" if verlust else "ok")
-                pill.set_valign(Gtk.Align.START)
-                zeile.append(pill)
-            txt.append(zeile)
+                if verlust:
+                    pill.add_css_class("accent")
+                pill.set_valign(Gtk.Align.CENTER)
+                kopf.append(pill)
+            txt.append(kopf)
+            txt.append(lbl(r["short"], "row-detail", wrap=True, chars=76))
             exp = Gtk.Expander(margin_top=4)
             exp.set_label_widget(lbl(_("Warum, und was es bewirkt"), "row-detail"))
             innen = box(spacing=10)
@@ -11339,7 +11618,8 @@ class App(Gtk.Application):
                 b.connect("clicked", self._appcheck_fix, r["title"], label, argv,
                           self._proton_reload, None, _(note) if note else "")
                 row.append(b)
-            c.append(sep_row(row))
+            inhalt.append(sep_row(row) if inhalt.get_first_child() else row)
+        c = group(_("Was zu klären ist"), inhalt, self._pro_bulk(results, bad))
         self.pro_box.append(c)
 
         # Seit in der ersten Karte Knoepfe stehen, zieht GTK die Ansicht beim
@@ -11358,31 +11638,16 @@ class App(Gtk.Application):
                  _("Lädt und aktualisiert Steam selbst."))):
             if not rows:
                 continue
-            v = box()
-            v.add_css_class("card")
-            v.append(card_head(title, lbl(str(len(rows)), "sub")))
-            v.append(self._pro_note(note, small=True))
+            inhalt = box()
+            inhalt.append(self._pro_note(note, small=True))
             for r in rows:
-                line = box(True, 12, margin_top=9, margin_bottom=9,
-                           margin_start=18, margin_end=18)
-                dot = Gtk.Box(valign=Gtk.Align.CENTER)
-                dot.add_css_class("bullet-ok" if r["ok"] else "bullet-crit")
-                line.append(dot)
-                txt = box(spacing=2, hexpand=True)
-                txt.append(lbl(r["name"], "row-title"))
-                if r["facts"]:
-                    txt.append(lbl(r["facts"], "row-detail", wrap=True, chars=68))
-                txt.append(lbl(r["path"], "mono-dim", wrap=True, chars=76))
-                line.append(txt)
-                pill = lbl(r["runtime"], "pill")
-                pill.set_valign(Gtk.Align.CENTER)
-                line.append(pill)
-                v.append(sep_row(line))
-            self.pro_box.append(v)
+                line = listrow(r["name"], r["facts"], pill=r["runtime"],
+                               sev="ok" if r["ok"] else "crit",
+                               mono=r["path"])
+                inhalt.append(sep_row(line))
+            self.pro_box.append(group(title, inhalt, len(rows)))
 
         m = box()
-        m.add_css_class("card")
-        m.append(card_head(_("Fassungen holen und entfernen")))
         m.append(self._pro_note(
             _("Eigene Fassungen wie GE-Proton verwaltet ein eigenes Werkzeug. "
               "dynotiq baut dafür nichts Zweites: es sagt, was fehlt oder "
@@ -11402,13 +11667,10 @@ class App(Gtk.Application):
                       b.get_label(), argv, self._proton_reload)
             row.append(b)
         m.append(row)
-        self.pro_box.append(m)
+        self.pro_box.append(group(_("Fassungen holen und entfernen"), m))
 
         if games:
             g = box()
-            g.add_css_class("card")
-            g.append(card_head(_("Welcher Titel benutzt was"),
-                               lbl(_("{n} Titel").format(n=len(games)), "sub")))
             exp = Gtk.Expander(margin_start=18, margin_end=18, margin_bottom=14,
                                margin_top=8)
             exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
@@ -11416,8 +11678,7 @@ class App(Gtk.Application):
             inner = box(spacing=0)
             for name, tool, built, ok in games:
                 r = box(True, 11, margin_top=8, margin_bottom=8)
-                dot = Gtk.Box(valign=Gtk.Align.CENTER)
-                dot.add_css_class("bullet-ok" if ok else "bullet-crit")
+                dot = bar("bullet-ok" if ok else "bullet-crit")
                 r.append(dot)
                 txt = box(spacing=2, hexpand=True)
                 txt.append(lbl(name, "row-title", wrap=True, chars=46))
@@ -11429,11 +11690,10 @@ class App(Gtk.Application):
                 inner.append(sep_row(r))
             exp.set_child(inner)
             g.append(exp)
-            self.pro_box.append(g)
+            self.pro_box.append(group(_("Welcher Titel benutzt was"), g,
+                                      len(games)))
 
         e = box()
-        e.add_css_class("card")
-        e.append(card_head(_("Wozu das alles gut ist")))
         e.append(self._pro_note(
             _("Windows-Spiele laufen unter Linux nicht direkt. Proton "
               "übersetzt sie. Weil jede Fassung andere Bibliotheken braucht, "
@@ -11442,7 +11702,7 @@ class App(Gtk.Application):
               "unvollständig entpackt, startet das Spiel nicht, und Steam sagt "
               "dazu nichts weiter als dass es gleich wieder beendet wurde. "
               "Diese Seite sieht in den Dateien nach, woran es liegt.")))
-        self.pro_box.append(e)
+        self.pro_box.append(group(_("Wozu das alles gut ist"), e))
         return False
 
     def _pro_bulk(self, results, bad):
@@ -11504,20 +11764,16 @@ class App(Gtk.Application):
             group = [e for e in entries if e["scope"] == scope]
             if not group:
                 continue
-            c = box()
-            c.add_css_class("card")
-            c.append(card_head(title, _("{on} von {total} aktiv").format(
-                on=sum(1 for e in group if e["enabled"]), total=len(group))))
+            c = HeadedCard(title, lbl(_("{on} von {total} aktiv").format(
+                on=sum(1 for e in group if e["enabled"]),
+                total=len(group)), "grouphead"))
             for e in group:
                 c.append(self._autostart_row(e))
             self.auto_box.append(c)
 
         units = parse_blame(blame)
         if units:
-            c = box()
-            c.add_css_class("card")
-            c.append(card_head(_("Langsamste Dienste beim Boot"),
-                               _("{n} Unit(s)").format(n=len(units))))
+            c = HeadedCard(_("Langsamste Dienste beim Boot"), len(units))
             for secs, unit in units[:8]:
                 r = box(True, 12, margin_top=9, margin_bottom=9, margin_start=18, margin_end=18)
                 r.append(lbl(unit, "mono"))
@@ -11727,9 +11983,7 @@ class App(Gtk.Application):
                 n=len(ms), free=fmt_bytes(total_free),
                 clean=fmt_bytes(sum(e[2] for e in eaters))))
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Dateisysteme"), f"{len(ms)}"))
+        c = HeadedCard(_("Dateisysteme"), len(ms))
         for m in ms:
             frac = m["used"] / m["total"]
             r = box(spacing=6, margin_top=12, margin_bottom=12, margin_start=18, margin_end=18)
@@ -11751,9 +12005,8 @@ class App(Gtk.Application):
             c.append(sep_row(r))
         self.sto_box.append(c)
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Aufräumbar"), fmt_bytes(sum(e[2] for e in eaters))))
+        c = HeadedCard(_("Aufräumbar"),
+                       lbl(fmt_bytes(sum(e[2] for e in eaters)), "grouphead"))
         if not eaters:
             e = box(halign=Gtk.Align.CENTER)
             e.append(lbl(_("Nichts Nennenswertes gefunden."), "empty"))
@@ -11811,9 +12064,7 @@ class App(Gtk.Application):
             grid.append(card(t, 14))
         p.append(grid)
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Frühere Läufe")))
+        c = HeadedCard(_("Frühere Läufe"))
         self.bench_hist = box()
         c.append(self.bench_hist)
         p.append(c)
@@ -11921,9 +12172,7 @@ class App(Gtk.Application):
         c.append(self.hist_chart)
         p.append(c)
 
-        lc = box()
-        lc.add_css_class("card")
-        lc.append(card_head(_("Aufzeichnungen")))
+        lc = HeadedCard(_("Aufzeichnungen"))
         self.hist_box = box()
         lc.append(self.hist_box)
         p.append(lc)
@@ -12054,16 +12303,21 @@ class App(Gtk.Application):
             b.connect("clicked", self._set_accent, col)
             self.swatch_buttons[col] = b
             sw.append(b)
-        dd = Gtk.DropDown.new_from_strings(list(PALETTES))
-        dd.set_selected(list(PALETTES).index(self.cfg["palette"]))
-        dd.connect("notify::selected", self._set_palette)
+        theme_names = [_("Dunkel"), _("Hell")]
+        th = Gtk.DropDown.new_from_strings(theme_names)
+        th.set_selected(list(THEMES).index(self.cfg["theme"]))
+        th.connect("notify::selected", self._set_theme)
+        rsw = Gtk.Switch(active=self.cfg["rig"])
+        rsw.connect("state-set", self._set_rig)
         opts = [1, 2, 5, 10]
         iv = Gtk.DropDown.new_from_strings([f"{s} s" for s in opts])
         iv.set_selected(opts.index(self.cfg["interval"]))
         iv.connect("notify::selected", self._set_interval, opts)
         p.append(scard(_("Darstellung"), [
+            srow(_("Erscheinungsbild"), _("Gilt sofort, ohne Neustart"), th),
             srow(_("Akzentfarbe"), _("Färbt Knöpfe, Diagramme und das Statusicon"), sw),
-            srow(_("Statusfarben"), _("Farbschema für ok, Hinweis und kritisch"), dd),
+            srow(_("Rechnerblock in der Seitenleiste"),
+                 _("Prozessor, Grafik und Arbeitsspeicher immer im Blick"), rsw),
             srow(_("Aktualisierungsintervall"), _("Wie oft Live-Werte neu gelesen werden"),
                  iv),
         ]))
@@ -12147,9 +12401,7 @@ class App(Gtk.Application):
                 self.cfg["snapshot"], "snapshot"),
         ]))
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Zurückgestellte Befunde")))
+        c = HeadedCard(_("Zurückgestellte Befunde"))
         snoozed_items = sorted(snoozed_all().items())
         if not snoozed_items:
             t = box(spacing=4, margin_start=18, margin_end=18, margin_bottom=16)
@@ -12176,10 +12428,9 @@ class App(Gtk.Application):
             c.append(row)
         p.append(c)
 
-        c = box()
-        c.add_css_class("card")
-        c.append(card_head(_("Über")))
-        t = box(spacing=4, margin_start=18, margin_end=18, margin_bottom=16)
+        c = HeadedCard(_("Über"))
+        t = box(spacing=4, margin_start=16, margin_end=16, margin_bottom=14,
+                margin_top=14)
         t.append(lbl(f"dynotiq {VERSION} · GTK4 · PyGObject", "mono"))
         t.append(lbl(_("Analysiert von sich aus nur lesend. Was etwas ändert, also Updates "
                      "und Behebungen, läuft erst nach deinem Klick, zeigt vorher den "
@@ -12245,19 +12496,44 @@ class App(Gtk.Application):
     def _set_accent(self, _b, col):
         self.cfg["accent"] = col
         save_config(self.cfg)
-        apply_colors(self.cfg)
-        self.apply_css()
         for c, b in self.swatch_buttons.items():
             b.remove_css_class("active")
         self.swatch_buttons[col].add_css_class("active")
-        self.win.queue_draw()
+        self.retheme()
 
-    def _set_palette(self, dd, _p):
-        self.cfg["palette"] = list(PALETTES)[dd.get_selected()]
+    def _set_theme(self, dd, _p):
+        self.cfg["theme"] = list(THEMES)[dd.get_selected()]
         save_config(self.cfg)
+        self.retheme()
+
+    def _set_rig(self, _sw, state):
+        self.cfg["rig"] = bool(state)
+        save_config(self.cfg)
+        self.rig.set_visible(bool(state))
+
+    def retheme(self):
+        """Farbwechsel überall hin, ohne Neustart.
+
+        Drei Wege, weil drei Dinge die Farbe je anders holen: das CSS, die
+        Cairo-Widgets über COLORS, und alles, was das Systemtheme malt und
+        das eigene Stilblatt nicht abdeckt.
+        """
         apply_colors(self.cfg)
         self.apply_css()
+        self.prefer_dark()
         self.win.queue_draw()
+
+    def prefer_dark(self):
+        """Dem Systemtheme sagen, welche Fassung gilt.
+
+        Checkbox und Aufklapper malt es selbst, an die kommt kein eigenes
+        CSS heran. Ohne das steht im Hellmodus eine dunkle Checkbox auf
+        heller Karte.
+        """
+        s = Gtk.Settings.get_default()
+        if s:
+            s.set_property("gtk-application-prefer-dark-theme",
+                           self.cfg["theme"] == "dark")
 
     def _set_interval(self, dd, _p, opts):
         self.cfg["interval"] = opts[dd.get_selected()]
@@ -12432,6 +12708,10 @@ class App(Gtk.Application):
         else:
             self.headline.set_text(_("Nichts Kritisches gefunden."))
             self.lede.set_text(_("Das System läuft im grünen Bereich."))
+        # Rot nur, wenn auch etwas Kritisches dahintersteht.
+        self.eyebrow.remove_css_class("state-crit")
+        if crit:
+            self.eyebrow.add_css_class("state-crit")
 
         clear(self.list_box)
         for f in findings[:4]:
@@ -12440,9 +12720,7 @@ class App(Gtk.Application):
         if rest > 0:
             more = box(True, 14, margin_top=12, margin_bottom=12, margin_start=18, margin_end=18)
             more.set_opacity(.72)
-            b = Gtk.Box(valign=Gtk.Align.CENTER)
-            b.add_css_class("bullet-warn")
-            more.append(b)
+            more.append(bar("bullet-warn"))
             more.append(lbl(_("{n} weitere Hinweise").format(n=rest),
                             "row-detail"))
             link = Gtk.Button(label=_("Alle anzeigen"), halign=Gtk.Align.END, hexpand=True)
@@ -13026,14 +13304,17 @@ def selftest():
 
     # Die Konfiguration traegt die Farben dieser App und schreibt dorthin, wo
     # die Auswertung nachher sucht
-    conf = mangohud_conf({"accent": "#F5C242", "palette": "Ampel"})
+    conf = mangohud_conf({"accent": "#F5C242", "theme": "dark"})
     assert "gpu_color=F5C242" in conf and "fps_color_change" in conf
     assert f"output_folder={MANGOHUD_LOGS}" in conf and "autostart_log=1" in conf
-    assert "gpu_load_color=2ED27A,FF8A3D,FF4747" in conf
+    assert "gpu_load_color=6F757E,F5C242,FF4747" in conf
+    # Das Overlay bleibt dunkel, auch wenn die App hell laeuft: es liegt auf
+    # eigenem Grund ueber dem Spiel.
+    assert mangohud_conf({"accent": "#F5C242", "theme": "light"}) == conf
     assert "font_file" not in conf and "font_file=/x.ttf" in mangohud_conf(
-        {"accent": "#F5C242", "palette": "Ampel"}, "/x.ttf")
+        {"accent": "#F5C242", "theme": "dark"}, "/x.ttf")
     # Schriftgroesse waechst mit dem Schirm, unter 1080p wird sie nicht kleiner
-    pal = {"accent": "#F5C242", "palette": "Ampel"}
+    pal = {"accent": "#F5C242", "theme": "dark"}
     assert "font_size=22" in mangohud_conf(pal, "", 1080)
     assert "font_size=44" in mangohud_conf(pal, "", 2160)
     assert "font_size=29" in mangohud_conf(pal, "", 1440)
@@ -13484,7 +13765,7 @@ def selftest():
     # Wert fuettern, den die Oberflaeche nie anbieten wuerde
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump({"interval": "zwei", "watch_interval": 7, "accent": "pink",
-                   "palette": "Neon", "tray": "ja", "unbekannt": 1}, f)
+                   "theme": "Neon", "tray": "ja", "unbekannt": 1}, f)
         broken = f.name
     real_config = CONFIG_FILE
     try:
@@ -13494,14 +13775,14 @@ def selftest():
         globals()["CONFIG_FILE"] = real_config
         os.unlink(broken)
     assert cfg["interval"] == 2 and cfg["watch_interval"] == 30
-    assert cfg["accent"] == ACCENTS[0] and cfg["palette"] == "Ampel"
+    assert cfg["accent"] == ACCENTS[0] and cfg["theme"] == "dark"
     assert cfg["tray"] is True and "unbekannt" not in cfg
     assert set(cfg) == set(DEFAULTS)
     # Jeder Schluessel muss geprueft werden. Wer einen neuen dazunimmt und die
     # Pruefung vergisst, reicht ihn ungeprueft bis in einen Timer durch.
-    checked = {"accent", "palette", "interval", "watch_interval",
+    checked = {"accent", "theme", "interval", "watch_interval",
                "tray", "firmware", "snapshot", "notify_crit", "notify_updates",
-               "auto_record"}
+               "auto_record", "rig"}
     assert checked == set(DEFAULTS), sorted(set(DEFAULTS) ^ checked)
 
     # Zurückstellen: der Befund kommt wieder, sobald Ubuntu die Fassung
@@ -14788,9 +15069,33 @@ def selftest():
     assert scan_window(1000.0, now=1000.0 + 60) == "@1000"
     assert scan_window(9e9, now=1000.0) == "-24h"          # Uhr in der Zukunft
 
+    # Jede Seite braucht ihr Symbol, und die Datei dazu muss daliegen. Fehlt
+    # eine, zeigt GTK stumm ein leeres Kaestchen in der Navigation.
+    assert set(NAV_ICONS) == set(NAV), sorted(set(NAV) ^ set(NAV_ICONS))
+    fehlend = [n for n in NAV_ICONS.values() if not os.path.exists(
+        os.path.join(APP_DIR, "icons", "ui", "hicolor", "scalable", "actions",
+                     f"{n}.svg"))]
+    assert not fehlend, fehlend
+
     assert alpha("#FF6B2C", .13) == "rgba(255,107,44,0.13)"
     assert lighten("#000000", .5) == "#7F7F7F"
-    assert "@ACC@" not in build_css() and COLORS["acc"] in build_css()
+    assert rgba("#FF0000") == (1.0, 0.0, 0.0, 1.0)
+    assert rgba("rgba(255,255,255,.09)") == (1.0, 1.0, 1.0, .09)
+    # Beide Saetze muessen dieselben Toene tragen. Ohne das faellt ein nur im
+    # Hellzweig vergessener Wert erst beim Umschalten auf, mitten im Betrieb.
+    assert set(THEMES["dark"]) == set(THEMES["light"]), \
+        sorted(set(THEMES["dark"]) ^ set(THEMES["light"]))
+    # Und kein Platzhalter darf uebrigbleiben, in keinem der beiden Themes:
+    # eine unersetzte @MARKE@ wirft GTK still weg, samt der ganzen Regel.
+    try:
+        for name in THEMES:
+            apply_colors({"theme": name, "accent": ACCENTS[0]})
+            css = build_css()
+            offen = sorted(set(re.findall(r"@[A-Z0-9]+@", css)))
+            assert not offen, f"{name}: {offen}"
+            assert COLORS["acc"] in css and THEMES[name]["bg"] in css
+    finally:
+        apply_colors(DEFAULTS)
     assert fmt_bytes(2**30) == "1.0 GB" and fmt_bytes(512) == "512 B"
 
     prev = cpu_times()

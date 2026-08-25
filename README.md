@@ -93,12 +93,12 @@ and install it directly. The package carries the repository and its key, so
 updates arrive through apt either way. GitHub replaces the tilde in the version
 with a dot in the attachment name, the package itself is unaffected:
 
-    sudo dpkg -i dynotiq_0.3.beta_all.deb
+    sudo dpkg -i dynotiq_0.4.beta_all.deb
 
 Build the package yourself:
 
     ./build-deb.sh
-    sudo dpkg -i build/dynotiq_0.3~beta_all.deb
+    sudo dpkg -i build/dynotiq_0.4~beta_all.deb
 
 Or run it from the source tree without installing:
 
@@ -133,17 +133,17 @@ signed with. `publish-repo.sh` replaces the `gh-pages` branch outright; it
 carries build artefacts only, the sources live in `main`.
 
 Versions carry the Ubuntu release rather than the series name, so
-`0.3~beta~ubuntu24.04.1` sorts below `0.3~beta~ubuntu26.04.1`. Series names
+`0.4~beta~ubuntu24.04.1` sorts below `0.4~beta~ubuntu26.04.1`. Series names
 cycle back through the alphabet, which would eventually make a newer Ubuntu look
-older to apt. A tilde sorts below everything, which is what makes `0.3~beta`
-an upgrade from `0.1` and still a downgrade from the final `0.2`. Git refuses a
-tilde in tag names, so the matching tag is written `v0.3-beta`.
+older to apt. A tilde sorts below everything, which is what makes `0.4~beta`
+an upgrade from `0.3` and still a downgrade from the final `0.4`. Git refuses a
+tilde in tag names, so the matching tag is written `v0.4-beta`.
 
 ## Requirements
 
 `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0`. Recommended:
-`librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-inter` for the
-interface font.
+`librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-ibm-plex` for
+the interface font. Without it the interface falls back to Ubuntu.
 
 ## Languages
 

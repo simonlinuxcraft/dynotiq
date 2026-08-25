@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4~beta - Light and dark
+
+### Appearance
+
+- The interface has a light appearance now. Switch it under Settings,
+  Appearance; it applies at once, without a restart. Every tone of the
+  interface lives in one place and both sets carry the same keys, so a
+  colour forgotten on one of them fails the self test rather than showing
+  up mid-session.
+- No more traffic light. Green and orange said the same thing as grey and
+  yellow, only louder. A grey bar means nothing to do, a yellow one means
+  it is waiting for a decision, a red one means something is broken. Yellow
+  follows the chosen accent, so the setting for status colours is gone.
+- Findings carry that bar down the left edge of the whole row instead of a
+  dot beside it.
+- Every page has its own symbol in the navigation, and a field above it
+  jumps to whichever page you type. It matches the English and the German
+  name, the same way `--page` does.
+- The score ring is a plain 270 degree arc in the accent colour. The glow
+  was drawn by hand out of stacked arcs and read as decoration.
+- New typeface: IBM Plex, with its monospace for anything measured, so
+  readings and timestamps line up in a column. It ships as a Recommends;
+  where the package is missing, Ubuntu carries the interface instead.
+- The machine block in the sidebar can be turned off.
+
+### Fixed
+
+- Text views, entries, expanders and progress bars had no colour of their
+  own and borrowed one from the system theme. That went unnoticed while
+  everything was dark and would have left dark boxes on light cards.
+
 ## 0.3~beta - Proton, and free again
 
 ### Settings

@@ -1,3 +1,22 @@
+dynotiq (0.4~beta) noble; urgency=medium
+
+  * The interface has a light appearance. Switch it under Settings,
+    Appearance; it applies at once, without a restart.
+  * No more traffic light. A grey bar means nothing to do, a yellow one
+    means it waits for a decision, a red one means something is broken.
+    Yellow follows the chosen accent, so the status colour setting is gone.
+  * Findings carry that bar down the left edge of the row instead of a dot.
+  * Every page has its own symbol in the navigation, and a field above it
+    jumps to whichever page is typed, by English or German name.
+  * The score ring is a plain 270 degree arc in the accent colour.
+  * New typeface: IBM Plex, with its monospace for anything measured.
+    Ships as a Recommends; Ubuntu carries the interface without it.
+  * The machine block in the sidebar can be turned off.
+  * Text views, entries, expanders and progress bars had no colour of their
+    own and borrowed one from the system theme.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Tue, 25 Aug 2026 14:30:00 +0200
+
 dynotiq (0.3~beta) noble; urgency=medium
 
   * The background watcher is configurable: how often it looks, and whether it
