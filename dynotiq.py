@@ -106,6 +106,7 @@ THEMES = {
         # Fließtext hat eine eigene Stufe: mit faint kommt ein langer Absatz
         # auf 4,3:1 gegen die Karte, und darunter wird er zur Zumutung.
         "detail": "#8B929B",
+        "ok": "#2ED27A", "warn": "#FF8A3D",
         "crit": "#FF4747", "track": "rgba(255,255,255,.09)",
         "line": "rgba(255,255,255,.07)", "line-soft": "rgba(255,255,255,.06)",
         "line-strong": "rgba(255,255,255,.12)",
@@ -125,6 +126,7 @@ THEMES = {
         "dim": "#5E656E", "text-arrow": "#767C85", "faint": "#767C85",
         "fainter": "#8A9099", "label": "#9AA1AA", "disabled": "#A8AEB6",
         "detail": "#5A626C",
+        "ok": "#177544", "warn": "#9C5800",
         "crit": "#C4362A", "track": "rgba(0,0,0,.10)",
         "line": "rgba(0,0,0,.09)", "line-soft": "rgba(0,0,0,.07)",
         "line-strong": "rgba(0,0,0,.14)",
@@ -137,17 +139,19 @@ THEMES = {
 }
 
 
-def status_colors(theme, accent):
-    """ok, warn und crit als Farbe.
+def status_colors(theme):
+    """ok, warn und crit als Farbe: die Ampel.
 
-    Die Ampel ist raus: Gruen und Orange sagten dasselbe wie Grau und Gelb,
-    nur lauter. Die drei Schluessel bleiben trotzdem, weil record_state und
-    die Zeilen jedes Befunds sie als Datenwert weiterreichen, bis in die
-    Cairo-Widgets. Wer sie hier entfernt, bekommt einen KeyError beim
-    Zeichnen, keinen Fehler beim Start.
+    Gruen heisst nichts zu tun, Orange wartet auf eine Entscheidung, Rot ist
+    kaputt. Drei Farben, die jeder ohne Legende liest, und genau darum geht
+    es auf einer Seite voller Befunde.
+
+    Sie haengen am Erscheinungsbild, nicht am Akzent. Am Akzent haengend
+    verschluckt ein gelber Akzent die Warnstufe, und der Nutzer kann die
+    Ampel nicht mehr von der Markenfarbe unterscheiden. Fuer Hell sind die
+    Toene abgedunkelt, sonst stehen sie mit 2:1 auf der weissen Karte.
     """
-    return {"ok": THEMES[theme]["fainter"], "warn": accent,
-            "crit": THEMES[theme]["crit"]}
+    return {k: THEMES[theme][k] for k in ("ok", "warn", "crit")}
 
 
 WATCH_INTERVALS = [15, 30, 60, 300]
@@ -162,8 +166,7 @@ DEFAULTS = {"accent": ACCENTS[0], "theme": "dark", "interval": 2, "tray": True,
 
 # Von build_css und den Cairo-Widgets gelesen, wechselt mit der Einstellung.
 THEME = "dark"
-COLORS = {"acc": ACCENTS[0], **THEMES[THEME],
-          **status_colors(THEME, ACCENTS[0])}
+COLORS = {"acc": ACCENTS[0], **THEMES[THEME], **status_colors(THEME)}
 
 
 def load_config():
@@ -227,7 +230,7 @@ def apply_colors(cfg):
     global THEME
     THEME = cfg["theme"]
     COLORS.update(THEMES[THEME])
-    COLORS.update(status_colors(THEME, cfg["accent"]))
+    COLORS.update(status_colors(THEME))
     COLORS["acc"] = cfg["accent"]
 
 
@@ -4746,11 +4749,12 @@ RELEASE_NOTES = {
           "Einstellungen, es gilt sofort und ohne Neustart"),
         _("Jede Seite hat ein eigenes Symbol in der Navigation, und ein "
           "Suchfeld darüber springt zu der Seite, die du tippst"),
-        _("Die Ampel ist weg. Grün und Orange sagten dasselbe wie Grau und "
-          "Gelb, nur lauter: ein grauer Balken heißt \"nichts zu tun\", ein "
-          "gelber \"warten auf deine Entscheidung\", ein roter \"kaputt\""),
         _("Befunde tragen den Balken links an der ganzen Zeile statt eines "
-          "Punktes daneben"),
+          "Punktes daneben. Grün heißt \"nichts zu tun\", Orange \"wartet "
+          "auf deine Entscheidung\", Rot \"kaputt\""),
+        _("Für die helle Oberfläche sind Grün und Orange abgedunkelt. In den "
+          "dunklen Tönen stünden sie mit 2:1 auf der weißen Karte und wären "
+          "kaum zu lesen"),
         _("Neue Schrift: Arial, und wo sie fehlt Liberation Sans. Die beiden "
           "messen gleich, der Umbruch bleibt also derselbe. Feste Breite "
           "steht nur noch bei Pfaden, Kennungen und Protokollen"),
@@ -5033,7 +5037,7 @@ def mangohud_conf(cfg, font="", height=1080):
 
     Farben kommen aus derselben Quelle wie die Oberflaeche, damit das Overlay
     nicht wie ein Fremdkoerper ueber dem Spiel liegt: Akzent fuer die Werte,
-    Grau, Akzent und Rot fuer Last und Bildrate, Kartenfarbe als Hintergrund.
+    die Ampel fuer Last und Bildrate, Kartenfarbe als Hintergrund.
 
     Die Schriftgroesse waechst mit der Bildschirmhoehe, sonst ist das Overlay
     auf einem 4K-Schirm nicht mehr zu lesen.
@@ -5041,7 +5045,7 @@ def mangohud_conf(cfg, font="", height=1080):
     acc = cfg["accent"].lstrip("#")
     # Immer die dunklen Toene, auch wenn die App hell laeuft: das Overlay
     # liegt ueber dem Spiel auf eigenem dunklem Grund, nicht in der App.
-    pal = status_colors("dark", cfg["accent"])
+    pal = status_colors("dark")
     ok, warn, crit = (pal[k].lstrip("#") for k in ("ok", "warn", "crit"))
     lines = [
         "# Von dynotiq geschrieben, Aenderungen hier gehen beim naechsten",
@@ -8442,8 +8446,8 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
         background: none; color: @LABEL@; }
 .pill.accent { background: none; color: @ACCTEXT@; }
 .pill.crit { background: none; color: @CRIT@; }
-/* Balken statt Punkt: er laeuft neben der ganzen Zeile mit und traegt die
-   Dringlichkeit, ohne sie wie eine Ampel auszurufen. */
+/* Balken statt Punkt: er laeuft neben der ganzen Zeile mit, statt als
+   Tupfen danebenzustehen. Die Ampelfarbe traegt er weiter. */
 .bullet-crit, .bullet-warn, .bullet-ok, .bullet-info {
         min-width: 2px; border-radius: 2px; }
 .bullet-crit { background: @CRIT@; }
@@ -8527,6 +8531,23 @@ def rgb255(hexcol):
 def alpha(hexcol, a):
     r, g, b = rgb255(hexcol)
     return f"rgba({r},{g},{b},{a})"
+
+
+def contrast(fore, back):
+    """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21.
+
+    Die Datei argumentiert an mehreren Stellen mit solchen Zahlen. Gemessen
+    hat sie bisher keine, und genau dabei faellt auf, dass ein Ton, der auf
+    dunklem Grund traegt, auf hellem verschwindet.
+    """
+    def hell(hexcol):
+        aus = []
+        for c in rgb255(hexcol):
+            c /= 255
+            aus.append(c / 12.92 if c <= .03928 else ((c + .055) / 1.055) ** 2.4)
+        return .2126 * aus[0] + .7152 * aus[1] + .0722 * aus[2]
+    a, b = sorted((hell(fore), hell(back)), reverse=True)
+    return (a + .05) / (b + .05)
 
 
 def lighten(hexcol, f=0.25):
@@ -8948,7 +8969,13 @@ class Ring(Gtk.DrawingArea):
             cr.arc(cx, cy, r, self.angle, self.angle + 1.1)
             cr.stroke()
         elif self.value > 0:
-            self._arc(cr, cx, cy, r, self.value / 100, COLORS["acc"])
+            # Der Ring traegt die Ampel, nicht den Akzent. Er ist das Erste,
+            # was jemand beim Oeffnen sieht, und die Farbe soll die Zahl
+            # bestaetigen statt nur die Marke zu wiederholen. Die Schwellen
+            # sind dieselben wie in der Bewertung darunter.
+            self._arc(cr, cx, cy, r, self.value / 100,
+                      COLORS["ok"] if self.value >= 85 else
+                      COLORS["warn"] if self.value >= 60 else COLORS["crit"])
         cr.select_font_face(CAIRO_SANS, 0, 1)
         cr.set_source_rgb(*rgb(COLORS["text"]))
         cr.set_font_size(54)
@@ -13563,7 +13590,10 @@ def selftest():
     conf = mangohud_conf({"accent": "#F5C242", "theme": "dark"})
     assert "gpu_color=F5C242" in conf and "fps_color_change" in conf
     assert f"output_folder={MANGOHUD_LOGS}" in conf and "autostart_log=1" in conf
-    assert "gpu_load_color=6F757E,F5C242,FF4747" in conf
+    # Die Ampel, nicht der Akzent: sonst faerbt ein gelber Akzent die
+    # Warnstufe und das Overlay kennt nur noch zwei Stufen.
+    assert "gpu_load_color=2ED27A,FF8A3D,FF4747" in conf
+    assert "fps_color=FF4747,FF8A3D,2ED27A" in conf
     # Das Overlay bleibt dunkel, auch wenn die App hell laeuft: es liegt auf
     # eigenem Grund ueber dem Spiel.
     assert mangohud_conf({"accent": "#F5C242", "theme": "light"}) == conf
@@ -15391,6 +15421,13 @@ def selftest():
     assert rgba("rgba(255,255,255,.09)") == (1.0, 1.0, 1.0, .09)
     # Beide Saetze muessen dieselben Toene tragen. Ohne das faellt ein nur im
     # Hellzweig vergessener Wert erst beim Umschalten auf, mitten im Betrieb.
+    # Gruen und Orange muessen auf ihrer Karte lesbar sein, sonst ist die
+    # Ampel im hellen Bild eine Behauptung. 4,5:1 ist die Schwelle, unter der
+    # Text als nicht mehr zugaenglich gilt.
+    for thema, karte in (("dark", "#161A20"), ("light", "#FFFDFA")):
+        for schluessel in ("ok", "warn", "crit"):
+            assert contrast(THEMES[thema][schluessel], karte) >= 4.5, \
+                (thema, schluessel, contrast(THEMES[thema][schluessel], karte))
     assert set(THEMES["dark"]) == set(THEMES["light"]), \
         sorted(set(THEMES["dark"]) ^ set(THEMES["light"]))
     # Und kein Platzhalter darf uebrigbleiben, in keinem der beiden Themes:

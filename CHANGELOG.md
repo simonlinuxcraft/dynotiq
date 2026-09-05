@@ -9,17 +9,20 @@
   interface lives in one place and both sets carry the same keys, so a
   colour forgotten on one of them fails the self test rather than showing
   up mid-session.
-- No more traffic light. Green and orange said the same thing as grey and
-  yellow, only louder. A grey bar means nothing to do, a yellow one means
-  it is waiting for a decision, a red one means something is broken. Yellow
-  follows the chosen accent, so the setting for status colours is gone.
-- Findings carry that bar down the left edge of the whole row instead of a
-  dot beside it.
+- Findings carry the status colour as a bar down the left edge of the whole
+  row instead of a dot beside it. Green still means nothing to do, orange
+  that it waits for a decision, red that something is broken.
+- Those three belong to the appearance rather than to the accent, so a
+  yellow accent cannot swallow the warning step. The light set is darkened:
+  the dark green would read at 2:1 on a white card, against 5.6:1 now, and
+  orange at 2.3:1 against 5.4:1.
 - Every page has its own symbol in the navigation, and a field above it
   jumps to whichever page you type. It matches the English and the German
   name, the same way `--page` does.
-- The score ring is a plain 270 degree arc in the accent colour. The glow
-  was drawn by hand out of stacked arcs and read as decoration.
+- The score ring is a plain 270 degree arc. The glow was drawn by hand out
+  of stacked arcs and read as decoration. It carries the status colour, not
+  the accent: it is the first thing anyone sees on opening, and green above
+  85 confirms the number rather than repeating the brand.
 - New typeface: Arial, falling back to Liberation Sans where it is
   missing. The two share their metrics, so the same text wraps the same way
   on either. Both know exactly two weights, so the interface uses regular

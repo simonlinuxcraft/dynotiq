@@ -4,8 +4,9 @@
    if the two drift apart.
 
    Appearance, accent and the derived accent values are switchable at
-   runtime. Status is no longer a traffic light: ok reads as "nothing to do"
-   and warn as "needs a decision", so both follow the theme and the accent. */
+   runtime. Status is a traffic light and belongs to the appearance, not to
+   the accent: a yellow accent would otherwise swallow the warning step. The
+   light set is darkened, since the dark green reads at 2:1 on a white card. */
 
 
 :root {
@@ -44,8 +45,8 @@
   --dq-jump:                  rgba(255,255,255,.045);  /* jump field */
   --dq-scroll:                rgba(255,255,255,.16);  /* scrollbar slider */
   --dq-chrome-edge:           rgba(0,0,0,.6);  /* headerbar bottom edge */
-  --dq-ok:                #6F757E;  /* nothing to do */
-  --dq-warn:              #F5C242;  /* needs a decision, follows the accent */
+  --dq-ok:                #2ED27A;  /* nothing to do */
+  --dq-warn:              #FF8A3D;  /* needs a decision */
 }
 
 [data-dq-theme="light"] {
@@ -84,8 +85,8 @@
   --dq-jump:                  rgba(0,0,0,.035);  /* jump field */
   --dq-scroll:                rgba(0,0,0,.20);  /* scrollbar slider */
   --dq-chrome-edge:           rgba(0,0,0,.14);  /* headerbar bottom edge */
-  --dq-ok:                #8A9099;  /* nothing to do */
-  --dq-warn:              #F5C242;  /* needs a decision, follows the accent */
+  --dq-ok:                #177544;  /* nothing to do, 5.6:1 on the card */
+  --dq-warn:              #9C5800;  /* needs a decision, 5.4:1 on the card */
 }
 
 /* Accent. Default is Signal Yellow, taken from the logo.
@@ -113,8 +114,8 @@
   --dq-r-xl:   12px;  /* card, switch track */
 
   /* Type */
-  --dq-sans: "IBM Plex Sans", Ubuntu, "Noto Sans", sans-serif;
-  --dq-mono: "IBM Plex Mono", "Ubuntu Mono", monospace;
+  --dq-sans: Arial, "Liberation Sans", Helvetica, sans-serif;
+  --dq-mono: "Liberation Mono", "Courier New", monospace;
 
   /* Layout */
   --dq-sidebar-w:   208px;
@@ -126,6 +127,6 @@
 .dq-tnum { font-feature-settings: "tnum" 1; }
 
 /* Alternate accents, switchable in Settings */
-[data-dq-accent="ubuntu"] { --dq-accent:#E95420; --dq-accent-hover:#EE7E57; --dq-accent-on:#170803; --dq-accent-text:#E95420; --dq-accent-a13:rgba(233,84,32,0.13); --dq-warn:#E95420; }
-[data-dq-accent="cyan"] { --dq-accent:#58C6E8; --dq-accent-hover:#81D4ED; --dq-accent-on:#081317; --dq-accent-text:#58C6E8; --dq-accent-a13:rgba(88,198,232,0.13); --dq-warn:#58C6E8; }
-[data-dq-accent="violet"] { --dq-accent:#A78BFA; --dq-accent-hover:#BDA8FB; --dq-accent-on:#100D18; --dq-accent-text:#A78BFA; --dq-accent-a13:rgba(167,139,250,0.13); --dq-warn:#A78BFA; }
+[data-dq-accent="ubuntu"] { --dq-accent:#E95420; --dq-accent-hover:#EE7E57; --dq-accent-on:#170803; --dq-accent-text:#E95420; --dq-accent-a13:rgba(233,84,32,0.13); }
+[data-dq-accent="cyan"] { --dq-accent:#58C6E8; --dq-accent-hover:#81D4ED; --dq-accent-on:#081317; --dq-accent-text:#58C6E8; --dq-accent-a13:rgba(88,198,232,0.13); }
+[data-dq-accent="violet"] { --dq-accent:#A78BFA; --dq-accent-hover:#BDA8FB; --dq-accent-on:#100D18; --dq-accent-text:#A78BFA; --dq-accent-a13:rgba(167,139,250,0.13); }
