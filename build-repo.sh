@@ -61,11 +61,11 @@ gpg --export "$KEY" > "$OUT/dynotiq.gpg"
 cmp -s "$OUT/dynotiq.gpg" packaging/dynotiq.gpg || {
   echo "packaging/dynotiq.gpg passt nicht zu $KEY"; exit 1; }
 
-cp packaging/screenshot.jpg "$OUT/screenshot.jpg"
-
 # Die Seite ist das Erste, was jemand von dynotiq sieht. Sie traegt deshalb
 # dieselbe Schrift, dieselben Toene und dieselbe Ampel wie die App, und sie
-# kann hell wie dunkel. Kein Framework: sie besteht aus einer Datei.
+# kann hell wie dunkel. Kein Bildschirmfoto: eines von dieser Maschine wuerde
+# Pfade, Kontonamen und laufende Dienste mit ins Netz nehmen. Das Zifferblatt
+# unten ist gezeichnet, kein Foto, und zeigt nichts als sich selbst.
 cat > "$OUT/index.html" <<HTML
 <!doctype html>
 <html lang="en">
@@ -78,51 +78,51 @@ cat > "$OUT/index.html" <<HTML
   --bg:#0E1116; --card:#161A20; --raised:#1B2027; --text:#F2F3F5;
   --dim:#9AA1AA; --faint:#767C85; --line:rgba(255,255,255,.09);
   --acc:#F5C242; --acctext:#F5C242; --ok:#2ED27A; --warn:#FF8A3D; --crit:#FF4747;
-  --shadow:0 18px 50px rgba(0,0,0,.45);
+  --track:rgba(255,255,255,.09);
 }
 @media (prefers-color-scheme:light){
   :root{
     --bg:#F4F1EC; --card:#FFFDFA; --raised:#F5F2ED; --text:#12161B;
     --dim:#5E656E; --faint:#767C85; --line:rgba(0,0,0,.10);
     --acctext:#AB872E; --ok:#177544; --warn:#9C5800; --crit:#C4362A;
-    --shadow:0 18px 50px rgba(0,0,0,.10);
+    --track:rgba(0,0,0,.10);
   }
 }
 *{box-sizing:border-box}
 body{
-  margin:0; padding:0 20px 72px;
-  background:var(--bg); color:var(--text);
+  margin:0; padding:0 20px 80px; background:var(--bg); color:var(--text);
   font:16px/1.65 Arial,"Liberation Sans",Helvetica,sans-serif;
   -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:52rem; margin:0 auto}
-header{padding:72px 0 34px; text-align:center}
-.mark{display:flex; align-items:center; justify-content:center; gap:14px}
-.mark svg{width:52px; height:52px; flex:none}
-h1{margin:0; font-size:44px; font-weight:700; letter-spacing:-.02em}
-.lede{margin:18px auto 0; max-width:34rem; font-size:18px; color:var(--dim)}
+.wrap{max-width:50rem; margin:0 auto}
+header{padding:76px 0 10px; text-align:center}
+.dial{width:132px; height:132px; margin:0 auto 26px; display:block}
+.dial .val{
+  font:700 34px Arial,"Liberation Sans",sans-serif; fill:var(--text);
+}
+.dial .cap{
+  font:700 8px Arial,"Liberation Sans",sans-serif; fill:var(--faint);
+  letter-spacing:2.4px;
+}
+h1{margin:0; font-size:46px; font-weight:700; letter-spacing:-.025em}
+.lede{margin:20px auto 0; max-width:33rem; font-size:18px; color:var(--dim)}
 .ver{
-  display:inline-block; margin-top:20px; padding:5px 13px; border-radius:999px;
+  display:inline-block; margin-top:22px; padding:5px 13px; border-radius:999px;
   border:1px solid var(--line); color:var(--faint);
-  font:700 12px/1 Arial,"Liberation Sans",sans-serif; letter-spacing:.04em;
+  font:700 12px/1 Arial,"Liberation Sans",sans-serif; letter-spacing:.05em;
 }
-.shot{
-  margin:38px 0 8px; border-radius:12px; overflow:hidden;
-  border:1px solid var(--line); box-shadow:var(--shadow); line-height:0;
-}
-.shot img{width:100%; height:auto; display:block}
 h2{
-  margin:52px 0 6px; font-size:13px; font-weight:700; letter-spacing:.1em;
+  margin:56px 0 6px; font-size:13px; font-weight:700; letter-spacing:.1em;
   text-transform:uppercase; color:var(--acctext);
 }
 h2+p{margin-top:0; color:var(--dim)}
 .card{
   background:var(--card); border:1px solid var(--line); border-radius:12px;
-  padding:6px 18px 18px; margin-top:14px;
+  padding:6px 18px 18px; margin-top:16px;
 }
 .head{
   display:flex; align-items:center; justify-content:space-between;
-  gap:12px; padding:10px 0 8px;
+  gap:12px; padding:11px 0 9px;
 }
 .head span{font-size:13px; color:var(--faint)}
 pre{
@@ -139,16 +139,22 @@ button{
   font:700 12px Arial,"Liberation Sans",sans-serif;
 }
 button:hover{color:var(--text); border-color:var(--faint)}
-ul{margin:14px 0 0; padding:0; list-style:none}
-li{display:flex; gap:11px; align-items:baseline; padding:5px 0; color:var(--dim)}
-li i{width:7px; height:7px; border-radius:2px; flex:none; transform:translateY(-1px)}
-.d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-crit{background:var(--crit)}
+.rows{margin-top:16px; display:grid; gap:10px}
+.row{
+  display:flex; gap:13px; align-items:flex-start;
+  background:var(--card); border:1px solid var(--line);
+  border-radius:10px; padding:14px 16px;
+}
+.row i{width:3px; align-self:stretch; border-radius:2px; flex:none}
+.row b{display:block; font-size:14.5px; margin-bottom:2px}
+.row span{color:var(--dim); font-size:14px}
+.b-crit{background:var(--crit)} .b-warn{background:var(--warn)}
+.b-ok{background:var(--ok)}
 footer{
-  margin-top:56px; padding-top:22px; border-top:1px solid var(--line);
+  margin-top:60px; padding-top:24px; border-top:1px solid var(--line);
   color:var(--faint); font-size:14px; text-align:center;
 }
-a{color:var(--acctext)}
-a:hover{text-decoration:none}
+a{color:var(--acctext)} a:hover{text-decoration:none}
 code{
   font:13px "Liberation Mono","Courier New",monospace;
   background:var(--raised); padding:2px 6px; border-radius:5px;
@@ -156,27 +162,22 @@ code{
 </style>
 <div class="wrap">
 <header>
-  <div class="mark">
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M13.87 45.45A20 20 0 1 1 50.79 30.16" fill="none"
-            stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
-      <path d="M50.79 30.16A20 20 0 0 1 50.13 45.45" fill="none"
-            stroke="var(--acc)" stroke-width="6" stroke-linecap="round"/>
-      <path d="M32 37L41.58 28.97" fill="none" stroke="currentColor"
-            stroke-width="5" stroke-linecap="round"/>
-      <circle cx="32" cy="37" r="4" fill="currentColor"/>
-    </svg>
-    <h1>dynotiq</h1>
-  </div>
+  <svg class="dial" viewBox="0 0 120 120" aria-hidden="true">
+    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--track)"
+            stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="217 289" transform="rotate(135 60 60)"/>
+    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--ok)"
+            stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="191 289" transform="rotate(135 60 60)"/>
+    <text class="val" x="60" y="66" text-anchor="middle">88</text>
+    <text class="cap" x="60" y="82" text-anchor="middle">OF 100</text>
+  </svg>
+  <h1>dynotiq</h1>
   <p class="lede">System diagnostics and tuning for Ubuntu. It looks for what
     actually slows the machine down, says what it found in plain words, and
     puts a button next to the things it can fix.</p>
   <div class="ver">VERSION $VER</div>
 </header>
-
-<div class="shot"><img src="screenshot.jpg" alt="The dynotiq overview, with a
-  system score and the current temperature, clock and free memory"
-  width="1100" height="392" loading="lazy"></div>
 
 <h2>Install</h2>
 <p>Four lines. The last one installs it, the first three tell apt where to
@@ -193,15 +194,24 @@ sudo apt install dynotiq</pre>
   package. The repository is signed, and the key above is the only one apt
   will accept for it.</p>
 
-<h2>What it looks at</h2>
-<ul>
-  <li><i class="d-crit"></i><span>Graphics drivers, failed services, GPU
-    errors and out-of-memory kills in the journal</span></li>
-  <li><i class="d-warn"></i><span>Filesystems running full, a journal growing
-    out of hand, thermal throttling, stale autostart entries</span></li>
-  <li><i class="d-ok"></i><span>Pending updates from apt, snap, flatpak and
-    fwupd, and which Proton build each Steam game is set to</span></li>
-</ul>
+<h2>What it reports</h2>
+<div class="rows">
+  <div class="row"><i class="b-crit"></i><div>
+    <b>Something is broken</b>
+    <span>A graphics driver that is not loaded, a service that failed, GPU
+    errors and out-of-memory kills read out of the journal.</span></div></div>
+  <div class="row"><i class="b-warn"></i><div>
+    <b>Something needs a decision</b>
+    <span>A filesystem running full, a journal growing out of hand, thermal
+    throttling under load, launchers pointing at programs that are gone.</span>
+    </div></div>
+  <div class="row"><i class="b-ok"></i><div>
+    <b>Nothing to do, but worth knowing</b>
+    <span>Pending updates from apt, snap, flatpak and fwupd, and which Proton
+    build each installed Steam game is set to.</span></div></div>
+</div>
+<p>Every finding says which file it came from, and nothing is changed without
+  asking first.</p>
 
 <footer>
   <a href="https://github.com/simonlinuxcraft/dynotiq">Source on GitHub</a>
