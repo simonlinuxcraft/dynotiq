@@ -9081,7 +9081,7 @@ class Ring(Gtk.DrawingArea):
         cr.select_font_face(CAIRO_SANS, 0, 0)
         cr.set_source_rgb(*rgb(COLORS["faint"]))
         cr.set_font_size(11)
-        t = "P R Ü F U N G E N" if self.busy and self.steps else "V O N  1 0 0"
+        t = _("P R Ü F U N G E N") if self.busy and self.steps else _("V O N  1 0 0")
         e = cr.text_extents(t)
         cr.move_to(cx - e.width / 2 - e.x_bearing, cy + 31)
         cr.show_text(t)
@@ -10055,10 +10055,11 @@ class App(Gtk.Application):
         kpis = box(True, 10, homogeneous=True, margin_top=16, vexpand=True,
                    valign=Gtk.Align.END)
         self.kpi = {}
-        for key, unit in (("CPU-TEMP", "°C"), ("GPU-TAKT", "MHz"), ("RAM FREI", "GB")):
+        for key, unit in ((N_("CPU-TEMP"), "°C"), (N_("GPU-TAKT"), "MHz"),
+                          (N_("RAM FREI"), "GB")):
             k = box(spacing=2)
             k.add_css_class("kpi")
-            k.append(lbl(key, "kpi-key"))
+            k.append(lbl(_(key), "kpi-key"))
             row = box(True, 4)
             v = lbl("-", "kpi-val")
             u = lbl(unit, "kpi-unit")
