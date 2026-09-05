@@ -16,6 +16,11 @@
   yellow accent cannot swallow the warning step. The light set is darkened:
   the dark green would read at 2:1 on a white card, against 5.6:1 now, and
   orange at 2.3:1 against 5.4:1.
+- Every page that shows a state shows it in those colours: the fill bars and
+  percentages on storage, the driver tags, the score in the history, the
+  memory and temperature readings on the overview and the live monitor. Where
+  a reading has no threshold it stays neutral, and that is deliberate: CPU and
+  GPU load carry none, since a game is allowed to use all of it.
 - Every page has its own symbol in the navigation, and a field above it
   jumps to whichever page you type. It matches the English and the German
   name, the same way `--page` does.
@@ -71,6 +76,13 @@
 - Counts read "1 service" and "1 point" instead of "1 service(s)" and
   "1 point(s)". Eight of these had been left in the German and the English
   text, in places where the rest of the app already spells both forms out.
+- Tags that carry a state were grey whatever they said. The code has always
+  set ok and warn on them, the stylesheet only ever knew crit, so on the
+  driver, storage and history pages the class went nowhere.
+- The second series on a live chart was drawn in the colour of the first.
+  Swap sat on memory and the GPU temperature on its load, both invisible,
+  because that series asks for the warning colour and the warning colour was
+  the accent.
 
 ## 0.3~beta - Proton, and free again
 

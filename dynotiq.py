@@ -8445,6 +8445,8 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .pill { font: 700 10.5px @SANS@; border-radius: 0; padding: 4px 0;
         background: none; color: @LABEL@; }
 .pill.accent { background: none; color: @ACCTEXT@; }
+.pill.ok { background: none; color: @OK@; }
+.pill.warn { background: none; color: @WARN@; }
 .pill.crit { background: none; color: @CRIT@; }
 /* Balken statt Punkt: er laeuft neben der ganzen Zeile mit, statt als
    Tupfen danebenzustehen. Die Ampelfarbe traegt er weiter. */
@@ -9108,9 +9110,14 @@ class Chart(Gtk.DrawingArea):
 
 
 class Bar(Gtk.DrawingArea):
-    def __init__(self, fraction=0.0, height=8, vertical=False):
+    def __init__(self, fraction=0.0, height=8, vertical=False,
+                 warn=.75, crit=.9):
         super().__init__(content_height=height, hexpand=True)
         self.fraction, self.vertical = fraction, vertical
+        # Die Vorgabe ist der Fuellstand einer Platte und deckt sich mit der
+        # Pill daneben. Wer andere Grenzen hat, gibt sie mit: ein Kern darf
+        # laenger hoch stehen als eine Platte voll sein darf.
+        self.warn, self.crit = warn, crit
         self.set_draw_func(self._draw)
 
     def set_fraction(self, f):
@@ -9118,9 +9125,11 @@ class Bar(Gtk.DrawingArea):
         self.queue_draw()
 
     def _draw(self, _a, cr, w, h):
-        # Ein Fuellstand ist eine Messung, keine Bewertung: er traegt den
-        # Akzent, bis er wirklich eng wird. Grau hiesse hier "abgeschaltet".
-        col = COLORS["acc"] if self.fraction < .9 else COLORS["crit"]
+        # Dieselbe Ampel wie ueberall sonst, und dieselben Grenzen wie die
+        # Pill in derselben Zeile: sonst steht ein gruener Balken neben einem
+        # orangen Wort.
+        col = (COLORS["crit"] if self.fraction >= self.crit else
+               COLORS["warn"] if self.fraction >= self.warn else COLORS["ok"])
         f = min(max(self.fraction, 0), 1)
         cr.set_source_rgba(*rgba(COLORS["track"]))
         cr.rectangle(0, 0, w, h)
@@ -12134,7 +12143,9 @@ class App(Gtk.Application):
         self.core_bars = []
         for _core in range(len(self.prev_cores) - 1):
             holder = box(spacing=3, hexpand=True)
-            bar = Bar(0.0, height=34, vertical=True)
+            bar = Bar(0.0, height=34, vertical=True,
+                      warn=RECORD_SCALE["core"][2] / 100,
+                      crit=RECORD_SCALE["core"][3] / 100)
             holder.append(bar)
             self.core_bars.append(bar)
             cb.append(holder)
@@ -13053,6 +13064,7 @@ class App(Gtk.Application):
         self.tiles["CPU"][0].set_text(f"{pct:.0f} %")
         self.tiles["CPU"][1].push(pct)
         self.tiles["RAM"][0].set_text(f"{ram_pct:.0f} %")
+        self._sev(self.tiles["RAM"][0], record_state("ram", ram_pct))
         self.tiles["RAM"][1].push(ram_pct)
         ct = cpu_temp()
         if ct:
@@ -13070,6 +13082,7 @@ class App(Gtk.Application):
             self.charts["cpu_val"].set_text(f"{pct:.0f} %")
             self.charts["mem"].push({"mem": ram_pct, "swap": swap_pct})
             self.charts["mem_val"].set_text(f"{ram_pct:.0f} %")
+            self._sev(self.charts["mem_val"], record_state("ram", ram_pct))
 
             cores = cpu_times(per_core=True)
             for i, bar in enumerate(self.core_bars):
@@ -13126,6 +13139,7 @@ class App(Gtk.Application):
     def _gpu_done(self, g, nt=0):
         if nt:
             self.tiles["NVMe"][0].set_text(f"{nt:.0f} °C")
+            self._sev(self.tiles["NVMe"][0], record_state("nvme_temp", nt))
             self.tiles["NVMe"][1].push(nt)
         if not g:
             return False
@@ -13138,12 +13152,27 @@ class App(Gtk.Application):
         if self.stack.get_visible_child_name() == "Live-Monitor":
             self.charts["gpu"].push({"util": g["util"], "temp": g["temp"]})
             self.charts["gpu_val"].set_text(f"{g['util']:.0f} % · {g['temp']:.0f} °C")
+            # Die Auslastung traegt keine Grenze, die Temperatur schon.
+            self._sev(self.charts["gpu_val"], record_state("gpu_temp", g["temp"]))
         return False
 
     def _state(self, widget, good, ok):
         for c in ("state-ok", "state-warn", "state-crit"):
             widget.remove_css_class(c)
         widget.add_css_class("state-ok" if good else "state-warn" if ok else "state-crit")
+
+    def _sev(self, widget, sev):
+        """Ampelfarbe aus einem Befund von record_state.
+
+        Leer heisst neutral, und das ist kein Versehen: fuer die Gesamtlast
+        von CPU und GPU steht in RECORD_SCALE bewusst keine Grenze. Ein Spiel
+        darf beide auf Anschlag fahren, das ist kein Zustand, den man
+        anfaerben muesste.
+        """
+        for c in ("state-ok", "state-warn", "state-crit"):
+            widget.remove_css_class(c)
+        if sev:
+            widget.add_css_class("state-" + sev)
 
 
 def selftest():
