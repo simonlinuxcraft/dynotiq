@@ -37,14 +37,53 @@ to be read, and being able to read it is not a weakness.
 ## How it handles privilege
 
 Nothing runs as root without a click, and every command is shown in full
-beforehand. Anything privileged is executed as an argument list through
-`pkexec`, never through a shell, so nothing in a file or package name can be
-interpreted as part of the command. Where a fix cannot be expressed that way,
-it is offered to copy into a terminal instead of being run.
+beforehand. Where a fix cannot be expressed as a command, it is offered to
+copy into a terminal instead of being run.
 
-One read-only command does go through `bash -c`: the journal rate check pipes
-`journalctl` output through `sed`, `sort` and `uniq`. It runs as your user,
-takes no input from anywhere, and its output is only counted.
+Most privileged commands are plain argument lists handed to `pkexec`. Four of
+them run a short shell script under `pkexec` instead: installing packages,
+adding the Flatpak PPA, persisting the ntsync module and removing old snap
+revisions. The reason is polkit, which offers `auth_admin` but not
+`auth_admin_keep` for `org.freedesktop.policykit.exec`. Split into separate
+calls, each of those asks for the password again, and whoever cancels the
+second prompt is left half done.
+
+Ten more shell invocations run as your user and never as root: the Steam and
+Proton repairs, the shader cache setting and two `journalctl` pipelines.
+
+In all of them, anything originating outside the source, a package name, a
+path, a unit name, is passed as a shell argument and read back as `"$1"` or
+`"$@"`. Nothing from outside is ever placed in the script text, so a name
+carrying a semicolon or a backtick cannot become part of the command.
+
+Where a command deletes or moves something, the script checks the path itself
+before acting: a Proton prefix only below `steamapps/compatdata` and only with
+an AppID for a name, a Proton build only below `compatibilitytools.d`. That
+check sits in the shell rather than in the caller, so it holds regardless of
+who assembles the call.
+
+## What the package installs
+
+The `.deb` brings an apt source and its key:
+
+    /etc/apt/sources.list.d/dynotiq.sources
+    /usr/share/keyrings/dynotiq.gpg
+
+Without them a package installed by hand would never see an update.
+`Signed-By` names that one key, so the source can vouch for nothing outside
+dynotiq.
+
+What that means is worth saying plainly: the key is what stands between this
+repository and root on every machine that installed the package. If it were
+taken, an update could carry anything. No CI job holds it, nothing on GitHub
+signs anything, and no build server has a copy: the repository is signed by
+hand on one machine. That is the whole of the protection.
+
+To take the source back out again:
+
+    sudo rm /etc/apt/sources.list.d/dynotiq.sources
+
+The package keeps working, it just stops updating.
 
 ## Supported versions
 
