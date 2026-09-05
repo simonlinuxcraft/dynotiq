@@ -142,8 +142,9 @@ tilde in tag names, so the matching tag is written `v0.4-beta`.
 ## Requirements
 
 `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0`. Recommended:
-`librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-ibm-plex` for
-the interface font. Without it the interface falls back to Ubuntu.
+`librsvg2-bin` for tray icons, `pkexec` to apply fixes, `fonts-liberation` for
+the interface font. The interface asks for Arial first and falls back to
+Liberation Sans, which has the same metrics, so the layout does not shift.
 
 ## Languages
 

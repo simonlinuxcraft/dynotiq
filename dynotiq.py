@@ -2532,12 +2532,14 @@ def compat_log_failures(root=None, limit=4 << 20):
 
 
 def stray_compat_tools():
-    """([(Name, Ordner)], der Ordner, den Steam liest).
+    """([(Name, Ordner, verschiebbar)], der Ordner, den Steam liest).
 
     Steam sieht nur den compatibilitytools.d-Ordner unter seiner eigenen
     Installation. Auf Ubuntu liegt die unter ~/.steam/debian-installation,
     waehrend Anleitungen und Werkzeuge oft ~/.local/share/Steam nennen. Wer
-    dorthin entpackt, sucht seine Fassung in Steam vergeblich.
+    dorthin entpackt, sucht seine Fassung in Steam vergeblich. Gemeldet wird
+    auch, was umu gehoert und deshalb nicht verschoben werden darf: die
+    Fassung fehlt dem Nutzer in Steam so oder so.
     """
     root = steam_root()
     if not root:
@@ -2553,6 +2555,7 @@ def stray_compat_tools():
     for real, shown in compat_dirs().items():
         if real == good:
             continue
+        fremd_umu = umu_managed(real)
         for v in sorted(glob.glob(os.path.join(real, "*",
                                                "compatibilitytool.vdf"))):
             m = re.search(r'"([^"]+)"', vdf_block(read(v) or "", "compat_tools") or "")
@@ -2560,18 +2563,29 @@ def stray_compat_tools():
                 continue
             name = os.path.basename(os.path.dirname(v))
             # umu legt seine Fassungen selbst hierher und holt sie neu, sobald
-            # sie weg sind. Sie zu verschieben kostet einen Download und macht
-            # nebenbei Lutris-Eintraege mit festem Pfad kaputt.
-            if name.startswith("UMU-Proton") or umu_managed():
+            # sie weg sind. Sie zu verschieben kostet nur einen Download.
+            if name.startswith("UMU-Proton"):
                 continue
-            out.append((name, os.path.join(shown, name)))
+            # Verschieben macht Lutris- und umu-Eintraege mit festem Pfad
+            # kaputt, wenn der Ordner umu gehoert. Melden trotzdem.
+            out.append((name, os.path.join(shown, name), not fremd_umu))
     return out, good
 
 
-def umu_managed(base=None):
-    """Verwaltet umu diesen Ordner selbst? Dann gehoert er ihm, nicht Steam."""
-    return os.path.exists(os.path.expanduser(
-        base or "~/.local/share/umu/compatibilitytools.d.lock"))
+def umu_managed(path=""):
+    """Verwaltet umu diesen Ordner? Dann gehoert er ihm, nicht Steam.
+
+    Der Lock in ~/.local/share/umu gilt genau fuer den compatibilitytools.d
+    unter ~/.local/share/Steam, nicht fuer jeden fremden Ordner. Vorher
+    schaltete er den Falscher-Ordner-Befund komplett ab, auch fuer Fassungen,
+    die gar nicht von umu stammen.
+    """
+    if not os.path.exists(os.path.expanduser(
+            "~/.local/share/umu/compatibilitytools.d.lock")):
+        return False
+    ziel = os.path.realpath(os.path.expanduser(
+        "~/.local/share/Steam/compatibilitytools.d"))
+    return not path or os.path.realpath(path) == ziel
 
 
 def prefix_version(prefix):
@@ -3000,7 +3014,7 @@ def launch_option_problems(games=None):
     return sorted(out)
 
 
-def proton_check():
+def proton_check(managers=None):
     """Was zwischen Steam, Proton und der Laufzeitumgebung schiefgehen kann.
 
     Je Befund ein dict: sev, title, short, long, fix. Getrennt, weil die Seite
@@ -3009,13 +3023,17 @@ def proton_check():
     geforderte Laufzeitumgebung steht in der toolmanifest.vdf der Fassung,
     welche Fassung ein Titel benutzt in Steams config.vdf, und was den Prefix
     gebaut hat in dessen version-Datei.
+
+    managers kann der Aufrufer durchreichen, sonst startet die Seite
+    'flatpak list' zweimal je Neuladen.
     """
     out = []
     if not steam_root():
         return out
     tools = proton_dirs()
     have = steam_installed_ids()
-    managers = proton_managers()
+    if managers is None:
+        managers = proton_managers()
     mgr = managers[0][0] if managers else ""
     cfg = read(steam_config_vdf()) or ""
 
@@ -3138,8 +3156,9 @@ def proton_check():
             "sev": "warn",
             "title": _("{rt} ist einer Proton-Fassung zugewiesen").format(
                 rt=runtime_name(appid)),
-            "short": _("Steam soll die Laufzeitumgebung selbst mit {tool} "
-                       "starten.").format(tool=tool),
+            "short": _("In der Konfiguration steht sie auf {tool}. Noch läuft "
+                       "alles, aber sobald Steam den Eintrag anfasst, geht "
+                       "die Umgebung kaputt.").format(tool=tool),
             "long": _("In Steams config.vdf steht unter CompatToolMapping ein "
                       "Eintrag für {rt} auf {tool}. Eine Laufzeitumgebung ist "
                       "aber kein Windows-Spiel: sie soll damit unter einer "
@@ -3209,6 +3228,7 @@ def proton_check():
     if weg:
         out.append({
             "sev": "warn",
+            "blockt": True,
             "title": _("1 Steam-Bibliothek ist nicht erreichbar") if len(weg) == 1
             else _("{n} Steam-Bibliotheken sind nicht erreichbar").format(
                 n=len(weg)),
@@ -3227,23 +3247,42 @@ def proton_check():
 
     stray, good = stray_compat_tools()
     if stray:
+        beweglich = [p for _n, p, m in stray if m]
+        long = _("Steam liest nur {good}. Alles andere taucht in "
+                 "seiner Liste nie auf. Das passiert, wenn ein "
+                 "Werkzeug oder eine Anleitung ~/.local/share/Steam "
+                 "annimmt, Ubuntu seine Installation aber unter "
+                 "~/.steam/debian-installation führt.").format(good=good)
+        if beweglich:
+            long += (_(" Der Knopf verschiebt den Ordner, ein vorhandener "
+                       "gleichen Namens bleibt unangetastet.")
+                     if len(beweglich) == 1 else
+                     _(" Der Knopf verschiebt die Ordner, vorhandene gleichen "
+                       "Namens bleiben unangetastet."))
+        if len(beweglich) < len(stray):
+            long += _(" Was umu oder Lutris gehört, bleibt liegen: dort "
+                      "erwarten Einträge den festen Pfad, Verschieben würde "
+                      "sie zerreißen. Für Steam-Spiele ist so eine Fassung "
+                      "schlicht nicht wählbar.")
         out.append({"sev": "warn",
-                    "title": _("{n} Fassung(en) liegen im falschen Ordner"
-                               ).format(n=len(stray)),
-                    "short": _("Steam sieht dort nicht nach: {names}.").format(
-                        names=", ".join(n for n, _p in stray)),
-                    "long": _("Steam liest nur {good}. Alles andere taucht in "
-                              "seiner Liste nie auf. Das passiert, wenn ein "
-                              "Werkzeug oder eine Anleitung ~/.local/share/Steam "
-                              "annimmt, Ubuntu seine Installation aber unter "
-                              "~/.steam/debian-installation führt. Der Knopf "
-                              "verschiebt die Ordner, vorhandene gleichen "
-                              "Namens bleiben unangetastet.").format(good=good),
+                    "title": _("1 Fassung liegt in einem Ordner, den Steam "
+                               "nicht liest") if len(stray) == 1 else
+                    _("{n} Fassungen liegen in einem Ordner, den Steam "
+                      "nicht liest").format(n=len(stray)),
+                    "short": (_("In Steams Auswahl taucht sie deshalb nie "
+                                "auf: {names}.") if len(stray) == 1 else
+                              _("In Steams Auswahl tauchen sie deshalb nie "
+                                "auf: {names}.")).format(
+                        names=", ".join(n for n, _p, _m in stray)),
+                    "long": long,
                     "fix": (_("In den richtigen Ordner verschieben"),
-                            move_tools_argv(good, [p for _n, p in stray]))})
+                            move_tools_argv(good, beweglich))
+                    if beweglich else None})
 
-    known = {n for n, _p in tools}
-    for game, appid, tool in missing_compat_games(known=known):
+    # Nur was Steam auch sieht, zaehlt als vorhanden. Eine Fassung im
+    # Fremdordner ist fuer Steam dasselbe wie eine geloeschte.
+    known = {n for n, p in tools if steam_sees(p)}
+    for game, appid, tool in missing_compat_games(known=known, tools=tools):
         out.append({"sev": "crit",
                     "title": game,
                     "short": _("Eingestellt ist {tool}, die es hier nicht gibt."
@@ -3294,6 +3333,10 @@ def proton_check():
         pfad = dict(tools).get(tool) or valve_tool_dir(tool, dict(tools))
         zurueck = proton_older(tool_build(pfad)[0] or tool, built, pfad)
         ziel, key = prefix_fix_choice(built, tools) if zurueck else ("", "")
+        # Der Name von der Platte, nicht Steams interner: proton_hotfix und
+        # 'Proton Hotfix' sind dieselbe Sache, und die Seite nennt sie ueberall
+        # gleich.
+        tool = os.path.basename(pfad) if pfad else tool
         stellen = set_mappings_argv([(appid, key)]) if key else None
         # Der Prefix ist der Notnagel. Beiseite schieben laesst sich
         # rueckgaengig machen, loeschen nicht, deshalb steht es davor.
@@ -3306,10 +3349,19 @@ def proton_check():
                          PREFIX_REMOVE_NOTE))
         mehr.append((_("Ordner öffnen"), prefix, ""))
         out.append({"sev": "warn" if zurueck else "info", "title": game,
-                    "short": (_("Zurück auf {tool}, die Windows-Ablage stammt "
-                                "aber von der neueren {built}.") if zurueck else
+                    # Der Rueckschritt haengt das Spiel im Ladebildschirm,
+                    # das Verdikt oben darf ihn nicht kleinreden.
+                    "blockt": bool(zurueck),
+                    # Der Kurztext muss allein tragen: was los ist, und ob
+                    # etwas zu tun ist.
+                    "short": (_("Das Spiel ist zurück auf {tool} gestellt, "
+                                "seine Windows-Ablage stammt aber von der "
+                                "neueren {built}. Der Rückschritt kann sie "
+                                "beschädigen.") if zurueck else
                               _("Eingestellt ist {tool}, die Windows-Ablage "
-                                "stammt noch von {built}.")).format(
+                                "stammt noch von {built}. Beim nächsten Start "
+                                "zieht die Fassung sie selbst nach, zu tun "
+                                "ist nichts.")).format(
                                     tool=tool, built=built),
                     "long": prefix_advice(zurueck, tool, built, prefix, ziel),
                     "risk": "loss" if zurueck and not stellen else "",
@@ -3403,7 +3455,10 @@ def proton_rows(tools=None):
             rt, ok = short_runtime(need), True
         valve = "compatibilitytools.d" not in path
         build, when = tool_build(path)
-        facts = []
+        sees = steam_sees(path)
+        # Der wichtigste Fakt zuerst: eine Fassung, die Steam nicht liest,
+        # sieht sonst genauso brauchbar aus wie jede andere.
+        facts = [] if sees else [_("Steam liest diesen Ordner nicht")]
         if build and build != name:
             facts.append(build)
         if not valve:
@@ -3417,7 +3472,7 @@ def proton_rows(tools=None):
         if valve:
             facts.append(_("pflegt Steam selbst"))
         out.append({"name": name, "runtime": rt, "ok": ok, "valve": valve,
-                    "facts": " · ".join(facts),
+                    "sees": sees, "facts": " · ".join(facts),
                     "path": path.replace(os.path.expanduser("~"), "~")})
     return out
 
@@ -3435,11 +3490,16 @@ def valve_tool_dir(name, paths):
             return next((p for n, p in paths.items() if wort in n.lower()), "")
     if not rest.isdigit():
         return ""
-    # 'Proton 9.0 (Beta)' und 'Proton 10.0' tragen beide die Hauptnummer vorn.
-    for n, p in paths.items():
-        m = re.match(r"Proton (\d+)\.", n)
-        if m and m.group(1) == rest:
-            return p
+    # Genau die Regel aus mapping_name, nur rueckwaerts gelesen: die
+    # Nebennummer haengt ohne Punkt an, eine 0 faellt weg. 'Proton 6.3' heisst
+    # proton_63, 'Proton 10.0' heisst proton_10, 'Proton 9.0 (Beta)' traegt
+    # seine Nummern ebenfalls vorn. Nur der volle Vergleich taugt: wer auf die
+    # Hauptnummer zurueckfaellt, gibt fuer proton_5 die Fassung 5.13 aus,
+    # sobald sie in der Liste vorne steht.
+    for n, pf in paths.items():
+        m = re.match(r"Proton (\d+)\.(\d+)", n)
+        if m and m.group(1) + ("" if m.group(2) == "0" else m.group(2)) == rest:
+            return pf
     return ""
 
 
@@ -3457,8 +3517,15 @@ def mapping_name(name, path):
     for wort in ("experimental", "hotfix"):
         if wort in name.lower():
             return "proton_" + wort
-    m = re.match(r"Proton (\d+)\.", name)
-    return "proton_" + m.group(1) if m else ""
+    # Die Gegenrichtung zu valve_tool_dir und nach derselben Regel: die
+    # Nebennummer haengt ohne Punkt an, eine 0 faellt weg. Ohne das schriebe
+    # ein Knopf fuer 'Proton 6.3' den Namen proton_6, und Steam faende die
+    # Fassung nicht.
+    m = re.match(r"Proton (\d+)\.(\d+)", name)
+    if not m:
+        return ""
+    haupt, neben = m.group(1), m.group(2)
+    return "proton_" + haupt + ("" if neben == "0" else neben)
 
 
 def steam_sees(path):
@@ -3507,16 +3574,21 @@ def is_steam_game(appid, g=None):
 
 
 def proton_game_rows(tools=None):
-    """[(Titel, eingestellte Fassung, Zeile zum Prefix, in Ordnung)].
+    """[(Spiel, Anzeigename der Fassung, Zeile zum Prefix, sev)].
 
-    Nur Titel, die wirklich installiert sind. Steam raeumt CompatToolMapping
-    beim Deinstallieren nicht auf, sonst stuenden hier ueberwiegend Karteileichen.
+    Nur Spiele, die wirklich installiert sind. Steam raeumt CompatToolMapping
+    beim Deinstallieren nicht auf, sonst stuenden hier ueberwiegend
+    Karteileichen. sev ist ok, warn oder crit und traegt dieselbe Bewertung
+    wie die Befundkarte: vorher stand hier jeder Prefix-Unterschied rot,
+    waehrend proton_check denselben Fall als harmlos einstufte, und die Seite
+    widersprach sich selbst. Fassungen, die Steam nicht sieht (fremdes
+    compatibilitytools.d), zaehlen wie geloeschte.
     """
-    paths = dict(proton_dirs() if tools is None else tools)
-    known = set(paths)
+    paths = {n: p for n, p in (proton_dirs() if tools is None else tools)
+             if steam_sees(p)}
     defekte = {n: (a, s) for n, _p, a, s in runtime_problems(list(paths.items()))}
     # Valves interne Namen auf dieselben Ordner abbilden, sonst bleibt der
-    # groesste Teil der Titel ohne Aussage.
+    # groesste Teil der Spiele ohne Aussage.
     for n in {t for t in compat_mappings().values() if t.startswith("proton_")}:
         p = valve_tool_dir(n, paths)
         if p and p in {q for _n, q in paths.items()}:
@@ -3524,38 +3596,65 @@ def proton_game_rows(tools=None):
             if treffer in defekte:
                 defekte[n] = defekte[treffer]
     out = []
-    # Ueber die installierten Titel, nicht ueber die Zuordnungstabelle: wer
+    weg = bool(steam_libraries_away())
+    # Ueber die installierten Spiele, nicht ueber die Zuordnungstabelle: wer
     # nichts umstellt, hat dort keinen Eintrag und lief bei der Voreinstellung
-    # mit. Genau die Titel fehlten hier vorher ganz.
+    # mit. Genau die Spiele fehlten hier vorher ganz.
     for appid in sorted(steam_installed_ids()):
         tool = steam_proton(appid)
         g = steam_game(appid)
         if not tool or not is_steam_game(appid, g):
             continue
-        valve = tool.startswith("proton_")
+        pfad = paths.get(tool) or valve_tool_dir(tool, paths)
+        # Die Pill traegt den Namen von der Platte, nicht Steams internen:
+        # proton_hotfix und 'Proton Hotfix' als zwei Dinge zu lesen, ist
+        # niemandem zuzumuten.
+        shown = os.path.basename(pfad) if pfad else tool
         built = prefix_version(g["prefix"])
         # Der Zustand der Laufzeitumgebung entscheidet mit. Ohne ihn stand ein
-        # Titel gruen da, dessen Fassung ohne Container gar nicht startet.
+        # Spiel gruen da, dessen Fassung ohne Container gar nicht startet.
         kaputt = defekte.get(tool, "")
-        if not valve and tool not in known:
-            line, ok = _("Diese Fassung gibt es hier nicht"), False
+        if not pfad:
+            # Eigener Zweig, und nicht bloss ein uebersprungener: ohne Ordner
+            # gibt es nichts zu vergleichen, und der Prefix-Zweig darunter
+            # verspraeche sonst, eine Fassung ziehe die Ablage nach, die gar
+            # nicht daliegt.
+            #
+            # Haengt eine Bibliothek nicht, sieht alles darauf deinstalliert
+            # aus. Das gilt aber nur fuer Valves Fassungen: eigene liegen in
+            # compatibilitytools.d unter Home und sind dann wirklich weg.
+            if weg and tool.startswith("proton_"):
+                line, sev = _("Die Fassung liegt auf einer Bibliothek, die "
+                              "gerade nicht erreichbar ist"), "warn"
+            else:
+                # Gilt jetzt auch fuer Valve-Namen: 'Proton 9.0' laesst sich
+                # wie jeder Steam-Titel deinstallieren, die Zuordnung bleibt
+                # stehen.
+                line, sev = _("Diese Fassung gibt es hier nicht"), "crit"
         elif kaputt:
-            line, ok = (_("{tool} startet nicht, {rt} fehlt")
-                        if kaputt[1] in ("missing", "empty") else
-                        _("{tool} startet nicht, {rt} ist beschädigt")).format(
-                            tool=tool, rt=short_runtime(kaputt[0])), False
-        elif built and built not in prefix_names(
-                tool, paths.get(tool) or valve_tool_dir(tool, paths)) \
-                and built != tool_prefix_version(
-                    paths.get(tool) or valve_tool_dir(tool, paths)):
-            line, ok = _("Windows-Ablage stammt von {built}").format(
-                built=built), False
+            line, sev = (_("{tool} startet nicht, {rt} fehlt")
+                         if kaputt[1] in ("missing", "empty") else
+                         _("{tool} startet nicht, {rt} ist beschädigt")).format(
+                             tool=shown, rt=short_runtime(kaputt[0])), "crit"
+        elif built and built not in prefix_names(tool, pfad) \
+                and built != tool_prefix_version(pfad):
+            # Dieselbe Richtungsfrage wie in proton_check: nur der
+            # Rueckschritt kann etwas beschaedigen, vorwaerts zieht Proton
+            # die Ablage selbst nach.
+            if proton_older(tool_build(pfad)[0] or tool, built, pfad):
+                line, sev = _("Windows-Ablage stammt von der neueren {built}, "
+                              "der Rückschritt kann sie beschädigen").format(
+                                  built=built), "warn"
+            else:
+                line, sev = _("Windows-Ablage von {built}, zieht die Fassung "
+                              "beim nächsten Start selbst nach").format(
+                                  built=built), "ok"
         elif built:
-            line, ok = _("Windows-Ablage von {built}").format(built=built), True
+            line, sev = _("Windows-Ablage von {built}").format(built=built), "ok"
         else:
-            line, ok = _("Noch keine Windows-Ablage angelegt"), True
-        out.append((g["name"] or appid, tool, line, ok))
-    return sorted(out, key=lambda r: (r[3], r[0]))
+            line, sev = _("Noch keine Windows-Ablage angelegt"), "ok"
+        out.append((g["name"] or appid, shown, line, sev))
+    return sorted(out, key=lambda r: (r[3] == "ok", r[0]))
 
 
 def prefix_mismatches(tools=None):
@@ -3566,7 +3665,10 @@ def prefix_mismatches(tools=None):
     Zuordnung aber 'proton_11'. Die gegeneinander zu halten hiesse, auf jedem
     Rechner einen Unterschied zu melden, den es nicht gibt.
     """
-    paths = dict(proton_dirs() if tools is None else tools)
+    # Nur Fassungen, die Steam sieht: mit einer im Fremdordner laeuft das
+    # Spiel real gar nicht, der Prefix-Vergleich waere eine Scheinaussage.
+    paths = {n: p for n, p in (proton_dirs() if tools is None else tools)
+             if steam_sees(p)}
     out = []
     for appid in sorted(steam_installed_ids()):
         tool = steam_proton(appid)
@@ -3888,10 +3990,14 @@ def shader_cache_check(steam=True):
                           ).format(size=size, n=steam_apps()), None))
         else:
             out.append(("ok", _("{name}-Shader-Cache").format(name=c["name"]),
-                        _("{size} in {n} Bibliothek(en). Steam legt hier die "
-                          "vorab übersetzten Shader ab, das spart genau die "
-                          "Ruckler beim ersten Spielstart.").format(
-                              size=size, n=c.get("dirs", 1)), None))
+                        (_("{size} in 1 Bibliothek. Steam legt hier die "
+                           "vorab übersetzten Shader ab, das spart genau die "
+                           "Ruckler beim ersten Spielstart.")
+                         if c.get("dirs", 1) == 1 else
+                         _("{size} in {n} Bibliotheken. Steam legt hier die "
+                           "vorab übersetzten Shader ab, das spart genau die "
+                           "Ruckler beim ersten Spielstart.")).format(
+                             size=size, n=c.get("dirs", 1)), None))
     # Jede Partition einzeln. Steam-Bibliotheken liegen oft auf eigenen Platten,
     # und voll laeuft die, auf der gespielt wird, nicht die mit /home.
     seen = set()
@@ -4511,7 +4617,8 @@ def app_check_program(entry):
         running = [p for p in processes() if p["name"] == os.path.basename(binary)[:15]]
         if running:
             out.append(("ok", _("Läuft gerade"),
-                        _("{n} Prozess(e), {size} Speicher").format(
+                        (_("1 Prozess, {size} Speicher") if len(running) == 1
+                         else _("{n} Prozesse, {size} Speicher")).format(
                             n=len(running),
                             size=fmt_bytes(sum(p["rss"] for p in running))), None))
 
@@ -4644,9 +4751,19 @@ RELEASE_NOTES = {
           "gelber \"warten auf deine Entscheidung\", ein roter \"kaputt\""),
         _("Befunde tragen den Balken links an der ganzen Zeile statt eines "
           "Punktes daneben"),
-        _("Neue Schrift: IBM Plex, mit der Monospace für alles Gemessene, "
-          "damit Zahlen untereinander stehen"),
+        _("Neue Schrift: Arial, und wo sie fehlt Liberation Sans. Die beiden "
+          "messen gleich, der Umbruch bleibt also derselbe. Feste Breite "
+          "steht nur noch bei Pfaden, Kennungen und Protokollen"),
         _("Der Rechnerblock in der Seitenleiste lässt sich abschalten"),
+        _("Die Proton-Seite sagt jetzt oben in einem Satz, ob deine Spiele "
+          "starten, und trennt darunter, was zu klären ist, von dem, was nur "
+          "zur Kenntnis gehört"),
+        _("Eine Proton-Fassung in einem Ordner, den Steam nicht liest, zählt "
+          "wie eine fehlende. Steam bietet sie nie an, vorher stand sie hier "
+          "trotzdem als vorhanden"),
+        _("Auch eine deinstallierte Fassung von Valve fällt auf, wenn ein "
+          "Spiel noch auf sie zeigt. Hängt gerade eine Steam-Bibliothek "
+          "nicht, behauptet die Seite dazu nichts"),
     ]),
 }
 
@@ -5747,7 +5864,8 @@ def check_missing_driver(ctx):
         return None
     nothing = [d for d in bad if not d.get("modules")]
     return Finding("crit" if nothing else "warn",
-                   _("{n} Gerät(e) ohne Kernel-Treiber").format(n=len(bad)),
+                   _("1 Gerät ohne Kernel-Treiber") if len(bad) == 1 else
+                   _("{n} Geräte ohne Kernel-Treiber").format(n=len(bad)),
                    _("Ohne Treiber bleibt das Gerät ungenutzt. Wo ein Modul "
                      "vorhanden ist, wurde es nur nicht geladen. Wo keins steht, "
                      "bringt der Kernel für dieses Gerät nichts mit.")
@@ -5855,21 +5973,32 @@ def check_shader_cache(ctx):
                    actions=[(_("App-Check öffnen"), "_goto_page", "App-Check")])
 
 
-def missing_compat_games(mappings=None, known=None):
-    """(Spielname, AppID, eingestellte Fassung) je installiertem Titel, dessen
+def missing_compat_games(mappings=None, known=None, tools=None):
+    """(Spielname, AppID, eingestellte Fassung) je installiertem Spiel, dessen
     Proton-Fassung fehlt.
 
     Steam räumt CompatToolMapping beim Deinstallieren nicht auf. Wer die
     Einträge zählt statt die Spiele, meldet überwiegend Karteileichen.
+    known sind die Namen, die Steam wirklich anbieten kann; Valves interne
+    Namen (proton_10) werden über die Ordner in tools aufgelöst, denn auch
+    eine Valve-Fassung lässt sich deinstallieren, während die Zuordnung
+    stehen bleibt.
     """
     mappings = compat_mappings() if mappings is None else mappings
     known = compat_tools() if known is None else known
     out = []
+    weg = None
     for appid, name in mappings.items():
-        # Die Fassungen von Valve liegen nicht in compatibilitytools.d, sie
-        # heißen proton_10, proton_experimental und so weiter.
-        if not name or name.startswith("proton_") or name in known:
+        if not name or name in known:
             continue
+        if name.startswith("proton_"):
+            # Haengt eine Bibliothek gerade nicht, sieht alles darauf
+            # deinstalliert aus. Dann lieber nichts behaupten.
+            if weg is None:
+                weg = bool(steam_libraries_away())
+                tools = proton_dirs() if tools is None else tools
+            if weg or valve_tool_dir(name, dict(tools)):
+                continue
         game = steam_game(appid)
         if game:
             out.append((game["name"] or appid, appid, name))
@@ -5882,14 +6011,17 @@ def check_compat_tools(ctx):
     Steam meldet das nicht. Es nimmt kommentarlos eine andere, und die
     Fehlersuche fängt danach an der falschen Stelle an.
     """
-    known = compat_tools()
+    # Eine Fassung in einem Ordner, den Steam nicht liest, kann Steam auch
+    # nicht anbieten. Sie zaehlt hier wie eine geloeschte.
+    known = {n: p for n, p in compat_tools().items() if steam_sees(p)}
     affected = missing_compat_games(known=known)
     if not affected:
         return None
     have = ", ".join(sorted(known)) or _("gar keine eigene")
     return Finding(
         "warn",
-        _("{n} Spiel(e) mit fehlender Proton-Fassung").format(n=len(affected)),
+        _("1 Spiel mit fehlender Proton-Fassung") if len(affected) == 1 else
+        _("{n} Spiele mit fehlender Proton-Fassung").format(n=len(affected)),
         _("Steam sagt dazu nichts und startet die Titel mit irgendeiner anderen "
           "Fassung. Läuft eins davon plötzlich schlechter, ist das der Grund. In "
           "den Eigenschaften des Spiels unter Kompatibilität neu auswählen, oder "
@@ -5994,7 +6126,8 @@ def check_filesystems(ctx):
     sev = "crit" if pct >= 90 else "warn"
     detail = (_("{free:.1f} GB von {total:.0f} GB frei").format(
                   free=worst["free"] / 2**30, total=worst["total"] / 2**30)
-              + (_(", {n} weitere Partition(en) knapp").format(n=len(full) - 1)
+              + (_(", 1 weitere Partition knapp") if len(full) == 2 else
+                 _(", {n} weitere Partitionen knapp").format(n=len(full) - 1)
                  if len(full) > 1 else ""))
     title = _("{mount} zu {pct:.0f} % voll").format(mount=worst["target"], pct=pct)
     badge = _("{free:.0f} GB frei").format(free=worst["free"] / 2**30)
@@ -6038,8 +6171,10 @@ def autoremove_warning(pkgs=None):
         return _("Entfernt Pakete, die kein anderes Paket mehr braucht. Im "
                  "Moment ist die Liste leer, es würde also nichts entfernt, "
                  "und der Befehl räumt nur den Paket-Zwischenspeicher.")
-    return (_("Entfernt {n} Paket(e), die kein anderes Paket mehr braucht:"
-              ).format(n=len(pkgs)) + "\n\n"
+    return ((_("Entfernt 1 Paket, das kein anderes Paket mehr braucht:")
+             if len(pkgs) == 1 else
+             _("Entfernt {n} Pakete, die kein anderes Paket mehr braucht:")
+             ).format(n=len(pkgs)) + "\n\n"
             + ", ".join(pkgs[:40]) + ("\n…" if len(pkgs) > 40 else "")
             + "\n\n"
             + _("Steht dort etwas, das du noch brauchst, brich ab und "
@@ -7231,7 +7366,8 @@ def check_failed_units(ctx):
                    _("systemd hat sie gestartet und sie sind gescheitert. Was "
                      "davon abhängt, funktioniert nicht, ohne dass irgendwo "
                      "eine Meldung erscheint."),
-                   _("{n} Dienst(e)").format(n=len(rows)), False,
+                   _("1 Dienst") if len(rows) == 1 else
+                   _("{n} Dienste").format(n=len(rows)), False,
                    key="failed_units",
                    lines=[("dialog-error-symbolic", "warn",
                            _("{unit}: {was}").format(
@@ -8220,51 +8356,49 @@ headerbar windowcontrols button { background-color: @CONTROL@; background-image:
             border: none; box-shadow: none; border-radius: 50%; color: @TEXTICON@;
             min-width: 22px; min-height: 22px; padding: 0; margin: 0 2px; }
 headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; }
-.hb-title { font: 600 12.5px @SANS@; color: @TITLE@; }
+.hb-title { font: 700 12.5px @SANS@; color: @TITLE@; }
 .hb-sub { font: 11px @SANS@; color: @FAINT@; }
 
-.sidebar { background: @INK@; box-shadow: inset -1px 0 @LINESOFT@;
-           padding: 16px 12px 12px; }
+.sidebar { background: @INK@; padding: 16px 12px 14px; }
 .brand { font: 700 15px @SANS@; color: @STRONG@; letter-spacing: -0.3px; }
-.brandsub { font: 500 9.5px @SANS@; color: @FAINTER@; letter-spacing: 0.7px; }
+.brandsub { font: 700 10px @SANS@; color: @FAINTER@; letter-spacing: 0.6px; }
 /* Sprungfeld ueber der Navigation. Flach und randlos, damit es die Leiste
    nicht in zwei Haelften teilt. */
 .jump { background: @JUMP@; background-image: none; color: @BODY@;
         border: 1px solid @LINEFAINT@; border-radius: 7px; box-shadow: none;
-        min-height: 29px; padding: 0 4px; font: 11.5px @SANS@;
+        min-height: 29px; padding: 0 4px; font: 400 12px @SANS@;
         margin-bottom: 12px; caret-color: @BODY@; }
 .jump:focus-within { border-color: @LINESTRONG@; }
 .jump image { color: @TEXTARROW@; }
-.nav { font: 12.5px @SANS@; color: @DIM@; background-color: transparent;
+.nav { font: 400 12.5px @SANS@; color: @DIM@; background-color: transparent;
        background-image: none; border: none; box-shadow: none; min-height: 32px;
        border-radius: 7px; padding: 0 10px; }
 .nav:hover { background-color: @HOVER@; color: @BODY@; }
 /* Weicher Akzentgrund statt voller Flaeche, dazu der Balken links: die
    Navigation soll die Seite zeigen, nicht um Aufmerksamkeit werben. */
 .nav.active { background-color: @TINT@; background-image: none; color: @STRONG@;
-              font-weight: 500; box-shadow: inset 2px 0 @ACC@; }
+              font-weight: 700; box-shadow: inset 2px 0 @ACC@; }
 .nav.active:hover { background-color: @TINT@; color: @STRONG@; }
-.navgroup { font: 600 9.5px @SANS@; color: @LABEL@; letter-spacing: 1px;
-            padding: 14px 0 5px 12px; }
-.navbadge { font: 600 10.5px @SANS@; color: @FAINT@; background: none;
+.navsep { min-height: 1px; background: @LINEFAINT@; }
+.navbadge { font: 700 10.5px @SANS@; color: @FAINT@; background: none;
             padding: 0 2px; }
-.rig { background: @RAISED@; border: 1px solid @LINESOFT@;
-       border-radius: 9px; padding: 11px 12px; }
-.rig-key { font: 9.5px @SANS@; color: @FAINTER@; letter-spacing: 0.7px; }
-.rig-val { font: 500 11px @SANS@; color: @MUTED@; }
-.rig-sub { font: 10px @MONO@; color: @FAINTER@; }
+.rig { background: none; border: none; padding: 0; }
+.rig-key { font: 700 10px @SANS@; color: @FAINTER@; letter-spacing: 0.6px; }
+.rig-val { font: 400 11.5px @SANS@; color: @DIM@; }
+.rig-sub { font: 400 10.5px @SANS@; color: @FAINTER@; }
 
-.card { background: @SURFACE@; border: 1px solid @LINE@; border-radius: 12px; }
-.h1 { font: 600 22px @SANS@; color: @TEXT@; letter-spacing: -0.25px; }
-.sub { font: 11.5px @MONO@; color: @FAINT@; }
-.btn-ghost { font: 500 11.5px @SANS@; color: @MUTED@; background-color: transparent;
+.card { background: none; border: none; border-radius: 0;
+        box-shadow: inset 0 -1px @LINEFAINT@; }
+.h1 { font: 700 22px @SANS@; color: @TEXT@; letter-spacing: -0.2px; }
+.sub { font: 400 11.5px @SANS@; color: @FAINT@; }
+.btn-ghost { font: 700 11.5px @SANS@; color: @MUTED@; background-color: transparent;
              background-image: none; box-shadow: none; min-height: 0;
              border: 1px solid @LINESTRONG@; border-radius: 7px; padding: 8px 14px; }
 .btn-ghost:hover { background-color: @HOVERGHOST@; }
 .btn-ghost:disabled { color: @DISABLED@; }
 /* Fuer den leisesten Weg aus einem Befund heraus: gleiche Groesse wie
    btn-ghost, aber ohne Rahmen, damit er nicht als Empfehlung gelesen wird. */
-.btn-quiet { font: 500 11.5px @SANS@; color: @FAINT@; background-color: transparent;
+.btn-quiet { font: 700 11.5px @SANS@; color: @FAINT@; background-color: transparent;
              background-image: none; box-shadow: none; min-height: 0;
              border: none; border-radius: 7px; padding: 9px 14px; }
 .btn-quiet:hover { background-color: @HOVER@; color: @MUTED@; }
@@ -8275,8 +8409,8 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .row-open:hover { background-color: @HOVERROW@; }
 .btn-accent, .btn-fix { color: @ACCTXT@; background-color: @ACC@; background-image: none;
               border: none; box-shadow: none; min-height: 0; }
-.btn-accent { font: 600 11.5px @SANS@; border-radius: 7px; padding: 8px 16px; }
-.btn-fix { font: 600 11.5px @SANS@; border-radius: 7px; padding: 8px 14px; }
+.btn-accent { font: 700 11.5px @SANS@; border-radius: 7px; padding: 8px 16px; }
+.btn-fix { font: 700 11.5px @SANS@; border-radius: 7px; padding: 8px 14px; }
 .btn-accent:hover, .btn-fix:hover { background-color: @ACCHI@; }
 .btn-accent:disabled, .btn-fix:disabled { background-color: @SURFACEDISABLED@;
               color: @FAINT@; }
@@ -8285,28 +8419,29 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
           padding: 3px; min-height: 0; }
 .swatch.active { border: 2px solid @STRONG@; padding: 2px; }
 
-.eyebrow { font: 600 10px @SANS@; color: @ACCTEXT@; letter-spacing: 1px; }
-.headline { font: 600 29px @SANS@; color: @TEXT@; letter-spacing: -0.3px; }
-.lede { font: 12.5px @SANS@; color: @DIM@; }
-.kpi { background: @RAISED@; border-radius: 9px; padding: 11px 12px; }
-.kpi-key { font: 10px @SANS@; color: @LABEL@; letter-spacing: 0.7px; }
-.kpi-val { font: 700 21px @MONO@; color: @STRONG@; }
+.eyebrow { font: 700 10.5px @SANS@; color: @ACCTEXT@; letter-spacing: 0.9px; }
+.headline { font: 700 29px @SANS@; color: @TEXT@; letter-spacing: -0.2px; }
+.lede { font: 400 13px @SANS@; color: @DIM@; }
+.kpi { background: none; border-radius: 0; padding: 2px 0 2px 12px;
+       box-shadow: inset 2px 0 @LINEFAINT@; }
+.kpi-key { font: 700 10px @SANS@; color: @LABEL@; letter-spacing: 0.6px; }
+.kpi-val { font: 700 22px @SANS@; color: @STRONG@; }
 .kpi-unit { font: 12px @SANS@; color: @FAINT@; }
 .state-ok { color: @OK@; } .state-warn { color: @WARN@; } .state-crit { color: @CRIT@; }
 .state-dim { color: @FAINT@; }
 
-.cardhead { font: 600 12.5px @SANS@; color: @TITLE@; }
+.cardhead { font: 700 12.5px @SANS@; color: @TITLE@; }
 .rowsep { background: @LINEFAINT@; min-height: 1px; }
-.row-title { font: 500 13px @SANS@; color: @STRONG@; }
+.row-title { font: 700 13px @SANS@; color: @STRONG@; }
 /* Eigene Stufe, nicht @FAINT@: 5,8:1 gegen den Kartengrund. Mit @FAINT@
    waren es 4,3:1, und darunter wird ein langer Absatz zur Zumutung. */
-.row-detail { font: 11.5px @SANS@; color: @DETAIL@; }
-.mono { font: 11.5px @MONO@; color: @DIM@; }
-.mono-dim { font: 11px @MONO@; color: @LABEL@; }
-.pill { font: 500 10.5px @SANS@; border-radius: 5px; padding: 4px 8px;
-        background: @NEUTRALA@; color: @DIM@; }
-.pill.accent { background: @ACC13@; color: @ACCTEXT@; }
-.pill.crit { background: @CRIT12@; color: @CRIT@; }
+.row-detail { font: 400 12px @SANS@; color: @DETAIL@; }
+.mono { font: 12.5px @MONO@; color: @DIM@; }
+.mono-dim { font: 12px @MONO@; color: @LABEL@; }
+.pill { font: 700 10.5px @SANS@; border-radius: 0; padding: 4px 0;
+        background: none; color: @LABEL@; }
+.pill.accent { background: none; color: @ACCTEXT@; }
+.pill.crit { background: none; color: @CRIT@; }
 /* Balken statt Punkt: er laeuft neben der ganzen Zeile mit und traegt die
    Dringlichkeit, ohne sie wie eine Ampel auszurufen. */
 .bullet-crit, .bullet-warn, .bullet-ok, .bullet-info {
@@ -8315,11 +8450,11 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .bullet-warn { background: @WARN@; }
 .bullet-ok { background: @OK@; }
 .bullet-info { background: @FAINTER@; }
-.tile-key { font: 500 10.5px @SANS@; color: @LABEL@; letter-spacing: 0.6px; }
-.tile-val { font: 700 15px @MONO@; color: @STRONG@; }
-.big-val { font: 700 27px @MONO@; color: @STRONG@; }
-.empty { font: 13px @SANS@; color: @FAINT@; }
-.grouphead { font: 600 9.5px @SANS@; color: @LABEL@; letter-spacing: 1px; }
+.tile-key { font: 700 10.5px @SANS@; color: @LABEL@; letter-spacing: 0.5px; }
+.tile-val { font: 700 15.5px @SANS@; color: @STRONG@; }
+.big-val { font: 700 28px @SANS@; color: @STRONG@; }
+.empty { font: 400 13px @SANS@; color: @FAINT@; }
+.grouphead { font: 700 11px @SANS@; color: @DIM@; letter-spacing: 0; }
 switch { background-color: @SURFACEDISABLED@; background-image: none; border: none;
          box-shadow: none; border-radius: 12px; }
 switch:checked { background-color: @ACC@; background-image: none; }
@@ -8338,7 +8473,26 @@ dropdown > button:hover { background-color: @CONTROLHOVER@; }
 dropdown > button > box > arrow, dropdown > button arrow {
     -gtk-icon-source: -gtk-icontheme("pan-down-symbolic");
     color: @TEXTARROW@; min-width: 15px; min-height: 15px; margin-left: 6px; }
-popover contents { background-color: @RAISED@; color: @BODY@; border-radius: 9px; }
+/* Aufklapp- und Kontextmenues. Ohne eigene Regeln stylt das Systemtheme die
+   Zeilen, und neben den eigenen Karten sah das wie ein Fremdkoerper aus. */
+popover contents { background-color: @RAISED@; color: @BODY@;
+        border: 1px solid @LINESTRONG@; border-radius: 9px; padding: 5px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.22); }
+popover > arrow { background-color: @RAISED@; border: 1px solid @LINESTRONG@; }
+/* GTK haengt dem DropDown-Popover die Klasse "menu" an, nicht "dropdown". */
+popover listview { background: transparent; color: @BODY@; }
+popover listview > row { font: 12px @SANS@; color: @BODY@;
+        border-radius: 6px; padding: 7px 10px; background-image: none; }
+popover listview > row:hover { background-color: @HOVER@; }
+popover listview > row:selected { background-color: @TINT@;
+        color: @STRONG@; font-weight: 700; }
+/* Haken der gewaehlten Zeile: Luft zum Text, Farbe wie der Akzenttext. */
+popover listview > row image { margin-left: 10px; color: @ACCTEXT@; }
+popover.menu modelbutton { font: 12px @SANS@; color: @BODY@; min-height: 0;
+        border-radius: 6px; padding: 7px 10px; background-image: none; }
+popover.menu modelbutton:hover { background-color: @HOVER@; color: @STRONG@; }
+popover.menu modelbutton accelerator { color: @FAINT@; }
+popover.menu separator { background: @LINEFAINT@; min-height: 1px; margin: 4px 2px; }
 scrollbar { background: transparent; }
 scrollbar slider { background: @SCROLL@; border-radius: 8px; min-width: 7px; }
 tooltip { background: @RAISED@; color: @BODY@; }
@@ -8386,11 +8540,21 @@ def darken(hexcol, f=0.90):
     return "#%02X%02X%02X" % tuple(int(c * (1 - f)) for c in rgb255(hexcol))
 
 
-# IBM Plex traegt die Oberflaeche, Ubuntu faengt auf, wo das Paket fehlt.
-# Beide OFL beziehungsweise Ubuntu Font Licence. Mono steht ueberall, wo
-# Zahlen untereinander stehen muessen: Messwerte, Zeitstempel, Achsen.
-SANS = "'IBM Plex Sans', Ubuntu, 'Noto Sans', sans-serif"
-MONO = "'IBM Plex Mono', 'Ubuntu Mono', monospace"
+# Arial traegt die Oberflaeche, Liberation Sans faengt auf, wo sie fehlt.
+# Die beiden sind metrisch identisch, der Umbruch bleibt also gleich, egal
+# welche der Rechner hat. Arial selbst liegt nicht bei und wird nur beim
+# Namen genannt; ausgeliefert wird nichts davon.
+#
+# Wichtig fuer alles darunter: dieser Satz kennt genau zwei Gewichte, 400 und
+# 700. Ein 500 oder 600 im Stilblatt rundet fontconfig still auf eines von
+# beiden, und die Abstufung, die dort gemeint war, ist weg. Betonung heisst
+# hier Bold, sonst Regular.
+#
+# Mono steht nur noch dort, wo Zeichen wirklich untereinander muessen: Pfade,
+# Kennungen, Protokolle. Liberation Mono passt im Strich zu Arial. Messwerte
+# tragen SANS: Arials Ziffern sind ohnehin alle gleich breit.
+SANS = "Arial, 'Liberation Sans', Helvetica, sans-serif"
+MONO = "'Liberation Mono', 'Courier New', monospace"
 
 
 def fc_family_file(name):
@@ -8412,9 +8576,10 @@ def first_font(*names):
     return "sans-serif"
 
 
-CAIRO_SANS = first_font("IBM Plex Sans", "Inter", "Ubuntu", "Noto Sans")
-CAIRO_MONO = first_font("IBM Plex Mono", "JetBrains Mono", "Ubuntu Mono",
-                        "Noto Sans Mono")
+CAIRO_SANS = first_font("Arial", "Liberation Sans", "Helvetica",
+                        "DejaVu Sans")
+CAIRO_MONO = first_font("Liberation Mono", "Courier New",
+                        "DejaVu Sans Mono", "Noto Sans Mono")
 
 
 def font_path():
@@ -8424,7 +8589,7 @@ def font_path():
     etwas, deshalb wird die gelieferte Familie gegengeprüft: sonst trägt das
     Overlay die Ersatzschrift und sieht nicht aus wie die App.
     """
-    for name in ("IBM Plex Sans", "Inter", "Ubuntu"):
+    for name in ("Arial", "Liberation Sans", "Helvetica"):
         fam, path = fc_family_file(name)
         if name.lower() in fam.lower() and path and os.path.exists(path):
             return path
@@ -8515,16 +8680,22 @@ def card(child, pad=16):
     return c
 
 
-def card_head(title, right=None):
+def card_head(title, right=None, left=None):
     """Kartenkopf samt Trennlinie darunter.
 
     Die Linie gehoert dazu, nicht an die Aufrufer: ohne sie klebt die erste
     Zeile am Titel und die Karte liest sich als ein Block statt als Kopf mit
     Inhalt. Sie laeuft ueber die volle Breite, waehrend die Linien zwischen
     den Zeilen eingerueckt sind, damit man Kopf und Zeile auseinanderhaelt.
+
+    left steht vor dem Titel. Es braucht den Umweg ueber diesen Parameter,
+    weil zurueck nur die senkrechte Box geht: wer dort selbst etwas voranstellt,
+    setzt es ueber die Kopfzeile statt neben den Titel.
     """
     w = box()
     h = box(True, margin_top=13, margin_bottom=13, margin_start=16, margin_end=16)
+    if left is not None:
+        h.append(left)
     h.append(lbl(title, "cardhead"))
     r = right if isinstance(right, Gtk.Widget) else lbl(right or "", "sub", xalign=1.0)
     r.set_hexpand(True)
@@ -8556,16 +8727,16 @@ def bar(css="bullet-info"):
 
 
 def grouphead(title, right=None):
-    """Versalienzeile mit auslaufender Linie, steht ueber einer Karte.
+    """Schlichte Titelzeile ueber einer Karte.
 
     Ordnet mehrere Karten, ohne selbst wie eine Karte auszusehen. Rechts
-    steht die Anzahl, wenn es eine gibt.
+    steht die Anzahl, wenn es eine gibt. Frueher in Versalien mit einer
+    auslaufenden Linie: das gab jeder Gruppe mehr Gewicht als ihrem Inhalt.
     """
-    h = box(True, 8, margin_bottom=9)
-    h.append(lbl(title.upper(), "grouphead"))
-    line = Gtk.Box(hexpand=True, valign=Gtk.Align.CENTER)
-    line.add_css_class("rowsep")
-    h.append(line)
+    h = box(True, 8, margin_bottom=8, margin_start=2)
+    t = lbl(title, "grouphead")
+    t.set_hexpand(True)
+    h.append(t)
     if right is not None:
         h.append(right if isinstance(right, Gtk.Widget)
                  else lbl(str(right), "grouphead"))
@@ -8796,6 +8967,15 @@ class Ring(Gtk.DrawingArea):
         cr.show_text(t)
 
 
+def axis_digits(span):
+    """Nachkommastellen der Achsenbeschriftung, aus der Spanne.
+
+    Fest auf null gerundet trugen die fuenf Marken eines Netzdiagramms
+    dreimal dieselbe Zahl, weil dessen Spanne bei 1 MB/s liegt.
+    """
+    return 0 if span >= 10 else 1 if span >= 1 else 2
+
+
 class Spark(Gtk.DrawingArea):
     def __init__(self, lo, hi, color_key="acc", points=13, height=26):
         super().__init__(content_height=height, hexpand=True)
@@ -8867,6 +9047,7 @@ class Chart(Gtk.DrawingArea):
         # Ohne Messwerte bleibt die Achse unbeschriftet: eine erfundene Skala
         # neben einem leeren Diagramm liest sich wie ein Messergebnis.
         scale = any(v > 0 for d in self.data.values() for v in d)
+        nk = axis_digits(span)
         cr.select_font_face(CAIRO_MONO, 0, 0)
         cr.set_font_size(9)
         for i in range(5):
@@ -8879,7 +9060,7 @@ class Chart(Gtk.DrawingArea):
             if scale:
                 cr.set_source_rgb(*rgb(COLORS["label"]))
                 cr.move_to(2, y + 3)
-                cr.show_text(f"{lo + span * (4 - i) / 4:.0f}")
+                cr.show_text(f"{lo + span * (4 - i) / 4:.{nk}f}")
         for key, color_key in self.series:
             vals = self.data[key]
             step = (w - 36) / max(len(vals) - 1, 1)
@@ -9398,27 +9579,30 @@ class App(Gtk.Application):
     def _sidebar(self):
         s = box(spacing=1)
         s.add_css_class("sidebar")
-        head = box(spacing=8, margin_bottom=18, margin_start=8, margin_top=2)
-        mark = self._wordmark(150)
+        # Nur die Marke, ohne Untertitel: welche Fassung laeuft, steht in den
+        # Einstellungen und muss nicht auf jedem Bildschirm mitlaufen.
+        head = box(spacing=8, margin_bottom=16, margin_start=8, margin_top=2)
+        mark = self._wordmark(132)
         if mark:
             mark.set_halign(Gtk.Align.START)
             head.append(mark)
-            sub = lbl(_("SYSTEMDIAGNOSE v{v}").format(v=VERSION), "brandsub")
-            sub.set_margin_start(3)
-            head.append(sub)
-        else:                              # ohne Wortmarke der alte Aufbau
+        else:                              # ohne Wortmarke Zeichen und Name
             row = box(True, 9)
-            row.append(self._logo(30))
-            txt = box()
-            txt.append(lbl("dynotiq", "brand"))
-            txt.append(lbl(f"SYSTEMDIAGNOSE v{VERSION}", "brandsub"))
-            row.append(txt)
+            row.append(self._logo(26))
+            row.append(lbl("dynotiq", "brand"))
             head.append(row)
         s.append(head)
         s.append(self._jump())
         self.nav_buttons = {}
-        for group, names in NAV_GROUPS:
-            s.append(lbl(group, "navgroup"))
+        for i, (_group, names) in enumerate(NAV_GROUPS):
+            # Die Gruppen bleiben als Ordnung erhalten, aber ohne Versalien-
+            # Ueberschrift: vierzehn Eintraege tragen sich selbst, und drei
+            # zusaetzliche Zeilen machten die Leiste nur voller.
+            if i:
+                trenn = Gtk.Box(margin_top=7, margin_bottom=7, margin_start=10,
+                                margin_end=10)
+                trenn.add_css_class("navsep")
+                s.append(trenn)
             for name in names:
                 b = Gtk.Button()
                 b.add_css_class("nav")
@@ -9445,19 +9629,19 @@ class App(Gtk.Application):
                 s.append(b)
 
         s.append(Gtk.Box(vexpand=True))
-        rig = box(spacing=3, margin_top=12)
+        rig = box(spacing=2, margin_top=14, margin_start=10, margin_end=10)
         rig.add_css_class("rig")
-        rig.append(lbl(_("RECHNER"), "rig-key"))
         total, _avail = meminfo()
         # gpu() startet nvidia-smi. Genau bei einer hängenden Karte, also im
         # Diagnosefall, gäbe es sonst minutenlang gar kein Fenster.
         self.rig_val = lbl(_("{cpu}\nGrafik wird gelesen …").format(cpu=cpu_model()),
                            "rig-val", wrap=True, chars=26)
         rig.append(self.rig_val)
-        sub = lbl(f"{total:.0f} GB · {os.uname().release} · "
-                  f"{os.environ.get('XDG_SESSION_TYPE', '?')}", "rig-sub",
+        # Kernel und Sitzungsart standen hier nur als Beiwerk. Wer sie
+        # braucht, findet sie in den Einstellungen und im Bericht.
+        sub = lbl(_("{gb:.0f} GB Arbeitsspeicher").format(gb=total), "rig-sub",
                   wrap=True, chars=26)
-        sub.set_margin_top(3)
+        sub.set_margin_top(2)
         rig.append(sub)
         rig.set_visible(self.cfg["rig"])
         self.rig = rig
@@ -10411,8 +10595,7 @@ class App(Gtk.Application):
                 right.append(lbl(f"{len(ups)} · {fmt_bytes(total)}" if total
                                  else str(len(ups)), "sub"))
                 right.append(btn)
-                head = card_head(source_label(src), right)
-                head.prepend(allbox)
+                head = card_head(source_label(src), right, allbox)
             else:
                 head = card_head(source_label(src))
             c.append(head)
@@ -11541,86 +11724,94 @@ class App(Gtk.Application):
     def _proton_worker(self):
         """Alles am Stück im Hintergrund: die Ordner liegen oft auf einer
         zweiten Platte, und die muss erst anlaufen."""
-        GLib.idle_add(self._proton_done, proton_check(), proton_rows(),
-                      proton_game_rows(), proton_managers())
+        managers = proton_managers()
+        GLib.idle_add(self._proton_done, proton_check(managers), proton_rows(),
+                      proton_game_rows(), managers)
 
     def _proton_done(self, results, versions, games, managers=()):
         clear(self.pro_box)
+        # Eine Bewertung fuer die ganze Seite: Kopf, Karten und Listen rendern
+        # alle aus results und den sev-Feldern. Vorher sagte der Kopf "alles
+        # in Ordnung", waehrend die Spieleliste dieselben Faelle rot trug.
         bad = [r for r in results if r["sev"] in ("crit", "warn")]
+        hints = [r for r in results if r["sev"] not in ("crit", "warn")]
         eigen = [v for v in versions if not v["valve"]]
-        self.pro_sub.set_text(
-            _("{n} Fassungen · alles in Ordnung").format(n=len(versions))
-            if not bad else
-            _("{n} Fassungen · {b} zu klären").format(n=len(versions),
-                                                     b=len(bad)))
+        have_steam = bool(steam_root())
+        fremd = sum(1 for v in versions if not v.get("sees", True))
+        teile = [_("{n} Fassungen").format(n=len(versions) - fremd)]
+        if fremd:
+            teile.append(_("{n} sieht Steam nicht").format(n=fremd))
+        teile.append(_("{b} zu klären").format(b=len(bad)) if bad
+                     else _("alles in Ordnung"))
+        self.pro_sub.set_text(" · ".join(teile) if have_steam
+                              else _("kein Steam gefunden"))
 
-        # Zuerst das Ergebnis, dann die Bestandsliste, dann die Erklärung.
-        # Wer die Seite öffnet, will wissen ob etwas klemmt, nicht was Proton ist.
-        c = box()
-        inhalt = box()
-        if not results:
-            inhalt.append(self._pro_note(_("Kein Steam gefunden. Diese Seite prüft "
-                                           "Proton, und das gehört zu Steam.")))
-        elif not bad:
-            inhalt.append(self._pro_note(
-                _("Jede Fassung hat die Laufzeitumgebung, die sie verlangt, "
-                  "und kein Titel zeigt auf eine Fassung, die es nicht gibt.")))
-        for r in results:
-            row = box(True, 13, margin_top=12, margin_bottom=12,
-                      margin_start=16, margin_end=16)
-            dot = bar({"crit": "bullet-crit",
-                       "warn": "bullet-warn"}.get(r["sev"], "bullet-ok"))
-            row.append(dot)
-            txt = box(spacing=3, hexpand=True)
-            # Was der Knopf kostet, gehoert neben den Titel, nicht in den
-            # aufgeklappten Text.
-            kopf = box(True, 8)
-            kopf.append(lbl(r["title"], "row-title", wrap=True, chars=56))
-            if r["fix"]:
-                verlust = r.get("risk") == "loss"
-                pill = lbl(_("Spielstände betroffen") if verlust
-                           else _("sicher"), "pill", xalign=0.5)
-                if verlust:
-                    pill.add_css_class("accent")
-                pill.set_valign(Gtk.Align.CENTER)
-                kopf.append(pill)
-            txt.append(kopf)
-            txt.append(lbl(r["short"], "row-detail", wrap=True, chars=76))
-            exp = Gtk.Expander(margin_top=4)
-            exp.set_label_widget(lbl(_("Warum, und was es bewirkt"), "row-detail"))
-            innen = box(spacing=10)
-            innen.append(lbl(r["long"], "row-detail", wrap=True, chars=76))
-            weitere = [m for m in r.get("more") or () if m[1]]
-            if weitere:
-                reihe = box(True, 8, halign=Gtk.Align.START, margin_bottom=4)
-                for label, ziel, note in weitere:
-                    b = Gtk.Button(label=label)
-                    b.add_css_class("btn-quiet")
-                    if isinstance(ziel, str):
-                        # Ein Ordner braucht keine Rueckfrage, er nimmt nichts weg.
-                        b.connect("clicked", lambda _b, p=ziel:
-                                  Gio.AppInfo.launch_default_for_uri(
-                                      Gio.File.new_for_path(p).get_uri(), None))
-                    else:
-                        b.connect("clicked", self._appcheck_fix, r["title"],
-                                  label, ziel, self._proton_reload, None,
-                                  _(note) if note else "")
-                    reihe.append(b)
-                innen.append(reihe)
+        # Das Verdikt zuerst: die eine Antwort, die ein Laie sucht, und die
+        # zwei Saetze Einordnung dazu. Die lange Erklaerung liegt dahinter im
+        # Expander statt wie frueher als letzte Gruppe drei Bildschirmseiten
+        # tiefer, wo sie niemand fand.
+        v = box(spacing=0)
+        v.append(lbl(_("BEFUND"), "eyebrow"))
+        if not have_steam:
+            headline, lede = _("Kein Steam gefunden"), \
+                _("Diese Seite prüft Proton, und das gehört zu Steam.")
+        elif any(r["sev"] == "crit" for r in bad):
+            headline, lede = _("Manche Spiele starten gerade nicht"), \
+                _("Woran es liegt und was hilft, steht direkt darunter.")
+        elif any(r.get("blockt") for r in bad):
+            headline, lede = _("Ein paar Spiele starten so nicht"), \
+                _("Was dahintersteckt und was hilft, steht direkt darunter.")
+        elif bad:
+            headline, lede = _("Es läuft, ein paar Punkte sind offen"), \
+                _("Keiner davon verhindert gerade einen Spielstart.")
+        else:
+            headline, lede = _("Alles bereit für deine Spiele"), \
+                _("Jede Fassung ist vollständig, und jedes Spiel zeigt auf "
+                  "eine Fassung, die Steam auch hat.")
+        hl = lbl(headline, "headline", wrap=True, chars=34)
+        hl.set_margin_top(7)
+        v.append(hl)
+        led = lbl(lede, "lede", wrap=True, chars=80)
+        led.set_margin_top(6)
+        v.append(led)
+        erk = Gtk.Expander(margin_top=10)
+        erk.set_label_widget(lbl(_("Was ist Proton?"), "row-detail"))
+        erk.set_child(lbl(
+            _("Windows-Spiele laufen unter Linux nicht direkt. Proton "
+              "übersetzt sie und liegt in mehreren Fassungen vor. Weil jede "
+              "Fassung andere Bibliotheken braucht, läuft sie selbst in einem "
+              "abgeschlossenen Container, den Steam getrennt herunterlädt. "
+              "Fehlt der Container oder ist die Fassung unvollständig "
+              "entpackt, startet das Spiel nicht, und Steam sagt dazu nichts "
+              "weiter als dass es gleich wieder beendet wurde. Diese Seite "
+              "sieht in den Dateien nach, woran es liegt."),
+            "row-detail", wrap=True, chars=88))
+        v.append(erk)
+        self.pro_box.append(card(v, 20))
+
+        # Zu klaeren gibt es die Karte nur, wenn wirklich etwas ansteht. Die
+        # fruehere Beruhigungszeile an dieser Stelle sagte dasselbe wie das
+        # Verdikt und stand ausgerechnet ueber einer Liste von Eintraegen.
+        if bad:
+            inhalt = box()
+            for r in bad:
+                row = self._pro_row(r)
+                inhalt.append(sep_row(row) if inhalt.get_first_child() else row)
+            self.pro_box.append(group(_("Was zu klären ist"), inhalt,
+                                      self._pro_bulk(results, bad)))
+        if hints:
+            inhalt = box()
+            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_top=8,
+                               margin_bottom=12)
+            exp.set_label_widget(lbl(_("Ansehen"), "row-detail"))
+            innen = box()
+            for r in hints:
+                row = self._pro_row(r)
+                innen.append(sep_row(row) if innen.get_first_child() else row)
             exp.set_child(innen)
-            txt.append(exp)
-            row.append(txt)
-            if r["fix"]:
-                label, argv = r["fix"][0], r["fix"][1]
-                note = r["fix"][2] if len(r["fix"]) > 2 else ""
-                b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
-                b.add_css_class("btn-fix")
-                b.connect("clicked", self._appcheck_fix, r["title"], label, argv,
-                          self._proton_reload, None, _(note) if note else "")
-                row.append(b)
-            inhalt.append(sep_row(row) if inhalt.get_first_child() else row)
-        c = group(_("Was zu klären ist"), inhalt, self._pro_bulk(results, bad))
-        self.pro_box.append(c)
+            inhalt.append(exp)
+            self.pro_box.append(group(_("Hinweise ohne Handlungsbedarf"),
+                                      inhalt, len(hints)))
 
         # Seit in der ersten Karte Knoepfe stehen, zieht GTK die Ansicht beim
         # Aufbau dorthin und der Seitenkopf war weg. Nach dem Neueinlesen
@@ -11629,60 +11820,78 @@ class App(Gtk.Application):
         if oben:
             GLib.idle_add(oben.get_vadjustment().set_value, 0.0)
 
-        for title, rows, note in (
+        # Der Verwalter-Knopf wohnt im Kopf der Bestandsliste, nicht in einer
+        # eigenen Gruppe: er handelt von genau diesen Fassungen.
+        mgr_label, mgr_argv = managers[0] if managers else (
+            "ProtonPlus", ["flatpak", "install", "-y", "--user", "flathub",
+                           "com.vysp3r.ProtonPlus"])
+        mgr = Gtk.Button(label=(_("{tool} öffnen") if managers
+                                else _("{tool} installieren")).format(
+                                    tool=mgr_label))
+        mgr.add_css_class("btn-ghost")
+        mgr.connect("clicked", self._appcheck_fix, _("Fassungen verwalten"),
+                    mgr.get_label(), mgr_argv, self._proton_reload)
+        for title, rows, note, recht in (
                 (_("Selbst installierte Fassungen"), eigen,
                  _("Von Hand oder über ein Werkzeug wie ProtonPlus "
-                   "eingespielt. Updates kommen nicht über Steam.")),
+                   "eingespielt. Updates kommen nicht über Steam."), mgr),
                 (_("Fassungen von Valve"),
                  [v for v in versions if v["valve"]],
-                 _("Lädt und aktualisiert Steam selbst."))):
+                 _("Lädt und aktualisiert Steam selbst."), None)):
             if not rows:
                 continue
             inhalt = box()
             inhalt.append(self._pro_note(note, small=True))
+            liste = box()
             for r in rows:
                 line = listrow(r["name"], r["facts"], pill=r["runtime"],
                                sev="ok" if r["ok"] else "crit",
                                mono=r["path"])
-                inhalt.append(sep_row(line))
-            self.pro_box.append(group(title, inhalt, len(rows)))
-
-        m = box()
-        m.append(self._pro_note(
-            _("Eigene Fassungen wie GE-Proton verwaltet ein eigenes Werkzeug. "
-              "dynotiq baut dafür nichts Zweites: es sagt, was fehlt oder "
-              "klemmt, und öffnet das Werkzeug, das es kann.") if managers else
-            _("Eigene Fassungen wie GE-Proton bringt ein Werkzeug wie "
-              "ProtonPlus auf den Rechner, hält sie aktuell und räumt alte "
-              "wieder weg. Hier ist keins davon installiert.")))
-        row = box(True, 10, margin_start=18, margin_end=18, margin_top=10,
-                  margin_bottom=16, halign=Gtk.Align.START)
-        for label, argv in managers or [
-                ("ProtonPlus", ["flatpak", "install", "-y", "--user", "flathub",
-                                "com.vysp3r.ProtonPlus"])]:
-            b = Gtk.Button(label=(_("{tool} öffnen") if managers
-                                  else _("{tool} installieren")).format(tool=label))
-            b.add_css_class("btn-fix" if managers else "btn-ghost")
-            b.connect("clicked", self._appcheck_fix, _("Fassungen verwalten"),
-                      b.get_label(), argv, self._proton_reload)
-            row.append(b)
-        m.append(row)
-        self.pro_box.append(group(_("Fassungen holen und entfernen"), m))
+                liste.append(sep_row(line))
+            # Eingeklappt, solange alles laeuft: die Pfade und Buildnummern
+            # braucht ein Laie erst, wenn etwas klemmt. Offen fuellten die
+            # zwei Gruppen allein die halbe Seite.
+            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_top=8,
+                               margin_bottom=12)
+            exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
+            exp.set_expanded(any(not r["ok"] for r in rows))
+            exp.set_child(liste)
+            inhalt.append(exp)
+            kopf = box(True, 12)
+            zahl = lbl(str(len(rows)), "grouphead")
+            zahl.set_valign(Gtk.Align.CENTER)
+            kopf.append(zahl)
+            if recht is not None:
+                kopf.append(recht)
+            self.pro_box.append(group(title, inhalt, kopf))
+        if not eigen and have_steam:
+            m = box()
+            m.append(self._pro_note(
+                _("Eigene Fassungen wie GE-Proton bringt ein Werkzeug wie "
+                  "ProtonPlus auf den Rechner, hält sie aktuell und räumt alte "
+                  "wieder weg.") + ("" if managers else " "
+                  + _("Hier ist keins davon installiert."))))
+            reihe = box(True, 10, margin_start=18, margin_end=18, margin_top=4,
+                        margin_bottom=16, halign=Gtk.Align.START)
+            reihe.append(mgr)
+            m.append(reihe)
+            self.pro_box.append(group(_("Eigene Fassungen"), m))
 
         if games:
             g = box()
             exp = Gtk.Expander(margin_start=18, margin_end=18, margin_bottom=14,
                                margin_top=8)
             exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
-            exp.set_expanded(any(not ok for _n, _t, _b, ok in games))
+            exp.set_expanded(any(sev != "ok" for _n, _t, _l, sev in games))
             inner = box(spacing=0)
-            for name, tool, built, ok in games:
+            for name, tool, line, sev in games:
                 r = box(True, 11, margin_top=8, margin_bottom=8)
-                dot = bar("bullet-ok" if ok else "bullet-crit")
+                dot = bar({"crit": "bullet-crit",
+                           "warn": "bullet-warn"}.get(sev, "bullet-ok"))
                 r.append(dot)
                 txt = box(spacing=2, hexpand=True)
                 txt.append(lbl(name, "row-title", wrap=True, chars=46))
-                txt.append(lbl(built, "row-detail", wrap=True, chars=54))
+                txt.append(lbl(line, "row-detail", wrap=True, chars=54))
                 r.append(txt)
                 pill = lbl(tool, "pill")
                 pill.set_valign(Gtk.Align.CENTER)
@@ -11690,20 +11899,66 @@ class App(Gtk.Application):
                 inner.append(sep_row(r))
             exp.set_child(inner)
             g.append(exp)
-            self.pro_box.append(group(_("Welcher Titel benutzt was"), g,
-                                      len(games)))
-
-        e = box()
-        e.append(self._pro_note(
-            _("Windows-Spiele laufen unter Linux nicht direkt. Proton "
-              "übersetzt sie. Weil jede Fassung andere Bibliotheken braucht, "
-              "läuft sie selbst in einem abgeschlossenen Container, den Steam "
-              "getrennt herunterlädt. Fehlt der Container oder ist die Fassung "
-              "unvollständig entpackt, startet das Spiel nicht, und Steam sagt "
-              "dazu nichts weiter als dass es gleich wieder beendet wurde. "
-              "Diese Seite sieht in den Dateien nach, woran es liegt.")))
-        self.pro_box.append(group(_("Wozu das alles gut ist"), e))
+            self.pro_box.append(group(_("Welches Spiel nutzt welche Fassung"),
+                                      g, len(games)))
         return False
+
+    def _pro_row(self, r):
+        """Eine Befundzeile: Balken, Titel mit Kosten-Pill, Kurztext, die
+        lange Erklärung im Expander, der Knopf rechts."""
+        row = box(True, 13, margin_top=12, margin_bottom=12,
+                  margin_start=16, margin_end=16)
+        dot = bar({"crit": "bullet-crit",
+                   "warn": "bullet-warn"}.get(r["sev"], "bullet-ok"))
+        row.append(dot)
+        txt = box(spacing=3, hexpand=True)
+        # Was der Knopf kostet, gehoert neben den Titel, nicht in den
+        # aufgeklappten Text.
+        kopf = box(True, 8)
+        kopf.append(lbl(r["title"], "row-title", wrap=True, chars=56))
+        if r["fix"]:
+            verlust = r.get("risk") == "loss"
+            pill = lbl(_("Spielstände betroffen") if verlust
+                       else _("sicher"), "pill", xalign=0.5)
+            if verlust:
+                pill.add_css_class("accent")
+            pill.set_valign(Gtk.Align.CENTER)
+            kopf.append(pill)
+        txt.append(kopf)
+        txt.append(lbl(r["short"], "row-detail", wrap=True, chars=76))
+        exp = Gtk.Expander(margin_top=4)
+        exp.set_label_widget(lbl(_("Warum, und was es bewirkt"), "row-detail"))
+        innen = box(spacing=10)
+        innen.append(lbl(r["long"], "row-detail", wrap=True, chars=76))
+        weitere = [m for m in r.get("more") or () if m[1]]
+        if weitere:
+            reihe = box(True, 8, halign=Gtk.Align.START, margin_bottom=4)
+            for label, ziel, note in weitere:
+                b = Gtk.Button(label=label)
+                b.add_css_class("btn-quiet")
+                if isinstance(ziel, str):
+                    # Ein Ordner braucht keine Rueckfrage, er nimmt nichts weg.
+                    b.connect("clicked", lambda _b, p=ziel:
+                              Gio.AppInfo.launch_default_for_uri(
+                                  Gio.File.new_for_path(p).get_uri(), None))
+                else:
+                    b.connect("clicked", self._appcheck_fix, r["title"],
+                              label, ziel, self._proton_reload, None,
+                              _(note) if note else "")
+                reihe.append(b)
+            innen.append(reihe)
+        exp.set_child(innen)
+        txt.append(exp)
+        row.append(txt)
+        if r["fix"]:
+            label, argv = r["fix"][0], r["fix"][1]
+            note = r["fix"][2] if len(r["fix"]) > 2 else ""
+            b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
+            b.add_css_class("btn-fix")
+            b.connect("clicked", self._appcheck_fix, r["title"], label, argv,
+                      self._proton_reload, None, _(note) if note else "")
+            row.append(b)
+        return row
 
     def _pro_bulk(self, results, bad):
         """Die rechte Seite des Kartenkopfs: Zahl, und wo es lohnt ein Knopf.
@@ -11713,13 +11968,14 @@ class App(Gtk.Application):
         das dreimal dieselbe Wartezeit. Alles andere bleibt einzeln, weil es
         nichts teilt.
         """
-        zahl = lbl(_("{n} Punkt(e)").format(n=len(bad)) if bad
+        zahl = lbl(_("1 Punkt") if len(bad) == 1 else
+                   _("{n} Punkte").format(n=len(bad)) if bad
                    else _("nichts"), "sub")
         paare = [r["pair"] for r in results if r.get("pair")]
         argv = set_mappings_argv(paare) if len(paare) > 1 else None
         if not argv:
             return zahl
-        b = Gtk.Button(label=_("Alle {n} Titel umstellen").format(n=len(paare)),
+        b = Gtk.Button(label=_("Alle {n} Spiele umstellen").format(n=len(paare)),
                        valign=Gtk.Align.CENTER)
         b.add_css_class("btn-fix")
         b.connect("clicked", self._appcheck_fix, _("Fassungen umstellen"),
@@ -13736,6 +13992,37 @@ def selftest():
             assert steam_sees(werkzeuge[2][1]) and not steam_sees(falsch[1])
             assert prefix_fix_choice("GE-Proton11-1", werkzeuge + [falsch])[0] \
                 == "GE-Proton11-5", "die neuere zaehlt nicht, Steam kennt sie nicht"
+            # Fuer die naechsten Zusicherungen ein Spiel vortaeuschen: ohne
+            # das faellt jeder Fall still durch und sie pruefen nichts.
+            echt_game, echt_away = steam_game, steam_libraries_away
+            globals()["steam_game"] = lambda a: {
+                "name": "Testspiel", "path": "/x", "prefix": "/x/pfx"}
+            globals()["steam_libraries_away"] = lambda: []
+            try:
+                sichtbar = {n: p for n, p in werkzeuge if steam_sees(p)}
+                # Was Steam nicht sieht, zaehlt wie geloescht: sonst bekommt
+                # ein Spiel auf einer Fassung im Fremdordner nirgends einen
+                # Befund, waehrend Steam stumm eine andere nimmt.
+                assert missing_compat_games({"1": "GE-Proton11-9"}, sichtbar) \
+                    == [("Testspiel", "1", "GE-Proton11-9")]
+                assert missing_compat_games({"1": "GE-Proton11-5"},
+                                            sichtbar) == []
+                # Auch Valves Fassungen lassen sich deinstallieren, die
+                # Zuordnung bleibt stehen. Vorher fiel der Fall durch jedes
+                # Netz: kein Befund, dafuer eine falsche Prefix-Zeile.
+                assert missing_compat_games({"1": "proton_99"}, {},
+                                            tools=werkzeuge) \
+                    == [("Testspiel", "1", "proton_99")]
+                assert missing_compat_games({"1": "proton_11"}, {},
+                                            tools=werkzeuge) == []
+                # Haengt eine Bibliothek nicht, sieht alles darauf
+                # deinstalliert aus. Dann lieber gar nichts behaupten.
+                globals()["steam_libraries_away"] = lambda: ["/weg"]
+                assert missing_compat_games({"1": "proton_99"}, {},
+                                            tools=werkzeuge) == []
+            finally:
+                globals()["steam_game"] = echt_game
+                globals()["steam_libraries_away"] = echt_away
         finally:
             globals()["steam_root"] = wurzel
         # Der Rat haengt daran, ob der Knopf eine Fassung anbieten kann
@@ -14316,6 +14603,27 @@ def selftest():
     assert valve_tool_dir("proton_hotfix", valve) == "/a/hf"
     assert valve_tool_dir("proton_99", valve) == ""
     assert valve_tool_dir("GE-Proton11-5", valve) == ""
+    # Steam haengt die Nebennummer ohne Punkt an und laesst nur eine 0 weg.
+    # Wer nur die Hauptnummer vergleicht, findet 'Proton 6.3' nie und meldet
+    # eine vorhandene Fassung als geloescht. proton_5 darf dabei nicht an
+    # 'Proton 5.13' haengenbleiben.
+    alt_valve = dict(valve, **{"Proton 6.3": "/a/63", "Proton 5.13": "/a/513",
+                               "Proton 5.0": "/a/5", "Proton 4.11": "/a/411"})
+    # Fuenf Achsenmarken, fuenf verschiedene Zahlen. Die Spanne 1 ist der
+    # Netzgraph im Leerlauf, dort stand vorher dreimal dieselbe Zahl.
+    for spanne in (1.0, 1.4, 2.5, 9.9, 10.0, 100.0, 4096.0):
+        marken = [f"{spanne * (4 - i) / 4:.{axis_digits(spanne)}f}"
+                  for i in range(5)]
+        assert len(set(marken)) == 5, marken
+    assert valve_tool_dir("proton_63", alt_valve) == "/a/63"
+    assert valve_tool_dir("proton_513", alt_valve) == "/a/513"
+    assert valve_tool_dir("proton_411", alt_valve) == "/a/411"
+    assert valve_tool_dir("proton_5", alt_valve) == "/a/5"
+    # Und die Gegenrichtung nach derselben Regel, sonst stellt ein Knopf ein
+    # Spiel auf einen Namen, den Steam nicht kennt.
+    assert mapping_name("Proton 6.3", "/x/common/y") == "proton_63"
+    assert mapping_name("Proton 5.13", "/x/common/y") == "proton_513"
+    assert mapping_name("Proton 10.0", "/x/common/y") == "proton_10"
     # Ein Titel ohne Windows-Programmdatei ist kein Spiel, sondern ein
     # Hilfspaket von Valve, und gehoert nicht in die Spielliste
     with tempfile.TemporaryDirectory() as td:

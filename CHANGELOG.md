@@ -20,16 +20,54 @@
   name, the same way `--page` does.
 - The score ring is a plain 270 degree arc in the accent colour. The glow
   was drawn by hand out of stacked arcs and read as decoration.
-- New typeface: IBM Plex, with its monospace for anything measured, so
-  readings and timestamps line up in a column. It ships as a Recommends;
-  where the package is missing, Ubuntu carries the interface instead.
+- New typeface: Arial, falling back to Liberation Sans where it is
+  missing. The two share their metrics, so the same text wraps the same way
+  on either. Both know exactly two weights, so the interface uses regular
+  for text and bold for every emphasis, with nothing in between that
+  fontconfig would have to round. Fixed width is left to paths, identifiers
+  and logs; readings are set in the interface face, whose digits already
+  share one width. `fonts-liberation` ships as a Recommends.
 - The machine block in the sidebar can be turned off.
+- The sidebar drops its group headings for thin rules. Fourteen entries
+  carry themselves, and three more lines of capitals only filled the bar.
+
+### Proton
+
+- The page opens with a verdict: one sentence on whether your games start,
+  and below it what needs deciding, kept apart from what is only worth
+  knowing. The version lists collapse while everything works.
+- A build sitting in a directory Steam does not read counts as missing.
+  Steam never offers it, so a game pointing at one now gets the same
+  finding as a game pointing at a deleted build, instead of looking fine.
+- Builds from Valve can be uninstalled too, and Steam leaves the mapping
+  behind. That case is caught now. Where a Steam library is offline,
+  everything on it looks uninstalled, so the page says nothing rather than
+  something wrong.
+- Steam writes its own names without the dot and drops a trailing zero, so
+  `Proton 6.3` is `proton_63` and `Proton 10.0` is `proton_10`. Both
+  directions follow that rule now. Comparing only the major number found
+  `Proton 5.13` when `proton_5` was meant.
+- Builds that belong to umu are reported rather than hidden. They are not
+  offered for moving, because entries elsewhere expect them at a fixed
+  path, but for Steam they are just as unavailable.
+- The per-game list grades each entry the way the findings above it do. A
+  prefix built by a newer version is a warning, since only the step back
+  can damage it; a step forward is fine and says so.
 
 ### Fixed
 
 - Text views, entries, expanders and progress bars had no colour of their
   own and borrowed one from the system theme. That went unnoticed while
   everything was dark and would have left dark boxes on light cards.
+- The select-all box above an update source sat above the card heading
+  instead of beside it. `card_head` hands back the heading and its rule as
+  one column, and prepending to that column put the box on its own line.
+- Chart axes rounded their five marks to whole numbers. On the network
+  chart, whose range sits at 1 MB/s, three of the five read the same
+  value. The number of decimals follows the range now.
+- Counts read "1 service" and "1 point" instead of "1 service(s)" and
+  "1 point(s)". Eight of these had been left in the German and the English
+  text, in places where the rest of the app already spells both forms out.
 
 ## 0.3~beta - Proton, and free again
 

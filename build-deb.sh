@@ -29,7 +29,7 @@ Priority: optional
 Architecture: all
 Installed-Size: $(du -sk "$PKG" | cut -f1)
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0
-Recommends: librsvg2-bin, pkexec, fonts-ibm-plex
+Recommends: librsvg2-bin, pkexec, fonts-liberation
 Suggests: fwupd, flatpak
 Conflicts: dynolab
 Replaces: dynolab
