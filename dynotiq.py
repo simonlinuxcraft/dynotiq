@@ -21,6 +21,7 @@ import gettext
 import glob
 import hashlib
 import json
+import math
 import os
 import re
 import resource
@@ -8535,6 +8536,16 @@ def alpha(hexcol, a):
     return f"rgba({r},{g},{b},{a})"
 
 
+def ease_out(p):
+    """Weicher Auslauf ueber 0 bis 1.
+
+    Schnell an, langsam aus. Eine Zahl, die so hochlaeuft, wirkt angekommen,
+    waehrend eine lineare wirkt, als haette jemand sie angehalten.
+    """
+    p = min(max(p, 0.0), 1.0)
+    return 1 - (1 - p) ** 3
+
+
 def contrast(fore, back):
     """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21.
 
@@ -8906,43 +8917,120 @@ def clear(widget):
         child = nxt
 
 
+class Skeleton(Gtk.DrawingArea):
+    """Platzhalter fuer eine Liste, die noch geladen wird.
+
+    Er zeigt die Form dessen, was kommt, und atmet dabei. Wo er steht, dauert
+    das Lesen wirklich: 'ubuntu-drivers devices' braucht auf dieser Maschine
+    knapp vier Sekunden. Ein leeres Feld mit dem Wort "wird gelesen" darueber
+    sieht in derselben Zeit aus wie eine Seite, die haengt.
+
+    Er wird nicht abgeraeumt: die Seiten leeren ihre Box, sobald die Daten da
+    sind, und nehmen ihn dabei mit.
+    """
+
+    ATEM = 1.8            # Sekunden je Zyklus, langsamer wirkt tot
+
+    def __init__(self, zeilen=4, zeilenhoehe=58):
+        super().__init__(content_height=zeilen * zeilenhoehe, hexpand=True)
+        self.zeilen, self.zh = zeilen, zeilenhoehe
+        self.phase = 0.0
+        self.add_tick_callback(self._puls)
+        self.set_draw_func(self._draw)
+
+    def _puls(self, _w, clock):
+        self.phase = (clock.get_frame_time() / 1e6 / self.ATEM) % 1.0
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def _draw(self, _a, cr, w, h):
+        # Kosinus statt Saegezahn: so hat der Wechsel keinen Knick, und das
+        # Auge liest ihn als Atmen statt als Blinken.
+        staerke = .5 - .5 * math.cos(self.phase * 6.2832)
+        cr.set_source_rgba(*rgb(COLORS["fainter"]), .07 + .06 * staerke)
+        for i in range(self.zeilen):
+            y = i * self.zh + 14
+            # Titelzeile breit, Unterzeile schmaler: das ist die Form jeder
+            # Listenzeile in dieser App.
+            for breite, hoehe, versatz in ((.38, 11, 0), (.62, 9, 19)):
+                cr.rectangle(18, y + versatz, max((w - 36) * breite, 40), hoehe)
+                cr.fill()
+
+
 class Ring(Gtk.DrawingArea):
+    # Umdrehungen des laufenden Bogens je Sekunde, und die Dauer, in der die
+    # Zahl ihren neuen Wert anfaehrt. Beides in Sekunden gedacht, nicht in
+    # Frames: sonst laeuft die App auf einem 144-Hz-Schirm doppelt so schnell.
+    SPIN = 3.4
+    ZAEHLDAUER = 0.7
+
     def __init__(self, size=186):
         super().__init__(content_width=size, content_height=size)
-        self.value = 0
+        self.value = 0.0
         self.busy = False
         self.angle = 0.0
         self.step = 0            # erledigte Prüfungen
         self.steps = 0           # Prüfungen gesamt
-        self.timer = None
+        self.tick = None         # laufender Bogen
+        self.zaehl = None        # Zahl faehrt ihren Wert an
+        self.von = self.ziel = 0.0
+        self.t0 = 0
         self.set_draw_func(self._draw)
 
-    def set_value(self, v):
-        self.value = v
+    def set_value(self, v, weich=True):
+        """Den Wert anfahren statt ihn zu setzen.
+
+        Nach einem Scan springt die Zahl sonst von 0 auf 88, und der Ring
+        springt mit. Hochgezaehlt liest sich dasselbe Ergebnis als Ergebnis.
+        """
+        ziel = float(v)
+        if not weich or ziel == self.value:
+            self.value = ziel
+            self.queue_draw()
+            return
+        self.von, self.ziel, self.t0 = self.value, ziel, 0
+        if self.zaehl is None:
+            self.zaehl = self.add_tick_callback(self._zaehlen)
+
+    def _zaehlen(self, _w, clock):
+        if not self.t0:
+            self.t0 = clock.get_frame_time()
+        p = (clock.get_frame_time() - self.t0) / (self.ZAEHLDAUER * 1e6)
+        self.value = self.von + (self.ziel - self.von) * ease_out(p)
         self.queue_draw()
+        if p >= 1.0:
+            self.value, self.zaehl = self.ziel, None
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
 
     def set_busy(self, busy, steps=0):
         """Während des Scans dreht ein Bogen, statt dass eine tote Zahl steht."""
         self.busy = busy
         self.step, self.steps = 0, steps
-        if busy and not self.timer:
-            self.timer = GLib.timeout_add(40, self._spin)
-        elif not busy and self.timer:
-            GLib.source_remove(self.timer)
-            self.timer = None
+        if busy and self.tick is None:
+            self.tick = self.add_tick_callback(self._spin)
+        elif not busy and self.tick is not None:
+            self.remove_tick_callback(self.tick)
+            self.tick = None
         self.queue_draw()
 
     def set_step(self, done, total):
         self.step, self.steps = done, total
         self.queue_draw()
 
-    def _spin(self):
+    def _spin(self, _w, clock):
+        """Der laufende Bogen, im Takt des Bildschirms statt alle 40 ms.
+
+        Der Winkel kommt aus der Uhr und nicht aus einem Zaehler: faellt ein
+        Frame aus, steht der Bogen danach dort, wo er zeitlich hingehoert,
+        statt langsamer geworden zu sein.
+        """
         if not self.busy:
-            self.timer = None
-            return False
-        self.angle = (self.angle + 0.16) % 6.2832
+            self.tick = None
+            return GLib.SOURCE_REMOVE
+        self.angle = (clock.get_frame_time() / 1e6 * self.SPIN) % 6.2832
         self.queue_draw()
-        return True
+        return GLib.SOURCE_CONTINUE
 
     # Offener Bogen statt Vollkreis: er beginnt links unten bei 135 Grad und
     # laeuft ueber 270 Grad. Die Luecke unten gibt der Zahl einen Boden.
@@ -8981,7 +9069,10 @@ class Ring(Gtk.DrawingArea):
         cr.select_font_face(CAIRO_SANS, 0, 1)
         cr.set_source_rgb(*rgb(COLORS["text"]))
         cr.set_font_size(54)
-        t = f"{self.step}/{self.steps}" if self.busy and self.steps else str(int(self.value))
+        # Gerundet, nicht abgeschnitten: beim Hochzaehlen stuende sonst 87,
+        # waehrend der Bogen schon auf 88 steht.
+        t = (f"{self.step}/{self.steps}" if self.busy and self.steps
+             else str(round(self.value)))
         if self.busy and self.steps:
             cr.set_font_size(30)
         e = cr.text_extents(t)
@@ -9465,7 +9556,12 @@ class App(Gtk.Application):
 
         root = box(True)
         root.append(self._sidebar())
-        self.stack = Gtk.Stack(hexpand=True)
+        # Ueberblenden statt harter Schnitt. 160 ms ist die Spanne, in der ein
+        # Wechsel weich wirkt, ohne dass man auf ihn wartet, und sie deckt
+        # nebenbei den Aufbau der Seite darunter zu.
+        self.stack = Gtk.Stack(hexpand=True,
+                               transition_type=Gtk.StackTransitionType.CROSSFADE,
+                               transition_duration=160)
         self.stack.add_css_class("page")
         self.pages = {}
         for name in NAV:
@@ -9480,6 +9576,7 @@ class App(Gtk.Application):
         self.win.present()
         # Erst wenn das Fenster steht, sonst hängt der Dialog vor dem Nichts.
         GLib.idle_add(self._maybe_intro)
+        GLib.timeout_add_seconds(2, self._prefetch)
         if self.start_page in NAV and self.start_page != "Übersicht":
             self._nav_clicked(self.nav_buttons[self.start_page], self.start_page)
 
@@ -9809,6 +9906,23 @@ class App(Gtk.Application):
                       "{cpu}\n{gpu}".format(
                           cpu=cpu_model(),
                           gpu=g["name"] if g else _("Keine dGPU")))
+
+    def _prefetch(self):
+        """Eine teure Seite je Aufruf im Voraus bauen.
+
+        Die vier hier kosten zusammen fast vier zehntel Sekunden, in denen das
+        Fenster beim ersten Klick gestanden haette. Vorgebaut merkt sie
+        niemand: der Nutzer liest noch die Uebersicht.
+
+        Nur Seiten, die beim Bauen nichts nachladen. Wer einen Worker startet,
+        soll das tun, wenn die Seite wirklich gefragt ist, und nicht beim Start
+        drei Hintergrundlaeufe nebeneinander legen.
+        """
+        for name in ("Einstellungen", "Prüfstand", "Live-Monitor", "App-Check"):
+            if name not in self.built:
+                self._build(name)
+                return True             # eine je Durchlauf, sonst ruckelt es
+        return False
 
     def _nav_clicked(self, btn, name):
         for b in self.nav_buttons.values():
@@ -10442,6 +10556,7 @@ class App(Gtk.Application):
         head, self.drv_sub = self._head(_("Treiber"), _("wird gelesen …"))
         p.append(head)
         self.drv_box = box(spacing=16)
+        self.drv_box.append(Skeleton(4))
         p.append(self.drv_box)
         self.work(self._drivers_worker, self.drv_sub)
         return self._scroll(p)
@@ -10544,6 +10659,9 @@ class App(Gtk.Application):
         head, self.upd_sub = self._head(_("Updates"), _("wird gelesen …"), *buttons)
         p.append(head)
         self.upd_box = box(spacing=16)
+        # apt, snap, flatpak und fwupd nacheinander zu fragen dauert gut drei
+        # Sekunden, und bis dahin stuende die Seite leer.
+        self.upd_box.append(Skeleton(3))
         p.append(self.upd_box)
         self.upd_checks = {}
         self._updates_reload()
@@ -11549,8 +11667,10 @@ class App(Gtk.Application):
         p = box(spacing=16)
         head, self.app_sub = self._head(_("App-Check"), _("Anwendung wählen und prüfen"))
         p.append(head)
-        self.apps = desktop_apps()
-        names = sorted(self.apps, key=str.lower)
+        # Die Liste kommt aus dem Hintergrund: alle Starter zu lesen kostet
+        # rund eine fuenftel Sekunde, und die haette das Fenster beim ersten
+        # Oeffnen dieser Seite gestanden. Sie faengt leer an und fuellt sich.
+        self.apps = {}
         # Die eingebaute Suche des Aufklappmenues trifft nur am Wortanfang des
         # ganzen Namens. Nach "A Total War Saga: TROY" sucht aber niemand mit
         # dem A, deshalb ein eigener Filter, der auch mitten im Namen greift.
@@ -11558,9 +11678,9 @@ class App(Gtk.Application):
             Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
         self.app_filter.set_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.app_filter.set_ignore_case(True)
+        self.app_names = Gtk.StringList.new([_("wird gelesen …")])
         self.app_pick = Gtk.DropDown.new(
-            Gtk.FilterListModel.new(Gtk.StringList.new(names or [_("nichts gefunden")]),
-                                    self.app_filter),
+            Gtk.FilterListModel.new(self.app_names, self.app_filter),
             Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
         self.app_pick.set_hexpand(True)
         self.app_pick.connect("notify::selected", lambda *_: self._appcheck_preview())
@@ -11597,14 +11717,24 @@ class App(Gtk.Application):
 
         self.app_box = box(spacing=16)
         p.append(self.app_box)
+        self._appcheck_hint(_("Anwendungen werden gelesen …"))
+        self.work(lambda: GLib.idle_add(self._appcheck_apps, desktop_apps()),
+                  self.app_sub)
+        return self._scroll(p)
+
+    def _appcheck_apps(self, apps):
+        """Die gelesenen Starter in das Aufklappmenue, laeuft ueber idle_add."""
+        self.apps = apps
+        namen = sorted(apps, key=str.lower) or [_("nichts gefunden")]
+        self.app_names.splice(0, self.app_names.get_n_items(), namen)
         self._appcheck_hint(
             _("{n} Anwendungen gefunden. Gesucht wird nach fehlenden "
               "Bibliotheken, abgeschnittenen Rechten in der Sandbox, "
               "blockierten Zugriffen, Abstürzen und Fehlern im Journal. "
               "Wo es eine Lösung gibt, steht ein Knopf daneben."
-              ).format(n=len(self.apps)))
+              ).format(n=len(apps)))
         self._appcheck_preview()
-        return self._scroll(p)
+        return False
 
     def _appcheck_hint(self, text):
         clear(self.app_box)
@@ -14668,6 +14798,13 @@ def selftest():
     # 'Proton 5.13' haengenbleiben.
     alt_valve = dict(valve, **{"Proton 6.3": "/a/63", "Proton 5.13": "/a/513",
                                "Proton 5.0": "/a/5", "Proton 4.11": "/a/411"})
+    # Die Kurve jeder Bewegung: startet bei null, kommt genau bei eins an,
+    # und liegt dazwischen immer ueber der Geraden. Ohne das Letzte waere es
+    # kein Auslauf, sondern ein Anlauf.
+    assert ease_out(0) == 0.0 and ease_out(1) == 1.0
+    assert ease_out(-0.5) == 0.0 and ease_out(1.7) == 1.0, "ausserhalb geklemmt"
+    assert all(ease_out(x / 20) > x / 20 for x in range(1, 20))
+    assert all(ease_out(x / 20) < ease_out((x + 1) / 20) for x in range(20))
     # Fuenf Achsenmarken, fuenf verschiedene Zahlen. Die Spanne 1 ist der
     # Netzgraph im Leerlauf, dort stand vorher dreimal dieselbe Zahl.
     for spanne in (1.0, 1.4, 2.5, 9.9, 10.0, 100.0, 4096.0):

@@ -39,6 +39,29 @@
 - The sidebar drops its group headings for thin rules. Fourteen entries
   carry themselves, and three more lines of capitals only filled the bar.
 
+### Motion
+
+- Pages cross-fade into each other over 160 ms instead of cutting. The score
+  ring counts up to its value rather than jumping there, easing out, so it
+  travels through the status colours on the way and arrives instead of
+  stopping.
+- Both animations run on the frame clock rather than on a 40 ms timer, and
+  the spinning arc takes its angle from that clock instead of adding a fixed
+  step per tick. A dropped frame no longer slows it down, and it runs at the
+  same speed on a 60 and a 144 Hz screen.
+- Opening the app check no longer freezes the window for a third of a second.
+  Reading every launcher on the machine takes 224 ms of that, and it happens
+  in the background now, while the page is already there.
+- The four pages that cost real time to assemble are built during the idle
+  after startup, one every two seconds, while you are still reading the
+  overview. Clicking them afterwards costs microseconds rather than the 107
+  to 136 ms each of them needed. Pages that fetch something on build are left
+  out on purpose: that work should start when you actually ask for the page.
+- Where the wait is real, a placeholder breathes in the shape of what is
+  coming, instead of an empty page under the words "wird gelesen". Reading
+  the driver list takes close to four seconds, `ubuntu-drivers devices`
+  alone, and asking apt, snap, flatpak and fwupd takes three.
+
 ### Proton
 
 - The page opens with a verdict: one sentence on whether your games start,
