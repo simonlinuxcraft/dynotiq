@@ -2945,6 +2945,12 @@ def move_tools_argv(target, paths):
     return ["sh", "-c",
             'd="$1"; shift; mkdir -p "$d" || exit 1; rc=0; '
             'for p in "$@"; do '
+            # Dieselbe Pruefung wie in remove_tool_argv, und aus demselben
+            # Grund: die Shell haelt sich nicht daran, was der Aufrufer
+            # gemeint hat, sondern an das, was sie selbst nachsieht.
+            'case "$p" in *"/compatibilitytools.d/"*) ;; '
+            '*) echo "Nicht unter compatibilitytools.d, uebersprungen: $p" >&2; '
+            'rc=1; continue ;; esac; '
             'if [ -e "$d/${p##*/}" ]; then '
             'echo "Bleibt liegen, dort gibt es das schon: $p" >&2; rc=1; '
             'else mv -- "$p" "$d" || rc=1; fi; done; exit $rc',
@@ -4638,6 +4644,28 @@ def app_check_program(entry):
                       ).format(path=path),
                     (_("Starter entfernen"), ["rm", "--", path])))
     return out
+
+
+def anonym(text):
+    """Den Kontonamen aus einem Text nehmen, der die Maschine verlaesst.
+
+    Alles, was ein Knopf in die Zwischenablage legt, ist zum Weitergeben
+    gedacht: Berichte landen in Issues und Foren. Der Home-Pfad allein zu
+    ersetzen reicht dafuer nicht. Eine zweite Platte haengt unter
+    /media/<name> oder /run/media/<name>, und genau die steht im Befund ueber
+    einen vollen Datentraeger.
+
+    Ersetzt wird nur als eigener Pfadbestandteil und erst ab drei Zeichen:
+    ein Konto namens "pi" oder "u" in jedem Wort zu treffen, richtete mehr
+    Schaden an als der Name.
+    """
+    home = os.path.expanduser("~")
+    if home and home != "/":
+        text = text.replace(home, "~")
+    user = os.path.basename(home)
+    if len(user) >= 3:
+        text = re.sub(r"(?<=/)" + re.escape(user) + r"(?=/|$|\s)", "<user>", text)
+    return text
 
 
 def app_check_text(name, results):
@@ -6415,6 +6443,11 @@ def source_status(uri, codename, timeout=SOURCES_TIMEOUT):
     Eine nicht erreichbare Quelle ist 'unknown', nicht 'missing': ein Timeout
     sagt nichts darueber, ob der Anbieter Pakete gebaut hat.
     """
+    # urllib versteht auch file:// und ftp://. Die URI stammt aus
+    # sources.list.d, gehoert also root, aber eine Zeile dort soll diese App
+    # nicht dazu bringen, eine lokale Datei zu oeffnen.
+    if not uri.startswith(("http://", "https://")):
+        return "unknown"
     url = uri.rstrip("/") + f"/dists/{codename}/Release"
     try:
         req = urllib.request.Request(url, method="HEAD")
@@ -10250,8 +10283,7 @@ class App(Gtk.Application):
 
         def fill(text):
             buf.set_text(text)
-            copy.connect("clicked", lambda *_: Gdk.Display.get_default()
-                         .get_clipboard().set(text))
+            copy.connect("clicked", lambda *_: self._clip(text))
             return False
 
         def worker():
@@ -10291,6 +10323,8 @@ class App(Gtk.Application):
         except GLib.Error:
             return
         if choice == 1:
+            # Absichtlich ohne anonym(): das hier wird ausgefuehrt, nicht
+            # weitergegeben. Ein ersetzter Pfad waere ein kaputter Befehl.
             Gdk.Display.get_default().get_clipboard().set(f.cmd)
         elif choice == 2 and f.argv:
             if f.preview:
@@ -10546,6 +10580,8 @@ class App(Gtk.Application):
         d.set_default_button(1)
         self._confirm(_(inc["title"]), "\n".join(text),
                       [_("Schließen"), _("Schritte kopieren")],
+                      # Ebenfalls ohne anonym(): eine Anleitung zum
+                      # Nachmachen, keine zum Verschicken.
                       lambda: Gdk.Display.get_default().get_clipboard().set(
                           "\n".join(f"{n}. {s}" for n, s in enumerate(steps, 1))),
                       default=1)
@@ -11444,8 +11480,7 @@ class App(Gtk.Application):
             when=time.strftime("%d.%m. %H:%M", time.localtime(t))))
 
     def _dyno_copy(self):
-        Gdk.Display.get_default().get_clipboard().set(
-            format_summary(self.dyno_result))
+        self._clip(format_summary(self.dyno_result))
         self.dyno_sub.set_text(_("Bericht in der Zwischenablage"))
 
     def _fill_overlay_row(self):
@@ -11811,8 +11846,8 @@ class App(Gtk.Application):
         c.add_css_class("card")
         copy = Gtk.Button(label=_("Bericht kopieren"), valign=Gtk.Align.CENTER)
         copy.add_css_class("btn-ghost")
-        copy.connect("clicked", lambda *_: Gdk.Display.get_default().get_clipboard()
-                     .set(app_check_text(name, results)))
+        copy.connect("clicked",
+                     lambda *_: self._clip(app_check_text(name, results)))
         c.append(card_head(_("Ergebnis"), copy))
         for sev, title, detail, fix in results:
             r = box(True, 14, margin_top=13, margin_bottom=13,
@@ -13173,7 +13208,7 @@ class App(Gtk.Application):
             lines.append(f"  {f.detail}")
             if f.cmd:
                 lines.append(f"  $ {f.cmd}")
-        Gdk.Display.get_default().get_clipboard().set("\n".join(lines))
+        self._clip("\n".join(lines))
         btn.set_label(_("Kopiert"))
         GLib.timeout_add_seconds(2, lambda: btn.set_label(_("Bericht kopieren")) or False)
 
@@ -13286,6 +13321,15 @@ class App(Gtk.Application):
             # Die Auslastung traegt keine Grenze, die Temperatur schon.
             self._sev(self.charts["gpu_val"], record_state("gpu_temp", g["temp"]))
         return False
+
+    def _clip(self, text):
+        """Text in die Zwischenablage, ohne den Kontonamen.
+
+        Nur fuer das, was weitergegeben wird: Berichte und Protokolle. Ein
+        Befehl zum Ausfuehren geht unveraendert, dort waere ein ersetzter
+        Pfad schlicht falsch.
+        """
+        Gdk.Display.get_default().get_clipboard().set(anonym(text))
 
     def _state(self, widget, good, ok):
         for c in ("state-ok", "state-warn", "state-crit"):
@@ -13854,6 +13898,35 @@ def selftest():
         assert valid_pkg(echt), echt
     assert not valid_pkg("--force-yes") and not valid_pkg("foo-") \
         and not valid_pkg("rm -rf") and not valid_pkg("")
+
+    # Was ein Knopf in die Zwischenablage legt, ist zum Weitergeben gedacht.
+    # Der Kontoname steht in jedem Pfad einer zweiten Platte und gehoert dort
+    # nicht hin, der Home-Pfad allein zu ersetzen reicht dafuer nicht.
+    alt_home = os.environ.get("HOME", "")
+    try:
+        os.environ["HOME"] = "/home/pruefling"
+        assert anonym("/home/pruefling/.cache voll") == "~/.cache voll"
+        assert anonym("/media/pruefling/Games zu 87 % voll") \
+            == "/media/<user>/Games zu 87 % voll"
+        assert anonym("/run/media/pruefling/Platte") == "/run/media/<user>/Platte"
+        # Nur als ganzer Pfadbestandteil, sonst zerlegt der Name jedes Wort,
+        # in dem er zufaellig vorkommt.
+        assert anonym("pruefling-backup.log") == "pruefling-backup.log"
+        assert anonym("Dienst me.proton.vpn laeuft") == "Dienst me.proton.vpn laeuft"
+        # Ein sehr kurzes Konto wird nicht ersetzt: der Schaden waere groesser
+        os.environ["HOME"] = "/home/pi"
+        assert anonym("/media/pi/x") == "/media/pi/x"
+    finally:
+        os.environ["HOME"] = alt_home
+
+    # Zu einer Netzanfrage kommen nur http und https. urllib wuerde auch
+    # file:// oeffnen, und die URI stammt aus sources.list.d.
+    assert source_status("file:///etc/shadow", "noble") == "unknown"
+    assert source_status("ftp://x/y", "noble") == "unknown"
+
+    # Verschieben prueft den Pfad in der Shell selbst, wie das Loeschen auch
+    mv_guard = move_tools_argv("/ziel", ["/x/compatibilitytools.d/A"])[2]
+    assert '"/compatibilitytools.d/"' in mv_guard, "Verschieben ohne Pfadpruefung"
     # pkexec setzt die Umgebung zurück, deshalb muss env davor stehen
     assert update_cmd("apt", ["a"])[:3] == ["pkexec", "/usr/bin/env",
                                             "DEBIAN_FRONTEND=noninteractive"]
@@ -13902,7 +13975,10 @@ def selftest():
     # Was drueben schon liegt, darf nicht still liegenbleiben: der Lauf muss
     # scheitern, sonst meldet er Erfolg und der Befund steht danach wieder da.
     with tempfile.TemporaryDirectory() as td:
-        quelle, ziel = os.path.join(td, "q"), os.path.join(td, "z")
+        # Die Quelle liegt unter compatibilitytools.d, so wie im Ernstfall:
+        # der Befehl prueft das selbst und verschiebt sonst nichts.
+        quelle = os.path.join(td, "q", "compatibilitytools.d")
+        ziel = os.path.join(td, "z")
         os.makedirs(os.path.join(quelle, "GE-X"))
         os.makedirs(os.path.join(ziel, "GE-X"))
         assert subprocess.run(
@@ -13914,6 +13990,13 @@ def selftest():
             move_tools_argv(ziel, [os.path.join(quelle, "GE-Y")]),
             capture_output=True).returncode == 0
         assert os.path.isdir(os.path.join(ziel, "GE-Y"))
+        # Und was ausserhalb liegt, wird nicht angefasst, egal wer den Befehl
+        # zusammengebaut hat.
+        fremd = os.path.join(td, "woanders")
+        os.makedirs(fremd)
+        assert subprocess.run(move_tools_argv(ziel, [fremd]),
+                              capture_output=True).returncode == 1
+        assert os.path.isdir(fremd), "ausserhalb compatibilitytools.d angefasst"
 
     # Eine Quelle fuer die Vorgaengerfassung bleibt beim Upgrade stehen und
     # liefert nichts mehr. Der Grund muss dabeistehen, sonst raet der Nutzer.
