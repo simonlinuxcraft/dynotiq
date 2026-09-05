@@ -61,6 +61,13 @@ gpg --export "$KEY" > "$OUT/dynotiq.gpg"
 cmp -s "$OUT/dynotiq.gpg" packaging/dynotiq.gpg || {
   echo "packaging/dynotiq.gpg passt nicht zu $KEY"; exit 1; }
 
+# Die Marken aus dem Projekt, nicht nachgebaut: die Wortmarke in beiden
+# Fassungen (die Datei heisst nach dem Grund, auf dem sie liegt) und das
+# App-Zeichen als Favicon.
+cp icons/wordmark/png/dynotiq-wordmark-dark-w600.png "$OUT/wordmark-dark.png"
+cp icons/wordmark/png/dynotiq-wordmark-light-w600.png "$OUT/wordmark-light.png"
+cp icons/app-icon/svg/dynotiq-app.svg "$OUT/icon.svg"
+
 # Die Seite ist das Erste, was jemand von dynotiq sieht. Sie traegt deshalb
 # dieselbe Schrift, dieselben Toene und dieselbe Ampel wie die App, und sie
 # kann hell wie dunkel. Kein Bildschirmfoto: eines von dieser Maschine wuerde
@@ -73,6 +80,7 @@ cat > "$OUT/index.html" <<HTML
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dynotiq apt repository</title>
 <meta name="description" content="System diagnostics and tuning for Ubuntu.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
 :root{
   --bg:#0E1116; --card:#161A20; --raised:#1B2027; --text:#F2F3F5;
@@ -95,16 +103,14 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 .wrap{max-width:50rem; margin:0 auto}
-header{padding:76px 0 10px; text-align:center}
-.dial{width:132px; height:132px; margin:0 auto 26px; display:block}
-.dial .val{
-  font:700 34px Arial,"Liberation Sans",sans-serif; fill:var(--text);
+header{padding:86px 0 10px; text-align:center}
+/* Die Wortmarke aus dem Projekt, nicht nachgesetzt. Zwei Fassungen, die
+   Fassung fuer den dunklen Grund traegt helle Schrift. */
+.wordmark{width:270px; max-width:78%; height:auto; display:block; margin:0 auto}
+.wm-light{display:none}
+@media (prefers-color-scheme:light){
+  .wm-dark{display:none} .wm-light{display:block}
 }
-.dial .cap{
-  font:700 8px Arial,"Liberation Sans",sans-serif; fill:var(--faint);
-  letter-spacing:2.4px;
-}
-h1{margin:0; font-size:46px; font-weight:700; letter-spacing:-.025em}
 .lede{margin:20px auto 0; max-width:33rem; font-size:18px; color:var(--dim)}
 .ver{
   display:inline-block; margin-top:22px; padding:5px 13px; border-radius:999px;
@@ -162,17 +168,10 @@ code{
 </style>
 <div class="wrap">
 <header>
-  <svg class="dial" viewBox="0 0 120 120" aria-hidden="true">
-    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--track)"
-            stroke-width="9" stroke-linecap="round"
-            stroke-dasharray="217 289" transform="rotate(135 60 60)"/>
-    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--ok)"
-            stroke-width="9" stroke-linecap="round"
-            stroke-dasharray="191 289" transform="rotate(135 60 60)"/>
-    <text class="val" x="60" y="66" text-anchor="middle">88</text>
-    <text class="cap" x="60" y="82" text-anchor="middle">OF 100</text>
-  </svg>
-  <h1>dynotiq</h1>
+  <img class="wordmark wm-dark" src="wordmark-dark.png" alt="dynotiq"
+       width="599" height="142">
+  <img class="wordmark wm-light" src="wordmark-light.png" alt="dynotiq"
+       width="599" height="142">
   <p class="lede">System diagnostics and tuning for Ubuntu. It looks for what
     actually slows the machine down, says what it found in plain words, and
     puts a button next to the things it can fix.</p>
