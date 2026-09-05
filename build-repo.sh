@@ -174,9 +174,9 @@ code{
   <div class="ver">VERSION $VER</div>
 </header>
 
-<div class="shot"><img src="screenshot.jpg" alt="The dynotiq overview,
-  showing a system score and the findings below it" width="1100" height="810"
-  loading="lazy"></div>
+<div class="shot"><img src="screenshot.jpg" alt="The dynotiq overview, with a
+  system score and the current temperature, clock and free memory"
+  width="1100" height="392" loading="lazy"></div>
 
 <h2>Install</h2>
 <p>Four lines. The last one installs it, the first three tell apt where to
