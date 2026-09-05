@@ -78,6 +78,20 @@ snap and Ubuntu specifics such as the HWE kernel stack and `do-release-upgrade`,
 so on other distributions parts of it will report nothing useful. Support for
 further distributions is planned.
 
+## How it is built
+
+One Python file, GTK4 through the GObject bindings, the standard library, and
+nothing else. No framework, no package from pip, no build step. What it knows
+it reads from the machine itself: `/proc`, `/sys`, apt, snap, flatpak, systemd,
+fwupd and Steam's own files.
+
+It carries 707 assertions in a built-in selftest that needs no display and no
+network. CI runs it on every push in both languages, then builds the package
+and checks the catalogues against the source, because a test that only passes
+in German is half a test.
+
+    python3 dynotiq.py --selftest
+
 ## Install
 
 From the apt repository, which also keeps it updated:
