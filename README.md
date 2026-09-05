@@ -21,55 +21,38 @@ Nothing runs without asking first.
 
 ## What it does
 
-**System check** scans for outdated graphics drivers, thermal throttling, full
-filesystems, a growing journal, failed units, startup entries and pending
-updates. Every finding says what is wrong, why it matters and what to do about
-it, and where the app can act on it, the finding leads to the page that does.
+It scans the machine, explains each finding in plain language, and where it can
+act, the finding carries the button that does it. Fourteen pages. Three of them
+are the reason the rest exists.
 
-**Incidents** reads the journal for audio dropouts, GPU driver errors,
-out-of-memory kills and failed systemd units. Each entry records temperature,
-clock and load at that moment, so a bare error message turns into a connection.
+**Proton.** A Windows game that stopped starting is the hardest thing on this
+list to work out. Every Proton version from 5.13 on runs inside a container
+Steam downloads separately, and when that container is missing or damaged, no
+game on that version starts while Steam says nothing beyond "exited
+unexpectedly". The page reads Steam's own files, names the cause and carries
+the fix: fetch the runtime again, take out an assignment that breaks it, move a
+version into the folder Steam actually reads, or switch a title to a Proton
+version its Windows store fits. The same page covers the rest of what Proton
+leans on: ntsync, Resizable BAR, the file descriptor limit, MangoHud. Shader
+caches and prefixes left behind by games uninstalled long ago come up in the
+system check.
 
-**Updates** brings apt, Snap, Flatpak and firmware together, with download
-sizes, per-entry selection, a live log and an optional Timeshift snapshot
-beforehand. Afterwards it verifies which entries actually went through.
+**Incidents.** Audio dropouts, GPU driver errors, out-of-memory kills and
+failed units, read out of the journal. Each one carries the temperature, clock
+and load from the moment it happened, which is usually the part that turns an
+error message into an explanation.
 
-**App check** takes an installed application apart: where its updates come
-from, how much it occupies in your home directory and how much of that is pure
-cache, unresolved libraries, disconnected Snap interfaces, missing Flatpak
-permissions, crashes, journal errors. Technical terms get translated, so
-`audio-record` reads as microphone. Where a fix exists, there is a button.
+**Dyno.** Records temperature, clock and waiting times over minutes under real
+load. It answers when the machine starts throttling, and whether it ever stood
+still waiting for a free core, for memory or for the disk. Stutter without heat
+is invisible in a temperature curve.
 
-
-**Games** checks what actually bites while playing: shader caches and their
-limits, the Proton build a title is set to, launch options, ntsync, Resizable
-BAR, titles pointing at a Proton build that is no longer installed, and prefixes
-left behind by games you uninstalled long ago.
-
-**Proton** is where a Windows game that stopped starting gets explained. Every
-Proton version from 5.13 on runs inside a container Steam downloads separately,
-and when that container is missing or damaged, no game starts on that version
-while Steam says nothing beyond "exited unexpectedly". The page reads Steam's
-own files, names the cause, and carries a button for it: fetch the runtime
-again, take out an assignment that breaks it, move a version Steam never looks
-at into the folder it does read, or switch a title to a Proton version its
-Windows store actually fits.
-
-**Dyno** records temperature, clock and waiting times over minutes under real
-load and answers what a snapshot cannot: at which point does it start
-throttling, and did the machine ever stand still waiting for a free core, for
-memory or for the disk. The last part matters because stutter without any heat
-looks like nothing at all in a temperature curve.
-
-**Benchmark** measures CPU, memory and disk against the median of your own
-earlier runs. A number without a baseline says nothing.
-
-**Settings** keeps the background watcher on a leash: how often it looks, and
-whether it interrupts for anything below a critical incident. Everything can go
-back to the defaults in one step, and history and snoozed findings survive that.
-
-Plus a driver page, a live monitor, storage analysis with cleanup, autostart
-control including slow boot services, and a history of every scan.
+The other eleven pages are the ordinary work: pending updates from apt, Snap,
+Flatpak and firmware in one list with sizes and an optional snapshot
+beforehand, an app inspector that says where a program updates from and what it
+occupies, drivers, a live monitor, storage with cleanup, a benchmark against
+your own earlier runs, autostart including slow boot services, the history of
+every scan, and settings.
 
 ## Ubuntu for now
 
@@ -91,6 +74,15 @@ and checks the catalogues against the source, because a test that only passes
 in German is half a test.
 
     python3 dynotiq.py --selftest
+
+It is written with AI assistance. That is worth saying outright rather than
+leaving to be guessed at. What it does not mean: nothing goes in unread or
+untested. Every fix the app offers has been triggered on a real machine before
+release, the selftest is the floor and not the ceiling, and everything that
+touches the system with root rights is written out in
+[SECURITY.md](SECURITY.md), line by line. If something in here reads as
+generated and wrong, that is a bug, and the issue tracker is the right place
+for it.
 
 ## Install
 
