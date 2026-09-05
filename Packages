@@ -1,0 +1,28 @@
+Package: dynotiq
+Version: 0.4~beta
+Architecture: all
+Maintainer: simonlinuxcraft <simonlinuxcraft@pm.me>
+Installed-Size: 1576
+Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0
+Recommends: librsvg2-bin, pkexec, fonts-liberation
+Suggests: fwupd, flatpak
+Conflicts: dynolab
+Replaces: dynolab
+Filename: ./dynotiq_0.4~beta_all.deb
+Size: 338706
+MD5sum: bacc19a534bb14169eb27e47e845c7a5
+SHA1: a714d52ee2d0b3e978d14329876e7412a201893b
+SHA256: d86096bf504ad3b868b173d385070302c89ad3173ead5143ea54898de3b6acaf
+Section: utils
+Priority: optional
+Description: System diagnostics and tuning for Ubuntu
+ Scans the machine for what slows it down: outdated graphics drivers,
+ thermal throttling, full filesystems, a growing journal, failed units
+ and stale autostart entries. Reads the journal for audio dropouts, GPU
+ driver errors and out-of-memory kills, and explains each one with
+ concrete steps.
+ .
+ Shows pending updates from apt, snap, flatpak and fwupd and installs the
+ selected ones, monitors CPU, GPU, RAM and disk live, and benchmarks the
+ machine.
+
