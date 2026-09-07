@@ -354,11 +354,12 @@ def history_append(entry):
             # run-Eintraegen (rund 900 Byte) nie darunter, und danach wird sie
             # bei jedem Eintrag komplett neu geschrieben.
             keep, total = [], 0
-            for line in reversed(open(HISTORY_FILE).readlines()):
-                total += len(line.encode())
-                if total > HISTORY_BYTES or len(keep) >= HISTORY_MAX:
-                    break
-                keep.append(line)
+            with open(HISTORY_FILE) as f:
+                for line in reversed(f.readlines()):
+                    total += len(line.encode())
+                    if total > HISTORY_BYTES or len(keep) >= HISTORY_MAX:
+                        break
+                    keep.append(line)
             fd, tmp = tempfile.mkstemp(dir=DATA_DIR, prefix=".hist")
             with os.fdopen(fd, "w") as f:
                 f.writelines(reversed(keep))
@@ -504,11 +505,12 @@ def sh(args, timeout=15):
 
 def cpu_times(per_core=False):
     out = []
-    for line in open("/proc/stat"):
-        if not line.startswith("cpu"):
-            break
-        vals = [int(x) for x in line.split()[1:]]
-        out.append((sum(vals), vals[3] + vals[4]))
+    with open("/proc/stat") as f:
+        for line in f:
+            if not line.startswith("cpu"):
+                break
+            vals = [int(x) for x in line.split()[1:]]
+            out.append((sum(vals), vals[3] + vals[4]))
     return out if per_core else out[0]
 
 
@@ -520,9 +522,10 @@ def busy_percent(prev, now):
 def meminfo_raw():
     """Alle Zeilen aus /proc/meminfo als {Name: kB}."""
     d = {}
-    for line in open("/proc/meminfo"):
-        k, _sep, v = line.partition(":")
-        d[k] = int(v.split()[0])
+    with open("/proc/meminfo") as f:
+        for line in f:
+            k, _sep, v = line.partition(":")
+            d[k] = int(v.split()[0])
     return d
 
 
@@ -666,9 +669,10 @@ def short_cpu(name):
 
 
 def cpu_model():
-    for line in open("/proc/cpuinfo"):
-        if line.startswith("model name"):
-            return short_cpu(line.split(":", 1)[1].strip())
+    with open("/proc/cpuinfo") as f:
+        for line in f:
+            if line.startswith("model name"):
+                return short_cpu(line.split(":", 1)[1].strip())
     return "Unbekannte CPU"
 
 
@@ -793,21 +797,22 @@ def autostart_set(entry, enabled):
 def mounts():
     keep = {"ext4", "ext3", "btrfs", "xfs", "vfat", "exfat", "ntfs3", "ntfs", "f2fs"}
     out = []
-    for line in open("/proc/mounts"):
-        src, target, fstype = line.split()[:3]
-        if fstype not in keep or not src.startswith("/dev/"):
-            continue
-        target = target.replace("\\040", " ")
-        try:
-            s = os.statvfs(target)
-        except OSError:
-            continue
-        total = s.f_blocks * s.f_frsize
-        free = s.f_bavail * s.f_frsize
-        if total == 0:
-            continue
-        out.append({"target": target, "src": src, "fs": fstype,
-                    "total": total, "free": free, "used": total - free})
+    with open("/proc/mounts") as f:
+        for line in f:
+            src, target, fstype = line.split()[:3]
+            if fstype not in keep or not src.startswith("/dev/"):
+                continue
+            target = target.replace("\\040", " ")
+            try:
+                s = os.statvfs(target)
+            except OSError:
+                continue
+            total = s.f_blocks * s.f_frsize
+            free = s.f_bavail * s.f_frsize
+            if total == 0:
+                continue
+            out.append({"target": target, "src": src, "fs": fstype,
+                        "total": total, "free": free, "used": total - free})
     return sorted(out, key=lambda m: m["target"])
 
 
@@ -843,13 +848,14 @@ def dir_sizes(paths, timeout=60):
 
 def net_bytes():
     rx = tx = 0
-    for line in open("/proc/net/dev").readlines()[2:]:
-        iface, _, rest = line.partition(":")
-        if iface.strip() == "lo":
-            continue
-        f = rest.split()
-        rx += int(f[0])
-        tx += int(f[8])
+    with open("/proc/net/dev") as fh:
+        for line in fh.readlines()[2:]:
+            iface, _, rest = line.partition(":")
+            if iface.strip() == "lo":
+                continue
+            f = rest.split()
+            rx += int(f[0])
+            tx += int(f[8])
     return rx, tx
 
 
@@ -858,12 +864,13 @@ DISK_RE = re.compile(r"^(sd[a-z]+|nvme\d+n\d+|vd[a-z]+|mmcblk\d+)$")
 
 def disk_bytes():
     rd = wr = 0
-    for line in open("/proc/diskstats"):
-        f = line.split()
-        if not DISK_RE.match(f[2]):
-            continue
-        rd += int(f[5]) * 512
-        wr += int(f[9]) * 512
+    with open("/proc/diskstats") as fh:
+        for line in fh:
+            f = line.split()
+            if not DISK_RE.match(f[2]):
+                continue
+            rd += int(f[5]) * 512
+            wr += int(f[9]) * 512
     return rd, wr
 
 
@@ -1795,6 +1802,7 @@ def parse_denials(text, label):
     return len(hits), ops
 
 
+SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
 APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": _("Paket"),
                   "lokal": _("manuell installiert"), "appimage": "AppImage",
                   "steam": _("Steam-Titel")}
@@ -8642,7 +8650,10 @@ def ease_out(p):
 
 
 def contrast(fore, back):
-    """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21.
+    """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21. Nur fuer den Selftest.
+
+    Steht hier und nicht im Testteil, weil sie zu den Farbtabellen darueber
+    gehoert. Die Oberflaeche ruft sie nicht.
 
     Die Datei argumentiert an mehreren Stellen mit solchen Zahlen. Gemessen
     hat sie bisher keine, und genau dabei faellt auf, dass ein Ton, der auf
@@ -9450,9 +9461,11 @@ MENU_XML = """<node>
 
 
 class Tray:
-    def __init__(self, items, tooltip=_("Systemdiagnose"), on_ready=None):
+    def __init__(self, items, tooltip=None, on_ready=None):
         self.items = items                  # [(id, label, callback)], label None = Trenner
-        self.tooltip = tooltip
+        # Erst hier uebersetzt: als Vorgabewert liefe _() beim Import,
+        # also einmal fuer die Laufzeit des Programms.
+        self.tooltip = tooltip or _("Systemdiagnose")
         self.on_ready = on_ready
         self.bus = None
         self.ok = False
@@ -10941,8 +10954,6 @@ class App(Gtk.Application):
         self._sources_card(sources)
         return False
 
-    SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
-
     def _sources_card(self, rows):
         """Woher die Updates kommen und ob jede Quelle noch etwas liefert.
 
@@ -10991,7 +11002,7 @@ class App(Gtk.Application):
             row.append(txt)
             # Ohne Farbe: den Zustand sagt schon der Punkt links, das Kuerzel
             # sagt nur, um welche Art von Quelle es geht.
-            pill = lbl(self.SOURCE_KIND.get(art, art), "pill")
+            pill = lbl(SOURCE_KIND.get(art, art), "pill")
             pill.set_valign(Gtk.Align.CENTER)
             row.append(pill)
             inner.append(sep_row(row))
