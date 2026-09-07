@@ -7274,6 +7274,9 @@ def check_dead_launchers(ctx):
                    actions=[(_("Einträge entfernen"), "_remove_launchers", None)])
 
 
+# Die Kennung kommt bei snap und flatpak aus dem Dateinamen des Menueeintrags,
+# und der Text hier ist zum Kopieren ins Terminal gedacht. Deshalb durch
+# shlex.quote: ein Dateiname mit Semikolon oder $() soll dort ein Name bleiben.
 APP_REMOVE = {"deb": "sudo apt remove {id}", "snap": "sudo snap remove {id}",
               "flatpak": "flatpak uninstall {id}"}
 
@@ -7314,7 +7317,8 @@ def check_duplicate_apps(ctx):
             lines.append(("user-trash-symbolic", "dim",
                           _("Älter ist {was}. Entfernen: {cmd}").format(
                               was=APP_KIND_LABEL.get(alt[0], alt[0]) + " " + alt[2],
-                              cmd=APP_REMOVE[alt[0]].format(id=alt[1]))))
+                              cmd=APP_REMOVE[alt[0]].format(
+                                  id=shlex.quote(alt[1])))))
     if not dupes:
         return None
     return Finding("info",
@@ -15355,6 +15359,14 @@ def selftest():
         == ("snap", "x", "1.39.0")
     assert older_install([("snap", "x", "1.39.0"), ("deb", "x", "1.39.0-2")]) is None
     assert older_install([("snap", "x", "stable"), ("deb", "x", "2024-06")]) is None
+    # Der Entfernen-Befehl wird kopiert und eingefuegt. Die Kennung stammt aus
+    # einem Dateinamen, ein Semikolon darin darf dort kein zweiter Befehl werden.
+    assert APP_REMOVE["flatpak"].format(id=shlex.quote("org.x$(id)")) \
+        == "flatpak uninstall 'org.x$(id)'"
+    assert APP_REMOVE["snap"].format(id=shlex.quote("foo;reboot")) \
+        == "sudo snap remove 'foo;reboot'"
+    assert APP_REMOVE["flatpak"].format(id=shlex.quote("org.mozilla.firefox")) \
+        == "flatpak uninstall org.mozilla.firefox"
     # Und beide muessen waehlbar bleiben: vorher fiel die zweite Anwendung
     # gleichen Namens aus der Auswahl des App-Checks.
     with tempfile.TemporaryDirectory() as td:
@@ -15400,7 +15412,9 @@ def selftest():
         assert all("&&" not in a and ";" not in a and "$" not in a
                    for a in rest), step
 
-    for chk in (check_journal, check_filesystems, check_gpu_driver):
+    # Über alle Checks, nicht über eine Auswahl: sonst fällt ein neuer Check
+    # mit eigenem argv aus dieser Zusicherung heraus, ohne dass es auffällt.
+    for chk in CHECKS:
         f = chk({"gpu": {"vendor": "nvidia", "driver": "1.0"}})
         if f and f.argv:
             for step in cmd_steps(f.argv):
@@ -15413,6 +15427,36 @@ def selftest():
         check_argv(step)
     for step in cmd_steps(flatpak_ppa_argv()):
         check_argv(step)
+    # Dieselbe Zusicherung noch einmal über den Syntaxbaum der ganzen Datei.
+    # Zur Laufzeit ist nur zu sehen, was auf dieser Maschine gerade anschlägt;
+    # hier fällt jede Shell unter pkexec auf, auch eine nie ausgelöste.
+    # ast steht hier und nicht oben: der Import kostet jeden Start 7 ms, und
+    # gebraucht wird er allein in dieser Zusicherung.
+    import ast
+    baum = ast.parse(read(os.path.abspath(__file__)) or "")
+    shells = []
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.List) or len(knoten.elts) < 4:
+            continue
+        vorn = [e.value if isinstance(e, ast.Constant) else None
+                for e in knoten.elts[:3]]
+        if vorn[0] != "pkexec" or vorn[2] != "-c" \
+                or not str(vorn[1] or "").endswith("sh"):
+            continue
+        shells.append(knoten.lineno)
+        skript = knoten.elts[3]
+        # Namen in der Bedingung eines a-wenn-b-sonst-c sind in Ordnung: sie
+        # wählen zwischen festen Texten, sie bringen keinen Wert hinein.
+        bedingt = {id(x) for t in ast.walk(skript) if isinstance(t, ast.IfExp)
+                   for x in ast.walk(t.test)}
+        for k in ast.walk(skript):
+            assert id(k) in bedingt \
+                or not isinstance(k, (ast.JoinedStr, ast.Call, ast.Name,
+                                      ast.Attribute, ast.Subscript)), \
+                f"Zeile {knoten.lineno}: der Skripttext ist nicht wörtlich"
+    # SECURITY.md nennt diese Zahl. Kommt eine fünfte Shell dazu, gehört sie
+    # dort beschrieben, statt still mitzulaufen.
+    assert len(shells) == 4, shells
     # Units über einer Minute oder Stunde sind genau die, die man sehen will
     assert parse_blame("11h 26min 16.414s snapd.service\n"
                        "1min 5.432s snapd.seeded.service\n"
