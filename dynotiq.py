@@ -313,13 +313,41 @@ def bench_vs_first(entries, key):
     return vals[-1][1] / vals[0][1], vals[0][0]
 
 
+def ensure_data_dir():
+    """Legt DATA_DIR an und hält es beim eigenen Konto.
+
+    Darin stehen Journalzeilen, Dienstnamen und Ausfallzeiten, und die gehen
+    kein zweites Konto auf der Maschine etwas an. Der Modus von makedirs greift
+    nur beim Anlegen, deshalb das chmod daneben: aus älteren Fassungen liegt
+    das Verzeichnis mit 0775 da und die beiden Dateien darin mit 0664.
+    """
+    os.makedirs(DATA_DIR, mode=0o700, exist_ok=True)
+    for path, mode in ((DATA_DIR, 0o700), (HISTORY_FILE, 0o600),
+                       (INCIDENTS_FILE, 0o600)):
+        try:
+            if os.path.exists(path) and os.stat(path).st_mode & 0o777 != mode:
+                os.chmod(path, mode)
+        except OSError:
+            pass
+
+
+def append_line(path, text):
+    """Eine Zeile anhängen, die Datei beim Anlegen nur für den eigenen Nutzer.
+
+    os.open statt open: dessen Modus gilt beim Anlegen, während open sich die
+    umask greift und damit 0664 hinterlässt.
+    """
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                           0o600), "a") as f:
+        f.write(text)
+
+
 def history_append(entry):
     """Schreibt einen Verlaufseintrag. Fehler dürfen den Aufrufer nicht killen,
     sonst hängt die Oberfläche bei voller Platte für immer im Ladezustand."""
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(HISTORY_FILE, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        ensure_data_dir()
+        append_line(HISTORY_FILE, json.dumps(entry) + "\n")
         if os.path.getsize(HISTORY_FILE) > HISTORY_BYTES:
             # Beide Grenzen, sonst greift keine: die Schwelle misst Bytes, ein
             # Schnitt auf HISTORY_MAX Zeilen allein bringt eine Datei aus langen
@@ -7954,7 +7982,7 @@ def incidents_sync(since="-24h"):
     with _INC_LOCK:
         lock = None
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
+            ensure_data_dir()
             lock = open(INCIDENTS_LOCK, "w")
             fcntl.flock(lock, fcntl.LOCK_EX)
         except OSError as e:
@@ -7979,9 +8007,8 @@ def incidents_sync(since="-24h"):
                          "units": episodes})
             if not fresh:
                 return []
-            with open(INCIDENTS_FILE, "a") as f:
-                for i in fresh:
-                    f.write(json.dumps(i) + "\n")
+            append_line(INCIDENTS_FILE,
+                        "".join(json.dumps(i) + "\n" for i in fresh))
             if len(known) + len(fresh) > INCIDENTS_MAX:
                 lines = open(INCIDENTS_FILE).readlines()[-INCIDENTS_MAX:]
                 tmp = INCIDENTS_FILE + ".tmp"
@@ -8000,15 +8027,28 @@ def incidents_sync(since="-24h"):
 
 def incidents_read(limit=None):
     """Alle Vorfälle, oder die letzten limit. Der Abgleich beim Anhängen braucht
-    die ganze Datei, sonst kommen ältere Einträge erneut dazu."""
+    die ganze Datei, sonst kommen ältere Einträge erneut dazu.
+
+    Einträge ohne die fünf Pflichtfelder fliegen hier raus, wie im Verlauf.
+    Jeder Verbraucher greift direkt zu: incident_key liest cat, die Übersicht
+    sev, die Seite title und detail. Eine von Hand bearbeitete Zeile hat sonst
+    den watch-Dienst beim Start umgeworfen, und der startet alle zehn Sekunden
+    neu, bis jemand die Datei repariert.
+    """
     out = []
     try:
         with open(INCIDENTS_FILE) as f:
             for line in f:
                 try:
-                    out.append(json.loads(line))
-                except ValueError:
+                    e = json.loads(line)
+                    if not isinstance(e, dict):
+                        continue
+                    e["t"] = float(e["t"])
+                    if not all(k in e for k in ("cat", "sev", "title", "detail")):
+                        continue
+                except (ValueError, TypeError, KeyError):
                     continue
+                out.append(e)
     except OSError:
         return []
     return out[-limit:] if limit else out
@@ -8176,7 +8216,18 @@ def classify(title, detail):
 
 
 def notify(title, body):
-    sh(["notify-send", "-a", "dynotiq", "-i", "dynotiq", title, body], timeout=10)
+    """Meldung auf den Desktop. Der Text wird escaped, nicht der Aufrufer.
+
+    In den Body geht auch rohe Journalzeile, und der Benachrichtigungsdienst
+    wertet dort Auszeichnung aus: gnome-shell nennt body-markup in seinen
+    Fähigkeiten und setzt ein <b> darin wirklich fett. Escaped wird hier statt
+    an der Aufrufstelle, damit es an einer neuen nicht vergessen werden kann.
+
+    Nur der Body. Die Überschrift ist nach der Spezifikation reiner Text, dort
+    stünde nach dem Escapen ein &amp; wörtlich auf dem Bildschirm.
+    """
+    sh(["notify-send", "-a", "dynotiq", "-i", "dynotiq",
+        title, GLib.markup_escape_text(body)], timeout=10)
 
 
 def release_notify():
@@ -8230,7 +8281,14 @@ def watch(interval=None):
     fixed = interval
     print(f"dynotiq watch: Intervall {fixed or load_config()['watch_interval']} s",
           flush=True)
-    incidents_sync("-1h")
+    # Derselbe Schutz wie um den Aufruf in der Schleife. Ohne ihn nimmt ein
+    # einziger unbrauchbarer Eintrag den Dienst mit, und zwar vor der ersten
+    # Runde: systemd startet ihn dann alle zehn Sekunden neu, bis jemand
+    # nachsieht.
+    try:
+        incidents_sync("-1h")
+    except Exception as e:
+        print(f"watch: {e}", file=sys.stderr, flush=True)
     last_release = 0.0
     rec = AutoRecorder()
     while True:
@@ -8355,7 +8413,7 @@ def bench_ram(seconds=1.5):
 
 
 def bench_disk(mib=256):
-    os.makedirs(DATA_DIR, exist_ok=True)
+    ensure_data_dir()
     path = os.path.join(DATA_DIR, "bench.tmp")
     # Eine Restdatei von einem abgebrochenen Lauf zaehlt beim Platzcheck mit
     if os.path.exists(path):
@@ -13751,6 +13809,65 @@ def selftest():
     assert [e["t"] for e in got] == [100.0, 200.0]
     assert all(isinstance(e["t"], float) for e in got)
     assert update_effect(got) is None and bench_vs_first(got, "cpun") == (0.8, 100.0)
+    # Dieselbe Prüfung für die Vorfälle. Jeder Verbraucher greift dort direkt
+    # zu, und der watch-Dienst rief das vor seiner Schleife ungeschützt auf:
+    # eine unbrauchbare Zeile nahm ihn beim Start mit, alle zehn Sekunden neu.
+    heil = {"t": 100.0, "cat": "Systemd", "sev": "crit",
+            "title": "systemd-Unit fehlgeschlagen", "detail": "foo.service"}
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+        f.write(json.dumps(heil) + "\n")
+        f.write('{"t": 101.0}\n')                          # abgebrochene Zeile
+        f.write('{"cat": "GPU", "sev": "crit", "title": "x", "detail": "y"}\n')
+        f.write('"nur ein string"\n')
+        f.write('[1, 2, 3]\n')
+        f.write('kein json\n')
+        broken_inc = f.name
+    real_inc = INCIDENTS_FILE
+    try:
+        globals()["INCIDENTS_FILE"] = broken_inc
+        inc = incidents_read()
+        # Was durchkommt, muss jeden Verbraucher überstehen
+        keys = {incident_key(i) for i in inc}
+        crit = [i for i in inc if i["sev"] == "crit" and i["t"] > 0]
+    finally:
+        globals()["INCIDENTS_FILE"] = real_inc
+        os.unlink(broken_inc)
+    assert inc == [heil], inc
+    assert keys == {"unit|foo.service|100"} and len(crit) == 1
+    # Verzeichnis und Dateien bleiben beim eigenen Konto: darin stehen
+    # Journalzeilen und Dienstnamen. Auch das, was aus einer aelteren Fassung
+    # schon mit 0775 beziehungsweise 0664 dalag.
+    real_dir, real_hist2, real_inc2 = DATA_DIR, HISTORY_FILE, INCIDENTS_FILE
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            weit = os.path.join(td, "weit")
+            os.makedirs(weit, mode=0o775)
+            globals()["DATA_DIR"] = weit
+            globals()["HISTORY_FILE"] = os.path.join(weit, "history.jsonl")
+            globals()["INCIDENTS_FILE"] = os.path.join(weit, "incidents.jsonl")
+            open(HISTORY_FILE, "w").close()
+            os.chmod(HISTORY_FILE, 0o664)          # Stand vor dieser Fassung
+            history_append({"t": 1.0, "kind": "scan"})
+            append_line(INCIDENTS_FILE, "{}\n")
+            moden = [os.stat(p).st_mode & 0o777
+                     for p in (weit, HISTORY_FILE, INCIDENTS_FILE)]
+        finally:
+            globals()["DATA_DIR"] = real_dir
+            globals()["HISTORY_FILE"] = real_hist2
+            globals()["INCIDENTS_FILE"] = real_inc2
+    assert moden == [0o700, 0o600, 0o600], [oct(m) for m in moden]
+    # Der Body einer Benachrichtigung traegt rohe Journalzeilen, und
+    # gnome-shell wertet dort Auszeichnung aus. Die Ueberschrift nicht: die
+    # ist reiner Text, ein escaptes & stuende dort woertlich auf dem Schirm.
+    gerufen = []
+    real_sh = sh
+    try:
+        globals()["sh"] = lambda argv, **kw: gerufen.append(argv) or ""
+        notify("Speicher & Swap", 'kernel: <b>fett</b> & <3>')
+    finally:
+        globals()["sh"] = real_sh
+    assert gerufen[0][-2:] == ["Speicher & Swap",
+                               "kernel: &lt;b&gt;fett&lt;/b&gt; &amp; &lt;3&gt;"], gerufen
 
     # MangoHud-Mitschrift: der Zeitraum wird aus Dateiname und `elapsed`
     # geschnitten, damit ein Bericht auch waehrend des Spielens Zahlen hat
