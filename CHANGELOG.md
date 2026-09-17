@@ -1,5 +1,123 @@
 # Changelog
 
+## 0.5~beta - Games, updates, and 26.04
+
+### Proton
+
+- Your games are a table now: the name, the build they run on, and a status
+  in three words next to a coloured dot. Each row carries the game's own
+  icon out of Steam's library cache, and the full sentence moved into the
+  tooltip. A search field sits above it, and the builds moved into a second
+  tab, so neither list buries the other.
+- The page opens on a single status card that talks about games rather than
+  checks: how many cannot start, or that all of them have a valid build.
+  The findings behind it stay folded until you ask for them.
+- The build tab is grouped by what Steam can actually pick: available in
+  Steam, not available, and managed by another tool. Above it stands the
+  count that matters, how many of the installed builds Steam can choose
+  from, next to the button that opens the manager.
+- A build that umu maintains says so. It used to be reported as a directory
+  Steam does not read, which is true and useless: umu keeps it where it is
+  on purpose.
+- The long "What is Proton?" text is gone. What stands there now says what
+  the page compares and that nothing changes until you confirm a fix.
+
+### Updates
+
+- Everything updates in one run. One button for apt, snap, flatpak and
+  firmware, in that order, with the number and the download size of what is
+  selected beside it. The per source install buttons are gone.
+- A filter bar carries the sources, a search field and one switch for the
+  whole selection, and the entries stand in two columns. The checkbox for a
+  source shows a mixed state when only part of it is ticked.
+- The selection is scanned again before anything installs. A package that
+  vanished in between, or that now points at a different version, stops the
+  run and says so, rather than installing something other than what you
+  ticked. A source that cannot be read at that moment stops it too, and
+  names itself.
+- The confirmation breaks the run down per source with sizes, says whether
+  a snapshot is taken first, and prints the commands it is about to run.
+  With firmware in the selection it says not to unplug the affected
+  devices.
+- Cancelling no longer cuts into a package manager mid run. The step that
+  is running finishes, and the run stops before the next source starts.
+- The button in the header reads "check for updates" and does what that
+  says: it fetches the apt lists, and the firmware index where firmware is
+  switched on. Reading the local state without a password moved into the
+  menu beside it.
+- The check afterwards covers every source in one pass, and a package that
+  did not move names its source in front of it.
+
+### Ubuntu 26.04
+
+- The symbols in the navigation came out as black blobs there. GTK reads
+  symbolic icons with its own parser since 4.20, and in that parser the
+  fill and stroke on an element count for nothing: the paint comes from the
+  class attribute, and without one every contour is filled. All nineteen
+  symbols carry that class now, and the self test fails if one loses it,
+  since a symbol without it still renders, just as a blob.
+- The buttons in the title bar were ovals. GTK 4.22 gives the ones built
+  into the header the full height of the bar, and a round corner on a box
+  22 by 46 pixels is an oval. The header carries its own centred controls
+  now. Neither of the two had anything to do with Wayland; both looked the
+  same under X11.
+
+### Privacy
+
+- A report you copy no longer carries your account name. Every copy button
+  exists so the text can leave the machine, into an issue or a forum, and a
+  second drive hangs under `/media/<name>`, which is exactly the path the
+  disk finding is about. Replacing the home path, which the app already
+  did, does not cover that. The name goes out as a whole path component and
+  only from three characters up, so an account called `pi` is not struck
+  out of every word that contains it. Commands stay untouched on purpose: a
+  substituted path in a command you are about to run is simply wrong.
+- The incident file and the history are private to your account, 0600 in a
+  directory at 0700. They hold journal lines, service names and outage
+  times, and the umask had left them readable for anyone on the machine.
+  Existing installations are corrected on the next write.
+- Notification bodies are escaped. gnome-shell lists body markup among its
+  capabilities, and a raw journal line goes into that body.
+
+### Fixed
+
+- One damaged line in the incident file took the background service down.
+  It died at startup, systemd restarted it, and that repeated every ten
+  seconds. Entries without the fields every reader needs are dropped now,
+  the way the history reader has always done it.
+- The removal command for a snap or a flatpak quotes the identifier. It
+  comes out of the file name of a desktop entry, and a file name with a
+  semicolon in it became a second command once pasted into a terminal.
+- The three readings under the score and the line inside the ring stayed
+  German on an English desktop, in the one place everybody looks first.
+- One sentence on the app check page never reached the catalogues, so an
+  English desktop was shown the German text. The self test in the other
+  language catches that, and it runs before the push now.
+- Seven loops read a file without closing it, two of them once a second
+  behind the live monitor.
+
+### Project
+
+- The repository page carries the project wordmark, and the screenshot on
+  it is gone. A picture of a working install names things that install
+  should not publish: the mount path holds an account name, and the journal
+  finding named the VPN service running on that machine. The command block
+  wraps instead of scrolling sideways, and a copy button sits next to it.
+- The README says what the app is made of, one Python file, GTK4 and the
+  standard library, nothing from pip and no build step, and that the self
+  test runs in both languages on every push. It also says outright that the
+  project is written with AI assistance, next to the self test rather than
+  as a footnote, and what carries that: nothing goes in unread, and every
+  fix is triggered on a real machine before a release.
+- SECURITY.md claimed that nothing privileged runs through a shell. Four
+  privileged calls do run a short script under pkexec, and ten more shell
+  calls run as the user. The protection is unchanged, arguments are passed
+  as `"$1"` and never pasted into the script text, but the document has to
+  say what the code does. It documents the apt source the package installs
+  as well, and what `Signed-By` does not cover.
+- The workflow token is declared read only in the repository instead of in
+  a web setting alone.
+
 ## 0.4~beta - Light and dark
 
 ### Appearance

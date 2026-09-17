@@ -1,3 +1,26 @@
+dynotiq (0.5~beta) noble; urgency=medium
+
+  * Proton: your games stand in a table with their Steam icon, their build
+    and a three word status, with a search field above and the builds in a
+    second tab.
+  * Proton: the build tab is grouped by what Steam can pick, and a build
+    maintained by umu says so.
+  * Updates: one run for apt, snap, flatpak and firmware, with a filter
+    bar, a search field and the size of the selection.
+  * Updates: the selection is scanned again before anything installs, and
+    a package that vanished or changed its target version stops the run.
+  * Updates: cancelling lets the running step finish instead of cutting
+    into a package manager.
+  * The navigation symbols and the title bar buttons render correctly on
+    Ubuntu 26.04, which ships GTK 4.22.
+  * Copied reports no longer carry the account name, and the incident file
+    and history are private to the account.
+  * A damaged line in the incident file no longer takes the background
+    service down.
+  * The readings under the score follow the language that is set.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Thu, 17 Sep 2026 20:15:00 +0200
+
 dynotiq (0.4~beta) noble; urgency=medium
 
   * The interface has a light appearance. Switch it under Settings,

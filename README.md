@@ -104,7 +104,7 @@ with a dot in the attachment name, the package itself is unaffected:
 Build the package yourself:
 
     ./build-deb.sh
-    sudo dpkg -i build/dynotiq_0.4~beta_all.deb
+    sudo dpkg -i build/dynotiq_0.5~beta_all.deb
 
 Or run it from the source tree without installing:
 
@@ -139,11 +139,11 @@ signed with. `publish-repo.sh` replaces the `gh-pages` branch outright; it
 carries build artefacts only, the sources live in `main`.
 
 Versions carry the Ubuntu release rather than the series name, so
-`0.4~beta~ubuntu24.04.1` sorts below `0.4~beta~ubuntu26.04.1`. Series names
+`0.5~beta~ubuntu24.04.1` sorts below `0.5~beta~ubuntu26.04.1`. Series names
 cycle back through the alphabet, which would eventually make a newer Ubuntu look
-older to apt. A tilde sorts below everything, which is what makes `0.4~beta`
-an upgrade from `0.3` and still a downgrade from the final `0.4`. Git refuses a
-tilde in tag names, so the matching tag is written `v0.4-beta`.
+older to apt. A tilde sorts below everything, which is what makes `0.5~beta`
+an upgrade from `0.4` and still a downgrade from the final `0.5`. Git refuses a
+tilde in tag names, so the matching tag is written `v0.5-beta`.
 
 ## Requirements
 

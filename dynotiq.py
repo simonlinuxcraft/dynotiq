@@ -45,7 +45,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
-VERSION = "0.4~beta"
+VERSION = "0.5~beta"
 APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -4887,6 +4887,34 @@ RELEASE_NOTES = {
         _("Auch eine deinstallierte Fassung von Valve fällt auf, wenn ein "
           "Spiel noch auf sie zeigt. Hängt gerade eine Steam-Bibliothek "
           "nicht, behauptet die Seite dazu nichts"),
+    ]),
+    "0.5~beta": (_("Spiele, Updates und 26.04"), [
+        _("Deine Spiele stehen auf der Proton-Seite in einer Tabelle, jedes "
+          "mit seinem Steam-Symbol, seiner Fassung und einem Status in drei "
+          "Worten. Darüber ein Suchfeld, und die Fassungen liegen im zweiten "
+          "Reiter"),
+        _("Eine Fassung, die umu verwaltet, wird als solche benannt. Vorher "
+          "galt sie als Ordner, den Steam nicht liest"),
+        _("Updates laufen in einem Zug: ein Knopf für apt, Snap, Flatpak und "
+          "Firmware, in dieser Reihenfolge, mit einem Filter und einer Suche "
+          "für die Auswahl"),
+        _("Vor dem Start wird die Auswahl noch einmal geprüft. Ist ein Paket "
+          "verschwunden oder zeigt es inzwischen auf eine andere Fassung, "
+          "bricht der Lauf ab, statt etwas anderes zu installieren als das, "
+          "was du angehakt hast"),
+        _("Abbrechen reißt keinen Paketmanager mitten im Lauf auseinander. "
+          "Der laufende Schritt wird fertig, danach hält der Lauf an"),
+        _("Unter Ubuntu 26.04 waren die Symbole in der Navigation schwarze "
+          "Klumpen und die Fensterknöpfe Ovale. Beides liegt an GTK 4.22 und "
+          "ist behoben"),
+        _("Ein Bericht, den du kopierst, trägt deinen Kontonamen nicht mehr "
+          "mit hinaus. Er stand über den Pfad eines zweiten Laufwerks darin"),
+        _("Über dem Knopf steht, ob vorher ein Snapshot gemacht wird, und "
+          "wenn nicht, warum"),
+        _("Eine beschädigte Zeile in den Vorfällen legt die "
+          "Hintergrundüberwachung nicht mehr lahm"),
+        _("Die drei Werte unter der Punktzahl sprechen jetzt die Sprache, die "
+          "eingestellt ist"),
     ]),
 }
 
@@ -11120,7 +11148,7 @@ class App(Gtk.Application):
         text.append(lbl(_("Alles in einem Lauf aktualisieren"),
                         "upd-status-title"))
         text.append(lbl(
-            _("Dynotiq führt apt, Snap, Flatpak und Firmware nacheinander aus. "
+            _("dynotiq führt apt, Snap, Flatpak und Firmware nacheinander aus. "
               "Jeder Bereich wird danach erneut geprüft."),
             "upd-status-copy", wrap=True, chars=64))
         actions = box(True, 12, margin_top=7)
@@ -11435,7 +11463,7 @@ class App(Gtk.Application):
         if selected.get("fwupd"):
             lines += ["", _("Firmware ist ausgewählt. Trenne betroffene Geräte "
                               "während des Updates nicht vom Rechner.")]
-        lines += ["", _("Die Paketmanager prüfen ihre Quellen selbst. Dynotiq "
+        lines += ["", _("Die Paketmanager prüfen ihre Quellen selbst. dynotiq "
                           "führt nur die oben ausgewählten Updates aus."),
                   "", _("Ausgeführt wird:"), *cmd_preview(steps)]
         label = _("Ausgewählte {n} aktualisieren").format(n=total)
@@ -12482,7 +12510,7 @@ class App(Gtk.Application):
         crit_games = sum(g["sev"] == "crit" for g in games)
         if not have_steam:
             title = _("Steam wurde nicht gefunden")
-            detail = _("Dynotiq kann Proton erst prüfen, wenn Steam installiert "
+            detail = _("dynotiq kann Proton erst prüfen, wenn Steam installiert "
                        "und mindestens einmal gestartet wurde.")
             sev = "info"
         elif crit_games:
@@ -12684,9 +12712,9 @@ class App(Gtk.Application):
 
     def _proton_help(self):
         exp = Gtk.Expander(margin_top=2, margin_bottom=4)
-        exp.set_label_widget(lbl(_("Was prüft Dynotiq hier?"), "row-detail"))
+        exp.set_label_widget(lbl(_("Was prüft dynotiq hier?"), "row-detail"))
         text = lbl(
-            _("Proton übersetzt Windows-Spiele für Linux. Dynotiq vergleicht "
+            _("Proton übersetzt Windows-Spiele für Linux. dynotiq vergleicht "
               "die installierten Fassungen mit ihren Laufzeitumgebungen, den "
               "Zuordnungen deiner Spiele und den vorhandenen Windows-Ablagen. "
               "Geändert wird erst etwas, wenn du einen Reparaturknopf "
@@ -16362,6 +16390,10 @@ def selftest():
     assert scan_window(1000.0, now=1000.0 + 25 * 3600) == "-24h"
     assert scan_window(1000.0, now=1000.0 + 60) == "@1000"
     assert scan_window(9e9, now=1000.0) == "-24h"          # Uhr in der Zukunft
+
+    # Der "Neu in"-Dialog ist das einzige, was ein Nutzer nach dem Update
+    # sieht. Bei 0.3~beta stand dort von vierzehn Commits keiner drin.
+    assert VERSION in RELEASE_NOTES, VERSION
 
     # Jede Seite braucht ihr Symbol, und die Datei dazu muss daliegen. Fehlt
     # eine, zeigt GTK stumm ein leeres Kaestchen in der Navigation.
