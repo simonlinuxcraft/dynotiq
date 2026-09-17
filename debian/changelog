@@ -1,16 +1,40 @@
+dynotiq (0.5~beta) noble; urgency=medium
+
+  * Proton: your games stand in a table with their Steam icon, their build
+    and a three word status, with a search field above and the builds in a
+    second tab.
+  * Proton: the build tab is grouped by what Steam can pick, and a build
+    maintained by umu says so.
+  * Updates: one run for apt, snap, flatpak and firmware, with a filter
+    bar, a search field and the size of the selection.
+  * Updates: the selection is scanned again before anything installs, and
+    a package that vanished or changed its target version stops the run.
+  * Updates: cancelling lets the running step finish instead of cutting
+    into a package manager.
+  * The navigation symbols and the title bar buttons render correctly on
+    Ubuntu 26.04, which ships GTK 4.22.
+  * Copied reports no longer carry the account name, and the incident file
+    and history are private to the account.
+  * A damaged line in the incident file no longer takes the background
+    service down.
+  * The readings under the score follow the language that is set.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Thu, 17 Sep 2026 20:15:00 +0200
+
 dynotiq (0.4~beta) noble; urgency=medium
 
   * The interface has a light appearance. Switch it under Settings,
     Appearance; it applies at once, without a restart.
-  * No more traffic light. A grey bar means nothing to do, a yellow one
-    means it waits for a decision, a red one means something is broken.
-    Yellow follows the chosen accent, so the status colour setting is gone.
-  * Findings carry that bar down the left edge of the row instead of a dot.
+  * Findings carry the status colour as a bar down the left edge of the row
+    instead of a dot beside it: green means nothing to do, orange that it
+    waits for a decision, red that something is broken. The three belong to
+    the appearance rather than to the accent.
   * Every page has its own symbol in the navigation, and a field above it
     jumps to whichever page is typed, by English or German name.
-  * The score ring is a plain 270 degree arc in the accent colour.
-  * New typeface: IBM Plex, with its monospace for anything measured.
-    Ships as a Recommends; Ubuntu carries the interface without it.
+  * The score ring is a plain 270 degree arc in the status colour.
+  * New typeface: Arial, falling back to Liberation Sans where it is
+    missing. The two share their metrics, so text wraps the same way on
+    either. Fixed width is left to paths, identifiers and logs.
   * The machine block in the sidebar can be turned off.
   * Text views, entries, expanders and progress bars had no colour of their
     own and borrowed one from the system theme.

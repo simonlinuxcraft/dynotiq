@@ -45,7 +45,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
-VERSION = "0.4~beta"
+VERSION = "0.5~beta"
 APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -313,24 +313,53 @@ def bench_vs_first(entries, key):
     return vals[-1][1] / vals[0][1], vals[0][0]
 
 
+def ensure_data_dir():
+    """Legt DATA_DIR an und hält es beim eigenen Konto.
+
+    Darin stehen Journalzeilen, Dienstnamen und Ausfallzeiten, und die gehen
+    kein zweites Konto auf der Maschine etwas an. Der Modus von makedirs greift
+    nur beim Anlegen, deshalb das chmod daneben: aus älteren Fassungen liegt
+    das Verzeichnis mit 0775 da und die beiden Dateien darin mit 0664.
+    """
+    os.makedirs(DATA_DIR, mode=0o700, exist_ok=True)
+    for path, mode in ((DATA_DIR, 0o700), (HISTORY_FILE, 0o600),
+                       (INCIDENTS_FILE, 0o600)):
+        try:
+            if os.path.exists(path) and os.stat(path).st_mode & 0o777 != mode:
+                os.chmod(path, mode)
+        except OSError:
+            pass
+
+
+def append_line(path, text):
+    """Eine Zeile anhängen, die Datei beim Anlegen nur für den eigenen Nutzer.
+
+    os.open statt open: dessen Modus gilt beim Anlegen, während open sich die
+    umask greift und damit 0664 hinterlässt.
+    """
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                           0o600), "a") as f:
+        f.write(text)
+
+
 def history_append(entry):
     """Schreibt einen Verlaufseintrag. Fehler dürfen den Aufrufer nicht killen,
     sonst hängt die Oberfläche bei voller Platte für immer im Ladezustand."""
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(HISTORY_FILE, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        ensure_data_dir()
+        append_line(HISTORY_FILE, json.dumps(entry) + "\n")
         if os.path.getsize(HISTORY_FILE) > HISTORY_BYTES:
             # Beide Grenzen, sonst greift keine: die Schwelle misst Bytes, ein
             # Schnitt auf HISTORY_MAX Zeilen allein bringt eine Datei aus langen
             # run-Eintraegen (rund 900 Byte) nie darunter, und danach wird sie
             # bei jedem Eintrag komplett neu geschrieben.
             keep, total = [], 0
-            for line in reversed(open(HISTORY_FILE).readlines()):
-                total += len(line.encode())
-                if total > HISTORY_BYTES or len(keep) >= HISTORY_MAX:
-                    break
-                keep.append(line)
+            with open(HISTORY_FILE) as f:
+                for line in reversed(f.readlines()):
+                    total += len(line.encode())
+                    if total > HISTORY_BYTES or len(keep) >= HISTORY_MAX:
+                        break
+                    keep.append(line)
             fd, tmp = tempfile.mkstemp(dir=DATA_DIR, prefix=".hist")
             with os.fdopen(fd, "w") as f:
                 f.writelines(reversed(keep))
@@ -476,11 +505,12 @@ def sh(args, timeout=15):
 
 def cpu_times(per_core=False):
     out = []
-    for line in open("/proc/stat"):
-        if not line.startswith("cpu"):
-            break
-        vals = [int(x) for x in line.split()[1:]]
-        out.append((sum(vals), vals[3] + vals[4]))
+    with open("/proc/stat") as f:
+        for line in f:
+            if not line.startswith("cpu"):
+                break
+            vals = [int(x) for x in line.split()[1:]]
+            out.append((sum(vals), vals[3] + vals[4]))
     return out if per_core else out[0]
 
 
@@ -492,9 +522,10 @@ def busy_percent(prev, now):
 def meminfo_raw():
     """Alle Zeilen aus /proc/meminfo als {Name: kB}."""
     d = {}
-    for line in open("/proc/meminfo"):
-        k, _sep, v = line.partition(":")
-        d[k] = int(v.split()[0])
+    with open("/proc/meminfo") as f:
+        for line in f:
+            k, _sep, v = line.partition(":")
+            d[k] = int(v.split()[0])
     return d
 
 
@@ -638,9 +669,10 @@ def short_cpu(name):
 
 
 def cpu_model():
-    for line in open("/proc/cpuinfo"):
-        if line.startswith("model name"):
-            return short_cpu(line.split(":", 1)[1].strip())
+    with open("/proc/cpuinfo") as f:
+        for line in f:
+            if line.startswith("model name"):
+                return short_cpu(line.split(":", 1)[1].strip())
     return "Unbekannte CPU"
 
 
@@ -765,21 +797,22 @@ def autostart_set(entry, enabled):
 def mounts():
     keep = {"ext4", "ext3", "btrfs", "xfs", "vfat", "exfat", "ntfs3", "ntfs", "f2fs"}
     out = []
-    for line in open("/proc/mounts"):
-        src, target, fstype = line.split()[:3]
-        if fstype not in keep or not src.startswith("/dev/"):
-            continue
-        target = target.replace("\\040", " ")
-        try:
-            s = os.statvfs(target)
-        except OSError:
-            continue
-        total = s.f_blocks * s.f_frsize
-        free = s.f_bavail * s.f_frsize
-        if total == 0:
-            continue
-        out.append({"target": target, "src": src, "fs": fstype,
-                    "total": total, "free": free, "used": total - free})
+    with open("/proc/mounts") as f:
+        for line in f:
+            src, target, fstype = line.split()[:3]
+            if fstype not in keep or not src.startswith("/dev/"):
+                continue
+            target = target.replace("\\040", " ")
+            try:
+                s = os.statvfs(target)
+            except OSError:
+                continue
+            total = s.f_blocks * s.f_frsize
+            free = s.f_bavail * s.f_frsize
+            if total == 0:
+                continue
+            out.append({"target": target, "src": src, "fs": fstype,
+                        "total": total, "free": free, "used": total - free})
     return sorted(out, key=lambda m: m["target"])
 
 
@@ -815,13 +848,14 @@ def dir_sizes(paths, timeout=60):
 
 def net_bytes():
     rx = tx = 0
-    for line in open("/proc/net/dev").readlines()[2:]:
-        iface, _, rest = line.partition(":")
-        if iface.strip() == "lo":
-            continue
-        f = rest.split()
-        rx += int(f[0])
-        tx += int(f[8])
+    with open("/proc/net/dev") as fh:
+        for line in fh.readlines()[2:]:
+            iface, _, rest = line.partition(":")
+            if iface.strip() == "lo":
+                continue
+            f = rest.split()
+            rx += int(f[0])
+            tx += int(f[8])
     return rx, tx
 
 
@@ -830,12 +864,13 @@ DISK_RE = re.compile(r"^(sd[a-z]+|nvme\d+n\d+|vd[a-z]+|mmcblk\d+)$")
 
 def disk_bytes():
     rd = wr = 0
-    for line in open("/proc/diskstats"):
-        f = line.split()
-        if not DISK_RE.match(f[2]):
-            continue
-        rd += int(f[5]) * 512
-        wr += int(f[9]) * 512
+    with open("/proc/diskstats") as fh:
+        for line in fh:
+            f = line.split()
+            if not DISK_RE.match(f[2]):
+                continue
+            rd += int(f[5]) * 512
+            wr += int(f[9]) * 512
     return rd, wr
 
 
@@ -1116,7 +1151,7 @@ TOOL_ERRORS = [
       "verified"),
      N_("Eine Paketquelle ist nicht sauber signiert. Von dort kommt nichts, "
         "solange das so ist. Welche es ist, steht in der Ausgabe unter "
-        "'Paketlisten holen'.")),
+        "'Auf Updates prüfen'.")),
     (("failed to fetch", "temporary failure resolving", "could not resolve",
       "connection failed", "network is unreachable"),
      N_("Eine Paketquelle war nicht erreichbar. Das kann an der Verbindung "
@@ -1313,6 +1348,33 @@ def needs_fresh(src, ids, fresh):
     apt genau deshalb ein Paket kommentarlos uebergeht.
     """
     return bool({(src, i) for i in ids} & set(fresh))
+
+
+UPDATE_ORDER = ("apt", "snap", "flatpak", "fwupd")
+
+
+def update_steps(selected, fresh=(), snapshot=False):
+    """Direkte Paketmanager-Aufrufe fuer einen gemeinsamen Update-Lauf."""
+    steps = [SNAPSHOT_CMD] if snapshot else []
+    for src in UPDATE_ORDER:
+        ids = sorted({i for i in selected.get(src, ()) if valid_pkg(i)})
+        if ids:
+            steps.extend(cmd_steps(update_cmd(src, ids,
+                                              needs_fresh(src, ids, fresh))))
+    return steps
+
+
+def update_targets(data):
+    """Zielversion je Quelle und Kennung aus einem Update-Scan."""
+    return {(src, item[0]): item[3] for src, result in data.items()
+            for item in result.get("items", ())}
+
+
+def update_changes(data, expected):
+    """Auswahl, die seit der Anzeige verschwunden ist oder ihr Ziel wechselte."""
+    current = update_targets(data)
+    return sorted(key for key, version in expected.items()
+                  if current.get(key) != version)
 
 
 def pkexec_apt_argv(pkgs, recommends=False):
@@ -1767,6 +1829,7 @@ def parse_denials(text, label):
     return len(hits), ops
 
 
+SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
 APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": _("Paket"),
                   "lokal": _("manuell installiert"), "appimage": "AppImage",
                   "steam": _("Steam-Titel")}
@@ -2158,6 +2221,19 @@ def steam_game(appid):
                 "prefix": os.path.join(apps, "compatdata", appid),
                 "cache": os.path.join(apps, "shadercache", appid)}
     return None
+
+
+def steam_game_icon(appid, root=None):
+    """Das lokale 32-Pixel-Symbol aus Steams Bibliothekscache, sonst ""."""
+    if not str(appid).isdigit():
+        return ""
+    root = steam_root() if root is None else root
+    if not root:
+        return ""
+    cache = os.path.join(root, "appcache", "librarycache", str(appid))
+    return next((p for p in sorted(glob.glob(os.path.join(cache, "*")))
+                 if re.fullmatch(r"[0-9a-f]{40}\.(?:jpg|png)",
+                                 os.path.basename(p), re.IGNORECASE)), "")
 
 
 def steam_proton(appid):
@@ -3466,9 +3542,13 @@ def proton_rows(tools=None):
         valve = "compatibilitytools.d" not in path
         build, when = tool_build(path)
         sees = steam_sees(path)
+        scope = ("steam" if sees else "umu" if name.startswith("UMU-Proton")
+                 and umu_managed(os.path.dirname(path)) else "outside")
         # Der wichtigste Fakt zuerst: eine Fassung, die Steam nicht liest,
         # sieht sonst genauso brauchbar aus wie jede andere.
-        facts = [] if sees else [_("Steam liest diesen Ordner nicht")]
+        facts = ([] if sees else
+                 [_("Von umu verwaltet")] if scope == "umu" else
+                 [_("Steam liest diesen Ordner nicht")])
         if build and build != name:
             facts.append(build)
         if not valve:
@@ -3482,7 +3562,7 @@ def proton_rows(tools=None):
         if valve:
             facts.append(_("pflegt Steam selbst"))
         out.append({"name": name, "runtime": rt, "ok": ok, "valve": valve,
-                    "sees": sees, "facts": " · ".join(facts),
+                    "sees": sees, "scope": scope, "facts": " · ".join(facts),
                     "path": path.replace(os.path.expanduser("~"), "~")})
     return out
 
@@ -3584,7 +3664,7 @@ def is_steam_game(appid, g=None):
 
 
 def proton_game_rows(tools=None):
-    """[(Spiel, Anzeigename der Fassung, Zeile zum Prefix, sev)].
+    """Spiele samt AppID, Fassung, Prefixzustand und lokalem Steam-Symbol.
 
     Nur Spiele, die wirklich installiert sind. Steam raeumt CompatToolMapping
     beim Deinstallieren nicht auf, sonst stuenden hier ueberwiegend
@@ -3636,16 +3716,20 @@ def proton_game_rows(tools=None):
             if weg and tool.startswith("proton_"):
                 line, sev = _("Die Fassung liegt auf einer Bibliothek, die "
                               "gerade nicht erreichbar ist"), "warn"
+                status = _("Fassung nicht erreichbar")
             else:
                 # Gilt jetzt auch fuer Valve-Namen: 'Proton 9.0' laesst sich
                 # wie jeder Steam-Titel deinstallieren, die Zuordnung bleibt
                 # stehen.
                 line, sev = _("Diese Fassung gibt es hier nicht"), "crit"
+                status = _("Fassung fehlt")
         elif kaputt:
             line, sev = (_("{tool} startet nicht, {rt} fehlt")
                          if kaputt[1] in ("missing", "empty") else
                          _("{tool} startet nicht, {rt} ist beschädigt")).format(
                              tool=shown, rt=short_runtime(kaputt[0])), "crit"
+            status = (_("Laufzeit fehlt") if kaputt[1] in ("missing", "empty")
+                      else _("Laufzeit beschädigt"))
         elif built and built not in prefix_names(tool, pfad) \
                 and built != tool_prefix_version(pfad):
             # Dieselbe Richtungsfrage wie in proton_check: nur der
@@ -3655,16 +3739,22 @@ def proton_game_rows(tools=None):
                 line, sev = _("Windows-Ablage stammt von der neueren {built}, "
                               "der Rückschritt kann sie beschädigen").format(
                                   built=built), "warn"
+                status = _("Ältere Fassung ausgewählt")
             else:
                 line, sev = _("Windows-Ablage von {built}, zieht die Fassung "
                               "beim nächsten Start selbst nach").format(
                                   built=built), "ok"
+                status = _("Wird beim nächsten Start aktualisiert")
         elif built:
             line, sev = _("Windows-Ablage von {built}").format(built=built), "ok"
+            status = _("Ablage aktuell")
         else:
             line, sev = _("Noch keine Windows-Ablage angelegt"), "ok"
-        out.append((g["name"] or appid, shown, line, sev))
-    return sorted(out, key=lambda r: (r[3] == "ok", r[0]))
+            status = _("Noch nicht gestartet")
+        out.append({"appid": appid, "name": g["name"] or appid,
+                    "tool": shown, "status": status, "detail": line,
+                    "sev": sev, "icon": steam_game_icon(appid)})
+    return sorted(out, key=lambda r: (r["sev"] == "ok", r["name"]))
 
 
 def prefix_mismatches(tools=None):
@@ -4797,6 +4887,34 @@ RELEASE_NOTES = {
         _("Auch eine deinstallierte Fassung von Valve fällt auf, wenn ein "
           "Spiel noch auf sie zeigt. Hängt gerade eine Steam-Bibliothek "
           "nicht, behauptet die Seite dazu nichts"),
+    ]),
+    "0.5~beta": (_("Spiele, Updates und 26.04"), [
+        _("Deine Spiele stehen auf der Proton-Seite in einer Tabelle, jedes "
+          "mit seinem Steam-Symbol, seiner Fassung und einem Status in drei "
+          "Worten. Darüber ein Suchfeld, und die Fassungen liegen im zweiten "
+          "Reiter"),
+        _("Eine Fassung, die umu verwaltet, wird als solche benannt. Vorher "
+          "galt sie als Ordner, den Steam nicht liest"),
+        _("Updates laufen in einem Zug: ein Knopf für apt, Snap, Flatpak und "
+          "Firmware, in dieser Reihenfolge, mit einem Filter und einer Suche "
+          "für die Auswahl"),
+        _("Vor dem Start wird die Auswahl noch einmal geprüft. Ist ein Paket "
+          "verschwunden oder zeigt es inzwischen auf eine andere Fassung, "
+          "bricht der Lauf ab, statt etwas anderes zu installieren als das, "
+          "was du angehakt hast"),
+        _("Abbrechen reißt keinen Paketmanager mitten im Lauf auseinander. "
+          "Der laufende Schritt wird fertig, danach hält der Lauf an"),
+        _("Unter Ubuntu 26.04 waren die Symbole in der Navigation schwarze "
+          "Klumpen und die Fensterknöpfe Ovale. Beides liegt an GTK 4.22 und "
+          "ist behoben"),
+        _("Ein Bericht, den du kopierst, trägt deinen Kontonamen nicht mehr "
+          "mit hinaus. Er stand über den Pfad eines zweiten Laufwerks darin"),
+        _("Über dem Knopf steht, ob vorher ein Snapshot gemacht wird, und "
+          "wenn nicht, warum"),
+        _("Eine beschädigte Zeile in den Vorfällen legt die "
+          "Hintergrundüberwachung nicht mehr lahm"),
+        _("Die drei Werte unter der Punktzahl sprechen jetzt die Sprache, die "
+          "eingestellt ist"),
     ]),
 }
 
@@ -6679,7 +6797,7 @@ def package_sources(scan=None, current="", series=None, sources=None):
             # gar keine Liste. Sie deshalb tot zu nennen war ein Fehlalarm,
             # und zwar genau in dem Moment, in dem jemand etwas Neues eintraegt.
             state, ok = _("Neu eingetragen, noch nicht abgeholt. Der Knopf "
-                          "'Paketlisten holen' erledigt das."), True
+                          "'Auf Updates prüfen' erledigt das."), True
         else:
             state, ok = _("Antwortet nicht, von hier kommen keine Updates"), False
         rows.append(("apt", source_title(name, uri, suite),
@@ -7274,6 +7392,9 @@ def check_dead_launchers(ctx):
                    actions=[(_("Einträge entfernen"), "_remove_launchers", None)])
 
 
+# Die Kennung kommt bei snap und flatpak aus dem Dateinamen des Menueeintrags,
+# und der Text hier ist zum Kopieren ins Terminal gedacht. Deshalb durch
+# shlex.quote: ein Dateiname mit Semikolon oder $() soll dort ein Name bleiben.
 APP_REMOVE = {"deb": "sudo apt remove {id}", "snap": "sudo snap remove {id}",
               "flatpak": "flatpak uninstall {id}"}
 
@@ -7314,7 +7435,8 @@ def check_duplicate_apps(ctx):
             lines.append(("user-trash-symbolic", "dim",
                           _("Älter ist {was}. Entfernen: {cmd}").format(
                               was=APP_KIND_LABEL.get(alt[0], alt[0]) + " " + alt[2],
-                              cmd=APP_REMOVE[alt[0]].format(id=alt[1]))))
+                              cmd=APP_REMOVE[alt[0]].format(
+                                  id=shlex.quote(alt[1])))))
     if not dupes:
         return None
     return Finding("info",
@@ -7950,7 +8072,7 @@ def incidents_sync(since="-24h"):
     with _INC_LOCK:
         lock = None
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
+            ensure_data_dir()
             lock = open(INCIDENTS_LOCK, "w")
             fcntl.flock(lock, fcntl.LOCK_EX)
         except OSError as e:
@@ -7975,9 +8097,8 @@ def incidents_sync(since="-24h"):
                          "units": episodes})
             if not fresh:
                 return []
-            with open(INCIDENTS_FILE, "a") as f:
-                for i in fresh:
-                    f.write(json.dumps(i) + "\n")
+            append_line(INCIDENTS_FILE,
+                        "".join(json.dumps(i) + "\n" for i in fresh))
             if len(known) + len(fresh) > INCIDENTS_MAX:
                 lines = open(INCIDENTS_FILE).readlines()[-INCIDENTS_MAX:]
                 tmp = INCIDENTS_FILE + ".tmp"
@@ -7996,15 +8117,28 @@ def incidents_sync(since="-24h"):
 
 def incidents_read(limit=None):
     """Alle Vorfälle, oder die letzten limit. Der Abgleich beim Anhängen braucht
-    die ganze Datei, sonst kommen ältere Einträge erneut dazu."""
+    die ganze Datei, sonst kommen ältere Einträge erneut dazu.
+
+    Einträge ohne die fünf Pflichtfelder fliegen hier raus, wie im Verlauf.
+    Jeder Verbraucher greift direkt zu: incident_key liest cat, die Übersicht
+    sev, die Seite title und detail. Eine von Hand bearbeitete Zeile hat sonst
+    den watch-Dienst beim Start umgeworfen, und der startet alle zehn Sekunden
+    neu, bis jemand die Datei repariert.
+    """
     out = []
     try:
         with open(INCIDENTS_FILE) as f:
             for line in f:
                 try:
-                    out.append(json.loads(line))
-                except ValueError:
+                    e = json.loads(line)
+                    if not isinstance(e, dict):
+                        continue
+                    e["t"] = float(e["t"])
+                    if not all(k in e for k in ("cat", "sev", "title", "detail")):
+                        continue
+                except (ValueError, TypeError, KeyError):
                     continue
+                out.append(e)
     except OSError:
         return []
     return out[-limit:] if limit else out
@@ -8172,7 +8306,18 @@ def classify(title, detail):
 
 
 def notify(title, body):
-    sh(["notify-send", "-a", "dynotiq", "-i", "dynotiq", title, body], timeout=10)
+    """Meldung auf den Desktop. Der Text wird escaped, nicht der Aufrufer.
+
+    In den Body geht auch rohe Journalzeile, und der Benachrichtigungsdienst
+    wertet dort Auszeichnung aus: gnome-shell nennt body-markup in seinen
+    Fähigkeiten und setzt ein <b> darin wirklich fett. Escaped wird hier statt
+    an der Aufrufstelle, damit es an einer neuen nicht vergessen werden kann.
+
+    Nur der Body. Die Überschrift ist nach der Spezifikation reiner Text, dort
+    stünde nach dem Escapen ein &amp; wörtlich auf dem Bildschirm.
+    """
+    sh(["notify-send", "-a", "dynotiq", "-i", "dynotiq",
+        title, GLib.markup_escape_text(body)], timeout=10)
 
 
 def release_notify():
@@ -8226,7 +8371,14 @@ def watch(interval=None):
     fixed = interval
     print(f"dynotiq watch: Intervall {fixed or load_config()['watch_interval']} s",
           flush=True)
-    incidents_sync("-1h")
+    # Derselbe Schutz wie um den Aufruf in der Schleife. Ohne ihn nimmt ein
+    # einziger unbrauchbarer Eintrag den Dienst mit, und zwar vor der ersten
+    # Runde: systemd startet ihn dann alle zehn Sekunden neu, bis jemand
+    # nachsieht.
+    try:
+        incidents_sync("-1h")
+    except Exception as e:
+        print(f"watch: {e}", file=sys.stderr, flush=True)
     last_release = 0.0
     rec = AutoRecorder()
     while True:
@@ -8351,7 +8503,7 @@ def bench_ram(seconds=1.5):
 
 
 def bench_disk(mib=256):
-    os.makedirs(DATA_DIR, exist_ok=True)
+    ensure_data_dir()
     path = os.path.join(DATA_DIR, "bench.tmp")
     # Eine Restdatei von einem abgebrochenen Lauf zaehlt beim Platzcheck mit
     if os.path.exists(path):
@@ -8460,6 +8612,39 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 .eyebrow { font: 700 10.5px @SANS@; color: @ACCTEXT@; letter-spacing: 0.9px; }
 .headline { font: 700 29px @SANS@; color: @TEXT@; letter-spacing: -0.2px; }
 .lede { font: 400 13px @SANS@; color: @DIM@; }
+.pro-status, .upd-status { background-color: @SURFACE@;
+              border: 1px solid @LINESTRONG@; border-radius: 9px; }
+.pro-status-title, .upd-status-title { font: 700 17px @SANS@; color: @STRONG@;
+                    letter-spacing: -0.1px; }
+.pro-status-copy, .upd-status-copy { font: 400 12.5px @SANS@; color: @DETAIL@; }
+.upd-guard { border-left: 1px solid @LINE@; padding-left: 18px; }
+.upd-guard-row { padding: 3px 0; }
+.upd-stage { padding: 13px 14px; }
+.upd-stage-count { font: 700 11px @SANS@; color: @ACCTEXT@;
+                   background-color: @RAISED@; border: 1px solid @LINESTRONG@;
+                   border-radius: 50%; min-width: 28px; min-height: 28px; }
+.upd-stage-title { font: 700 12px @SANS@; color: @STRONG@; }
+.upd-stage-detail { font: 400 10.5px @SANS@; color: @FAINT@; }
+.pro-tabs { border-bottom: 1px solid @LINESTRONG@; }
+.pro-tabs button { font: 700 12.5px @SANS@; color: @FAINT@;
+                   background-color: transparent; background-image: none;
+                   border: none; border-radius: 0; box-shadow: none;
+                   min-height: 0; padding: 10px 14px; }
+.pro-tabs button:first-child { padding-left: 6px; }
+.pro-tabs button:hover { background-color: @HOVER@; color: @MUTED@; }
+.pro-tabs button:checked { color: @STRONG@; background-color: transparent;
+                          box-shadow: inset 0 -2px @ACC@; }
+.pro-tabs button:focus-visible { box-shadow: inset 0 0 0 1px @LINESTRONG@; }
+.pro-tabs button:checked:focus-visible {
+        box-shadow: inset 0 0 0 1px @LINESTRONG@, inset 0 -2px @ACC@; }
+.pro-search { min-height: 34px; padding: 0 10px; }
+.pro-colhead { font: 700 11px @SANS@; color: @DIM@; }
+.pro-game-icon { border-radius: 5px; }
+.pro-game-icon-fallback { color: @FAINTER@; }
+.pro-state-dot { min-width: 8px; min-height: 8px; border-radius: 50%; }
+.pro-state-dot.ok { background-color: @OK@; }
+.pro-state-dot.warn { background-color: @WARN@; }
+.pro-state-dot.crit { background-color: @CRIT@; }
 .kpi { background: none; border-radius: 0; padding: 2px 0 2px 12px;
        box-shadow: inset 2px 0 @LINEFAINT@; }
 .kpi-key { font: 700 10px @SANS@; color: @LABEL@; letter-spacing: 0.6px; }
@@ -8580,7 +8765,10 @@ def ease_out(p):
 
 
 def contrast(fore, back):
-    """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21.
+    """Kontrastverhaeltnis zweier Farben nach WCAG, 1 bis 21. Nur fuer den Selftest.
+
+    Steht hier und nicht im Testteil, weil sie zu den Farbtabellen darueber
+    gehoert. Die Oberflaeche ruft sie nicht.
 
     Die Datei argumentiert an mehreren Stellen mit solchen Zahlen. Gemessen
     hat sie bisher keine, und genau dabei faellt auf, dass ein Ton, der auf
@@ -9388,9 +9576,11 @@ MENU_XML = """<node>
 
 
 class Tray:
-    def __init__(self, items, tooltip=_("Systemdiagnose"), on_ready=None):
+    def __init__(self, items, tooltip=None, on_ready=None):
         self.items = items                  # [(id, label, callback)], label None = Trenner
-        self.tooltip = tooltip
+        # Erst hier uebersetzt: als Vorgabewert liefe _() beim Import,
+        # also einmal fuer die Laufzeit des Programms.
+        self.tooltip = tooltip or _("Systemdiagnose")
         self.on_ready = on_ready
         self.bus = None
         self.ok = False
@@ -9578,13 +9768,29 @@ class App(Gtk.Application):
         self.win = Gtk.ApplicationWindow(application=self, default_width=1180,
                                          default_height=860, title="dynotiq",
                                          icon_name="dynotiq")
-        hb = Gtk.HeaderBar(show_title_buttons=True)
+        hb = Gtk.HeaderBar(show_title_buttons=False)
+        # Die eingebauten Knöpfe der Titelleiste ziehen sich seit GTK 4.22 auf
+        # deren ganze Höhe, aus den Kreisen wurden Ovale. Eigene WindowControls
+        # bleiben bei ihrer Größe. Beide Seiten, weil die Knopfreihenfolge im
+        # System auch links stehen kann. Aus dem Layout fliegt das Programmsymbol,
+        # sonst steht es unter Wayland links neben dem Logo ein zweites Mal.
+        layout = ":".join(
+            ",".join(teil for teil in seite.split(",")
+                     if teil not in ("icon", "appmenu", "menu"))
+            for seite in (Gtk.Settings.get_default().props.gtk_decoration_layout
+                          or ":minimize,maximize,close").split(":"))
+        hb.pack_start(Gtk.WindowControls(side=Gtk.PackType.START,
+                                         valign=Gtk.Align.CENTER,
+                                         decoration_layout=layout))
         t = box(True, 10)
         t.append(self._logo(18))
         t.append(lbl("dynotiq", "hb-title"))
         t.append(lbl(self._distro(), "hb-sub"))
         hb.set_title_widget(Gtk.Box())
         hb.pack_start(t)
+        hb.pack_end(Gtk.WindowControls(side=Gtk.PackType.END,
+                                       valign=Gtk.Align.CENTER,
+                                       decoration_layout=layout))
         self.win.set_titlebar(hb)
 
         root = box(True)
@@ -10681,19 +10887,28 @@ class App(Gtk.Application):
 
     def _page_updates(self):
         p = box(spacing=16)
-        buttons = []
-        if shutil.which("apt-get"):
-            # Getrennt vom Neu-Einlesen: das Holen der Listen braucht root und
-            # darf deshalb nicht bei jedem Blick auf die Seite passieren.
-            fetch = Gtk.Button(label=_("Paketlisten holen"))
-            fetch.add_css_class("btn-ghost")
-            fetch.connect("clicked", self._apt_update)
-            buttons.append(fetch)
-        rel = Gtk.Button(label=_("Neu einlesen"))
-        rel.add_css_class("btn-accent")
-        rel.connect("clicked", lambda *_: self._updates_reload())
-        buttons.append(rel)
-        head, self.upd_sub = self._head(_("Updates"), _("wird gelesen …"), *buttons)
+        check = Gtk.Button(label=_("Auf Updates prüfen"))
+        check.add_css_class("btn-ghost")
+        check.connect("clicked", self._updates_refresh)
+        more = Gtk.MenuButton()
+        more.set_icon_name("dq-dots-symbolic")
+        more.set_tooltip_text(_("Weitere Aktionen"))
+        more.add_css_class("btn-ghost")
+        pop = Gtk.Popover()
+        local = Gtk.Button(label=_("Nur lokale Daten neu einlesen"))
+        local.add_css_class("btn-quiet")
+
+        def reload_local(_button):
+            pop.popdown()
+            self._updates_reload()
+
+        local.connect("clicked", reload_local)
+        pop.set_child(box(spacing=4, margin_top=6, margin_bottom=6,
+                          margin_start=6, margin_end=6))
+        pop.get_child().append(local)
+        more.set_popover(pop)
+        head, self.upd_sub = self._head(_("Updates"), _("wird gelesen …"),
+                                        check, more)
         p.append(head)
         self.upd_box = box(spacing=16)
         # apt, snap, flatpak und fwupd nacheinander zu fragen dauert gut drei
@@ -10712,17 +10927,36 @@ class App(Gtk.Application):
         data = updates_scan(self.cfg.get("firmware", True))
         GLib.idle_add(self._updates_done, data, package_sources(data))
 
-    def _apt_update(self, _b):
-        self._run_log(_("Paketlisten holen"), APT_UPDATE_CMD,
-                      lambda: self._updates_reload())
+    def _updates_refresh(self, _button):
+        if getattr(self, "upd_running", False):
+            self._alert(_("Läuft bereits"),
+                        _("Warte, bis der laufende Update-Vorgang fertig ist."))
+            return
+        steps = []
+        if shutil.which("apt-get"):
+            steps.append(APT_UPDATE_CMD)
+        if self.cfg.get("firmware", True) and shutil.which("fwupdmgr"):
+            steps.append(["fwupdmgr", "refresh"])
+        if not steps:
+            self._updates_reload()
+            return
+        self.upd_running = True
+
+        def done():
+            self.upd_running = False
+            self._updates_reload()
+
+        self._run_log(_("Auf Updates prüfen"), steps, done)
 
     def _updates_done(self, data, sources=()):
         clear(self.upd_box)
         self.upd_checks = {}
-        # Mit der Quelle im Schluessel: ein Snap und ein Paket duerfen gleich
-        # heissen, und dann entschied vorher das Snap ueber die apt-Zeile.
-        self.upd_fresh = {(k, u[0]) for k, v in data.items()
-                          for u in v["items"] if not u[2]}
+        self.upd_rows = {}
+        self.upd_groups = {}
+        self.upd_source_all = {}
+        self.upd_sizes = {}
+        self.upd_versions = {}
+        self.upd_source_filter = "all"
         parts = [f"{len(v['items'])} {source_label(k, len(v['items']))}"
                  for k, v in data.items() if v["items"]]
         phased = data.get("apt", {}).get("phased", [])
@@ -10735,6 +10969,8 @@ class App(Gtk.Application):
         age = fmt_lists_age(apt_lists_age()) if "apt" in data else ""
         self.upd_sub.set_text(f"{text} · {age}" if age else text)
 
+        total = sum(len(v["items"]) for v in data.values())
+        self.upd_box.append(self._updates_status(data, broken))
         for src, res in data.items():
             if res["error"]:
                 c = box()
@@ -10764,8 +11000,13 @@ class App(Gtk.Application):
             self._sources_card(sources)
             return False
 
+        if total:
+            self.upd_box.append(self._updates_filter_bar(data))
         failed = update_fail_notes()
-        for src, res in data.items():
+        for src in UPDATE_ORDER:
+            if src not in data:
+                continue
+            res = data[src]
             ups = res["items"]
             gone = res.get("removals", [])
             held = res.get("phased", [])
@@ -10776,21 +11017,18 @@ class App(Gtk.Application):
             c.add_css_class("card")
             allbox = None
             if ups:
-                btn = Gtk.Button(label=_("Installieren"), valign=Gtk.Align.CENTER)
-                btn.add_css_class("btn-fix")
-                btn.connect("clicked", self._updates_apply, src)
                 total = sum(u[4] for u in ups)
                 allbox = Gtk.CheckButton(active=True, valign=Gtk.Align.CENTER,
                                          tooltip_text=_("Alle in dieser Quelle"))
-                right = box(True, 10)
-                right.append(lbl(f"{len(ups)} · {fmt_bytes(total)}" if total
-                                 else str(len(ups)), "sub"))
-                right.append(btn)
+                right = lbl(f"{len(ups)} · {fmt_bytes(total)}" if total
+                            else str(len(ups)), "sub")
                 head = card_head(source_label(src), right, allbox)
             else:
                 head = card_head(source_label(src))
             c.append(head)
             checks = []
+            rows = []
+            grid = Gtk.Grid(column_homogeneous=True)
             for uid, name, old, new, size in ups:
                 r = box(True, 12, margin_top=9, margin_bottom=9,
                         margin_start=18, margin_end=18)
@@ -10801,8 +11039,11 @@ class App(Gtk.Application):
                     cb.set_active(False)
                     cb.set_sensitive(False)
                     cb.set_tooltip_text(_("Ungewöhnlicher Name, hier nicht ausführbar"))
+                cb.connect("toggled", lambda *_: self._updates_selection_changed())
                 r.append(cb)
                 checks.append((cb, uid))
+                self.upd_sizes[(src, uid)] = size
+                self.upd_versions[(src, uid)] = new
                 icon = update_icon(src, uid, name)
                 img = (Gtk.Image.new_from_file(icon) if icon.startswith("/")
                        else Gtk.Image.new_from_icon_name(
@@ -10821,7 +11062,12 @@ class App(Gtk.Application):
                     s = lbl(fmt_bytes(size), "mono-dim")
                     s.set_valign(Gtk.Align.CENTER)
                     r.append(s)
-                c.append(sep_row(r))
+                wrap = sep_row(r)
+                index = len(rows)
+                grid.attach(wrap, index % 2, index // 2, 1, 1)
+                rows.append(("\n".join((name, uid, old, new)).casefold(), wrap))
+            if ups:
+                c.append(grid)
             if src == "apt" and ups:
                 w = box()
                 w.append(sep())
@@ -10875,11 +11121,209 @@ class App(Gtk.Application):
             if allbox:
                 allbox.connect("toggled", self._updates_toggle_all, checks)
             self.upd_checks[src] = checks
+            if allbox:
+                self.upd_source_all[src] = allbox
+            self.upd_rows[src] = rows
+            self.upd_groups[src] = c
             self.upd_box.append(c)
+        self.upd_filter_empty = lbl(_("Kein Update passt zur Suche."), "empty")
+        self.upd_filter_empty.set_visible(False)
+        self.upd_box.append(self.upd_filter_empty)
+        self._updates_selection_changed()
+        self._updates_filter()
         self._sources_card(sources)
         return False
 
-    SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
+    def _updates_status(self, data, broken):
+        self.upd_broken = bool(broken)
+        self.upd_total_count = sum(valid_pkg(item[0])
+                                   for result in data.values()
+                                   for item in result["items"])
+        shell = box()
+        shell.add_css_class("upd-status")
+        inner = box(spacing=14, margin_top=18, margin_bottom=16,
+                    margin_start=18, margin_end=18)
+        top = box(True, 24)
+        text = box(spacing=5, hexpand=True)
+        text.append(lbl(_("Alles in einem Lauf aktualisieren"),
+                        "upd-status-title"))
+        text.append(lbl(
+            _("dynotiq führt apt, Snap, Flatpak und Firmware nacheinander aus. "
+              "Jeder Bereich wird danach erneut geprüft."),
+            "upd-status-copy", wrap=True, chars=64))
+        actions = box(True, 12, margin_top=7)
+        self.upd_all_btn = Gtk.Button()
+        self.upd_all_btn.add_css_class("btn-accent")
+        self.upd_all_btn.connect("clicked", self._updates_apply_all)
+        actions.append(self.upd_all_btn)
+        self.upd_selection = lbl("", "mono-dim")
+        self.upd_selection.set_valign(Gtk.Align.CENTER)
+        actions.append(self.upd_selection)
+        if not self.upd_total_count:
+            self.upd_all_btn.set_label(_("Keine Updates verfügbar"))
+            self.upd_all_btn.set_sensitive(False)
+            self.upd_selection.set_text(_("Keine auswählbaren Updates"))
+        text.append(actions)
+        top.append(text)
+
+        guard = box(spacing=5, hexpand=True)
+        guard.add_css_class("upd-guard")
+        snapshot = self.cfg.get("snapshot", False) and shutil.which("timeshift")
+        snapshot_title = (_("Snapshot vor dem Start") if snapshot else
+                          _("Kein Snapshot vor dem Start"))
+        snapshot_detail = (_("aktiv") if snapshot else
+                           _("Timeshift ist aus oder nicht installiert"))
+        for ok, title, detail in (
+                (bool(snapshot), snapshot_title, snapshot_detail),
+                (True, _("Auswahl wird beim Start erneut geprüft"),
+                 _("veraltete Ziele werden nicht ausgeführt")),
+                (True, _("Quellenprüfung durch die Paketmanager"),
+                 _("apt, Snap, Flatpak und fwupd"))):
+            row = box(True, 9)
+            icon = Gtk.Image.new_from_icon_name(
+                "dq-check-symbolic" if ok else "dq-alert-symbolic")
+            icon.set_pixel_size(16)
+            icon.add_css_class("state-ok" if ok else "state-warn")
+            row.append(icon)
+            title_label = lbl(title, "row-title", wrap=True, chars=42)
+            title_label.set_hexpand(True)
+            row.append(title_label)
+            row.append(lbl(detail, "sub", xalign=1.0, wrap=True, chars=34))
+            guard.append(row)
+        top.append(guard)
+        inner.append(top)
+        inner.append(sep())
+
+        rail = Gtk.Grid(column_homogeneous=True)
+        column = 0
+        for src in UPDATE_ORDER:
+            result = data.get(src)
+            if result is None:
+                continue
+            items = result["items"]
+            stage = box(True, 10)
+            stage.add_css_class("upd-stage")
+            count = lbl("?" if result.get("error") else str(len(items)),
+                        "upd-stage-count", xalign=0.5)
+            count.set_halign(Gtk.Align.CENTER)
+            count.set_valign(Gtk.Align.CENTER)
+            stage.append(count)
+            words = box(spacing=1)
+            words.append(lbl(source_label(src, len(items)), "upd-stage-title"))
+            size = sum(item[4] for item in items)
+            detail = (_("nicht geprüft") if result.get("error") else
+                      fmt_bytes(size) if size else
+                      _("Größe unbekannt") if items else _("Keine Updates"))
+            words.append(lbl(detail, "upd-stage-detail"))
+            stage.append(words)
+            rail.attach(stage, column, 0, 1, 1)
+            column += 1
+        inner.append(rail)
+        shell.append(inner)
+        return shell
+
+    def _updates_filter_bar(self, data):
+        row = box(True, 4)
+        row.add_css_class("pro-tabs")
+        first = Gtk.ToggleButton(label=_("Alle {n}").format(
+            n=sum(len(v["items"]) for v in data.values())))
+        first.set_active(True)
+        first.connect("toggled", self._updates_source_changed, "all")
+        row.append(first)
+        for src in UPDATE_ORDER:
+            items = data.get(src, {}).get("items", ())
+            if not items:
+                continue
+            button = Gtk.ToggleButton(label=_("{src} {n}").format(
+                src=source_label(src, len(items)), n=len(items)))
+            button.set_group(first)
+            button.connect("toggled", self._updates_source_changed, src)
+            row.append(button)
+        row.append(Gtk.Box(hexpand=True))
+        self.upd_all_toggle = Gtk.Button(label=_("Alle abwählen"))
+        self.upd_all_toggle.add_css_class("btn-quiet")
+        self.upd_all_toggle.connect("clicked", self._updates_toggle_everything)
+        row.append(self.upd_all_toggle)
+        self.upd_search = Gtk.SearchEntry()
+        self.upd_search.add_css_class("pro-search")
+        self.upd_search.set_placeholder_text(_("Updates filtern"))
+        self.upd_search.set_size_request(210, -1)
+        self.upd_search.connect("search-changed", lambda *_: self._updates_filter())
+        row.append(self.upd_search)
+        return row
+
+    def _updates_source_changed(self, button, src):
+        if button.get_active():
+            self.upd_source_filter = src
+            self._updates_filter()
+
+    def _updates_filter(self):
+        query = (self.upd_search.get_text().strip().casefold()
+                 if hasattr(self, "upd_search") else "")
+        visible = 0
+        for src, group in self.upd_groups.items():
+            source_visible = self.upd_source_filter in ("all", src)
+            matches = 0
+            for haystack, row in self.upd_rows.get(src, ()):
+                show = source_visible and (not query or query in haystack)
+                row.set_visible(show)
+                matches += show
+            show_group = source_visible and (not query or bool(matches))
+            group.set_visible(show_group)
+            visible += show_group
+        if hasattr(self, "upd_filter_empty"):
+            self.upd_filter_empty.set_visible(not visible)
+
+    def _updates_selected(self):
+        return {src: sorted(uid for cb, uid in checks
+                            if cb.get_active() and valid_pkg(uid))
+                for src, checks in self.upd_checks.items()
+                if any(cb.get_active() and valid_pkg(uid)
+                       for cb, uid in checks)}
+
+    def _updates_selection_changed(self):
+        if not hasattr(self, "upd_all_btn"):
+            return
+        selected = self._updates_selected()
+        count = sum(map(len, selected.values()))
+        size = sum(self.upd_sizes.get((src, uid), 0)
+                   for src, ids in selected.items() for uid in ids)
+        if not getattr(self, "upd_total_count", 0):
+            self.upd_all_btn.set_label(_("Keine Updates verfügbar"))
+            self.upd_all_btn.set_sensitive(False)
+            self.upd_selection.set_text(_("Keine auswählbaren Updates"))
+            return
+        self.upd_all_btn.set_sensitive(bool(count))
+        if count == getattr(self, "upd_total_count", 0):
+            label = (_("Verfügbare {n} aktualisieren") if self.upd_broken else
+                     _("Alle {n} aktualisieren")).format(n=count)
+        else:
+            label = _("Ausgewählte {n} aktualisieren").format(n=count)
+        self.upd_all_btn.set_label(label if count else _("Nichts ausgewählt"))
+        self.upd_selection.set_text(
+            _("{n} ausgewählt, {size}").format(n=count, size=fmt_bytes(size))
+            if size else _("{n} ausgewählt").format(n=count))
+        if hasattr(self, "upd_all_toggle"):
+            self.upd_all_toggle.set_label(
+                _("Alle abwählen") if count == self.upd_total_count
+                else _("Alle auswählen"))
+        for src, allbox in self.upd_source_all.items():
+            checks = [cb for cb, uid in self.upd_checks[src] if valid_pkg(uid)]
+            active = sum(cb.get_active() for cb in checks)
+            allbox.set_inconsistent(0 < active < len(checks))
+            if active == 0 and allbox.get_active():
+                allbox.set_active(False)
+            elif checks and active == len(checks) and not allbox.get_active():
+                allbox.set_active(True)
+
+    def _updates_toggle_everything(self, _button):
+        selected = sum(map(len, self._updates_selected().values()))
+        active = selected != getattr(self, "upd_total_count", 0)
+        for checks in self.upd_checks.values():
+            for cb, uid in checks:
+                if cb.get_sensitive() and valid_pkg(uid):
+                    cb.set_active(active)
+        self._updates_selection_changed()
 
     def _sources_card(self, rows):
         """Woher die Updates kommen und ob jede Quelle noch etwas liefert.
@@ -10929,7 +11373,7 @@ class App(Gtk.Application):
             row.append(txt)
             # Ohne Farbe: den Zustand sagt schon der Punkt links, das Kuerzel
             # sagt nur, um welche Art von Quelle es geht.
-            pill = lbl(self.SOURCE_KIND.get(art, art), "pill")
+            pill = lbl(SOURCE_KIND.get(art, art), "pill")
             pill.set_valign(Gtk.Align.CENTER)
             row.append(pill)
             inner.append(sep_row(row))
@@ -10942,73 +11386,142 @@ class App(Gtk.Application):
             if cb.get_sensitive():
                 cb.set_active(allbox.get_active())
 
-    def _updates_apply(self, btn, src):
+    def _updates_apply_all(self, btn):
         if getattr(self, "upd_running", False):
-            self._alert(_("Läuft bereits"), _("Warte, bis die laufende Installation fertig ist."))
+            self._alert(_("Läuft bereits"),
+                        _("Warte, bis die laufende Installation fertig ist."))
             return
-        ids = sorted({uid for cb, uid in self.upd_checks.get(src, ())
-                      if cb.get_active() and valid_pkg(uid)})
-        if not ids:
+        selected = self._updates_selected()
+        if not selected:
             self._alert(_("Nichts ausgewählt"),
                         _("Wähle mindestens einen Eintrag zum Aktualisieren."))
             return
         self.upd_running = True
         btn.set_sensitive(False)
-        fresh = needs_fresh(src, ids, getattr(self, "upd_fresh", set()))
-        steps = cmd_steps(update_cmd(src, ids, fresh))
-        if self.cfg["snapshot"] and shutil.which("timeshift"):
-            # Erst sichern, dann installieren. Scheitert der Snapshot, bricht die
-            # Kette ab und es wird nichts angefasst.
-            steps = [SNAPSHOT_CMD] + steps
+        self.upd_sub.set_text(_("Auswahl wird erneut geprüft …"))
+        expected = {(src, uid): self.upd_versions[(src, uid)]
+                    for src, ids in selected.items() for uid in ids}
+        self.work(self._updates_preflight, self.upd_sub, selected, expected, btn)
+
+    def _updates_preflight(self, selected, expected, btn):
+        try:
+            data = updates_scan(self.cfg.get("firmware", True))
+            sources = package_sources(data)
+        except Exception as e:
+            GLib.idle_add(self._updates_preflight_failed, btn, str(e))
+            return
+        GLib.idle_add(self._updates_preflight_done, data, sources,
+                      selected, expected, btn)
+
+    def _updates_preflight_failed(self, btn, error):
+        self.upd_running = False
+        btn.set_sensitive(True)
+        self.upd_sub.set_text(_("Vorprüfung fehlgeschlagen"))
+        self._alert(_("Updates nicht gestartet"), error)
+        return False
+
+    def _updates_preflight_done(self, data, sources, selected, expected, btn):
+        self.upd_running = False
+        btn.set_sensitive(True)
+        errors = [(src, data.get(src, {}).get("error") or
+                   _("Quelle nicht verfügbar")) for src in selected
+                  if src not in data or data[src].get("error")]
+        changed = update_changes(data, expected)
+        if errors or changed:
+            self._updates_done(data, sources)
+            if errors:
+                detail = "\n".join(f"{source_label(src)}: {error}"
+                                   for src, error in errors)
+                self._alert(_("Updates nicht gestartet"),
+                            _("Mindestens eine ausgewählte Quelle konnte nicht "
+                              "erneut geprüft werden:\n\n") + detail)
+            else:
+                self._alert(_("Auswahl hat sich geändert"),
+                            _("Seit dem letzten Einlesen hat sich mindestens "
+                              "eine Zielversion geändert. Prüfe die neue Liste, "
+                              "bevor du die Updates startest."))
+            return False
+
+        fresh = {(src, item[0]) for src, result in data.items()
+                 for item in result.get("items", ()) if not item[2]}
+        snapshot = self.cfg.get("snapshot", False) and shutil.which("timeshift")
+        steps = update_steps(selected, fresh, bool(snapshot))
+        total = sum(map(len, selected.values()))
+        targets = {(src, item[0]): item for src, result in data.items()
+                   for item in result["items"]}
+        lines = []
+        for src in UPDATE_ORDER:
+            ids = selected.get(src, ())
+            if not ids:
+                continue
+            size = sum(targets[(src, uid)][4] for uid in ids)
+            amount = f"{len(ids)}, {fmt_bytes(size)}" if size else str(len(ids))
+            lines.append(f"{source_label(src, len(ids))}: {amount}")
+        lines += ["", (_("Vor dem Start wird ein Timeshift-Snapshot angelegt.")
+                         if snapshot else
+                         _("Vor dem Start wird kein Snapshot angelegt."))]
+        if selected.get("fwupd"):
+            lines += ["", _("Firmware ist ausgewählt. Trenne betroffene Geräte "
+                              "während des Updates nicht vom Rechner.")]
+        lines += ["", _("Die Paketmanager prüfen ihre Quellen selbst. dynotiq "
+                          "führt nur die oben ausgewählten Updates aus."),
+                  "", _("Ausgeführt wird:"), *cmd_preview(steps)]
+        label = _("Ausgewählte {n} aktualisieren").format(n=total)
+        self._confirm(_("{n} Updates aktualisieren?").format(n=total),
+                      "\n".join(lines), [_("Abbrechen"), label],
+                      lambda: self._updates_start(selected, steps, btn),
+                      default=0)
+        return False
+
+    def _updates_start(self, selected, steps, btn):
+        self.upd_running = True
+        btn.set_sensitive(False)
+        total = sum(map(len, selected.values()))
 
         log = []
 
         def done():
             self.upd_running = False
             btn.set_sensitive(True)
-            self.work(self._updates_verify, self.upd_sub, src, ids,
+            self.work(self._updates_verify_all, self.upd_sub, selected,
                       "\n".join(log))
 
-        self._run_log(_("{src} aktualisieren").format(
-            src=source_label(src, len(ids))), steps, done,
-                      count=len(ids), sink=log)
+        self._run_log(_("Updates aktualisieren"), steps, done,
+                      count=total, sink=log, safe_cancel=True)
 
-    def _updates_verify(self, src, ids, log=""):
-        """Nach dem Lauf nachsehen, was wirklich weg ist. Der Sammel-Exitcode
-        sagt nicht, welches Paket gescheitert ist."""
+    def _updates_verify_all(self, selected, log=""):
+        """Alle ausgewaehlten Quellen nach dem gemeinsamen Lauf nachsehen."""
         data = updates_scan(self.cfg.get("firmware", True))
-        err = data.get(src, {}).get("error")
-        if err:
-            # Ohne den zweiten Scan ist unbekannt, was durchlief. Die leere
-            # Liste als Erfolg zu lesen war der Fehler: dann meldete die Seite
-            # jedes Paket als eingespielt, gerade wenn apt gar nicht antwortete.
-            GLib.idle_add(self._updates_done, data, package_sources(data))
-            GLib.idle_add(self._alert, _("Nicht nachprüfbar"),
-                          _("Der Lauf ist beendet, aber {err}. Ob die Updates "
-                            "wirklich angekommen sind, sagt erst das nächste "
-                            "Einlesen.").format(err=err))
-            return
-        left = {u[0] for u in data.get(src, {}).get("items", [])} & set(ids)
-        done = sorted(set(ids) - left)
-        if done:
-            # Der Verlauf ist der einzige Ort, an dem sich spaeter nachsehen
-            # laesst, ob eine Messung vor oder nach einem Eingriff entstand.
-            history_append({"t": time.time(), "kind": "update", "src": src,
-                            "n": len(done), "items": done[:20]})
-        GLib.idle_add(self._updates_done, data, package_sources(data))
-        if left:
-            notes, kind = update_failures(src, sorted(left), log)
-            known = {r: w for r, w in notes.items() if w}
+        notes, first_kind = {}, ""
+        for src, ids in selected.items():
+            result = data.get(src, {})
+            err = result.get("error") or (
+                _("Quelle nicht mehr verfügbar") if src not in data else "")
+            if err:
+                for uid in ids:
+                    notes[f"{source_label(src)}: {uid}"] = \
+                        _("Nicht nachprüfbar: {err}").format(err=err)
+                continue
+            left = {item[0] for item in result.get("items", ())} & set(ids)
+            done = sorted(set(ids) - left)
+            if done:
+                history_append({"t": time.time(), "kind": "update", "src": src,
+                                "n": len(done), "items": done[:20]})
+            failed, kind = update_failures(src, sorted(left), log)
+            first_kind = first_kind or kind
+            known = {uid: why for uid, why in failed.items() if why}
             if known:
-                # Damit die Seite beim naechsten Mal schon vor dem Anhaken
-                # sagen kann, woran es zuletzt lag.
                 history_append({"t": time.time(), "kind": "update-fail",
                                 "src": src, "items": known})
-            # Den Rat hier holen, nicht im Dialog: er fragt flatpak und apt,
-            # und das gehoert nicht in den Zeichenthread.
-            note, cmd, label = (flatpak_too_old_fix() if kind == "too_old"
-                                else ("", None, ""))
-            GLib.idle_add(self._updates_failed, len(ids), notes, note, cmd, label)
+            for uid, why in failed.items():
+                notes[f"{source_label(src)}: {uid}"] = why
+        GLib.idle_add(self._updates_done, data, package_sources(data))
+        if notes:
+            note, cmd, label = (flatpak_too_old_fix()
+                                if first_kind == "too_old" else ("", None, ""))
+            GLib.idle_add(self._updates_failed,
+                          sum(map(len, selected.values())), notes,
+                          note, cmd, label)
 
     def _updates_failed(self, total, notes, note, cmd, label):
         """Was der Lauf ueber die einzelnen Eintraege gesagt hat, statt nur
@@ -11027,7 +11540,8 @@ class App(Gtk.Application):
             self._alert(title, detail)
         return False
 
-    def _run_log(self, title, cmd, done=None, count=0, sink=None):
+    def _run_log(self, title, cmd, done=None, count=0, sink=None,
+                 safe_cancel=False):
         """Führt cmd aus und zeigt die Ausgabe live. Kein Shell, cmd ist eine
         Liste von Argumenten oder eine Liste solcher Listen."""
         win = Gtk.Window(title=title, transient_for=self.win, modal=True,
@@ -11038,7 +11552,8 @@ class App(Gtk.Application):
         scroll = Gtk.ScrolledWindow(child=view, vexpand=True)
         bar = Gtk.ProgressBar(show_text=True, text=_("startet …"), margin_top=10,
                               pulse_step=0.06)
-        stop = Gtk.Button(label=_("Abbrechen"), halign=Gtk.Align.END)
+        stop = Gtk.Button(label=_("Nach diesem Schritt stoppen") if safe_cancel
+                          else _("Abbrechen"), halign=Gtk.Align.END)
         close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END, sensitive=False)
         close.connect("clicked", lambda *_: win.close())
         row = box(True, 8, margin_top=10, halign=Gtk.Align.END)
@@ -11058,7 +11573,7 @@ class App(Gtk.Application):
 
         seen = set()
         run = {"start": time.monotonic(), "last": time.monotonic(), "done": False,
-               "step": "", "pct": 0.0}
+               "step": "", "pct": 0.0, "stop_after_step": False}
 
         def append(line):
             run["last"] = time.monotonic()
@@ -11126,6 +11641,12 @@ class App(Gtk.Application):
             return False
 
         def do_cancel():
+            if safe_cancel:
+                run["stop_after_step"] = True
+                stop.set_sensitive(False)
+                append(_("Der laufende Schritt wird fertiggestellt. Danach "
+                         "startet keine weitere Update-Quelle."))
+                return
             pr = proc.get("p")
             if not pr or pr.poll() is not None:
                 return
@@ -11142,11 +11663,17 @@ class App(Gtk.Application):
 
         def cancel(_b):
             d = Gtk.AlertDialog(modal=True)
-            d.set_message(_("Installation abbrechen?"))
-            d.set_detail(_("Mitten im Entpacken abzubrechen kann halb installierte "
-                         "Pakete hinterlassen. Danach hilft nur "
-                         "'sudo dpkg --configure -a'."))
-            d.set_buttons([_("Weiterlaufen lassen"), _("Abbrechen erzwingen")])
+            d.set_message(_("Update-Lauf stoppen?") if safe_cancel else
+                          _("Installation abbrechen?"))
+            d.set_detail(
+                _("Der aktuelle Paketmanager beendet seinen Schritt. Danach "
+                  "startet keine weitere Quelle.") if safe_cancel else
+                _("Mitten im Entpacken abzubrechen kann halb installierte "
+                  "Pakete hinterlassen. Danach hilft nur "
+                  "'sudo dpkg --configure -a'."))
+            d.set_buttons([_("Weiterlaufen lassen"),
+                           _("Danach stoppen") if safe_cancel else
+                           _("Abbrechen erzwingen")])
             d.set_default_button(0)
             d.set_cancel_button(0)
             d.choose(win, None, lambda dlg, res: dlg.choose_finish(res) == 1
@@ -11175,6 +11702,9 @@ class App(Gtk.Application):
                     GLib.idle_add(finish, _("Abgebrochen.")
                                   if rc in (126, 127) or rc < 0
                                   else _("Beendet mit Code {rc}.").format(rc=rc))
+                    return
+                if run["stop_after_step"]:
+                    GLib.idle_add(finish, _("Nach diesem Schritt beendet."))
                     return
             GLib.idle_add(finish, _("Fertig."))
 
@@ -11932,98 +12462,211 @@ class App(Gtk.Application):
 
     def _proton_done(self, results, versions, games, managers=()):
         clear(self.pro_box)
-        # Eine Bewertung fuer die ganze Seite: Kopf, Karten und Listen rendern
-        # alle aus results und den sev-Feldern. Vorher sagte der Kopf "alles
-        # in Ordnung", waehrend die Spieleliste dieselben Faelle rot trug.
         bad = [r for r in results if r["sev"] in ("crit", "warn")]
-        hints = [r for r in results if r["sev"] not in ("crit", "warn")]
-        eigen = [v for v in versions if not v["valve"]]
         have_steam = bool(steam_root())
-        fremd = sum(1 for v in versions if not v.get("sees", True))
-        teile = [_("{n} Fassungen").format(n=len(versions) - fremd)]
-        if fremd:
-            teile.append(_("{n} sieht Steam nicht").format(n=fremd))
-        teile.append(_("{b} zu klären").format(b=len(bad)) if bad
-                     else _("alles in Ordnung"))
-        self.pro_sub.set_text(" · ".join(teile) if have_steam
-                              else _("kein Steam gefunden"))
+        visible = sum(v.get("sees", True) for v in versions)
+        spiele = (_("1 Spiel") if len(games) == 1 else
+                  _("{n} Spiele").format(n=len(games)))
+        self.pro_sub.set_text(
+            " · ".join((_("{n} installiert").format(n=len(versions)),
+                        _("{n} in Steam").format(n=visible), spiele))
+            if have_steam else _("kein Steam gefunden"))
+        self.pro_box.append(self._proton_status(results, bad, versions, games,
+                                                have_steam))
 
-        # Das Verdikt zuerst: die eine Antwort, die ein Laie sucht, und die
-        # zwei Saetze Einordnung dazu. Die lange Erklaerung liegt dahinter im
-        # Expander statt wie frueher als letzte Gruppe drei Bildschirmseiten
-        # tiefer, wo sie niemand fand.
-        v = box(spacing=0)
-        v.append(lbl(_("BEFUND"), "eyebrow"))
-        if not have_steam:
-            headline, lede = _("Kein Steam gefunden"), \
-                _("Diese Seite prüft Proton, und das gehört zu Steam.")
-        elif any(r["sev"] == "crit" for r in bad):
-            headline, lede = _("Manche Spiele starten gerade nicht"), \
-                _("Woran es liegt und was hilft, steht direkt darunter.")
-        elif any(r.get("blockt") for r in bad):
-            headline, lede = _("Ein paar Spiele starten so nicht"), \
-                _("Was dahintersteckt und was hilft, steht direkt darunter.")
-        elif bad:
-            headline, lede = _("Es läuft, ein paar Punkte sind offen"), \
-                _("Keiner davon verhindert gerade einen Spielstart.")
-        else:
-            headline, lede = _("Alles bereit für deine Spiele"), \
-                _("Jede Fassung ist vollständig, und jedes Spiel zeigt auf "
-                  "eine Fassung, die Steam auch hat.")
-        hl = lbl(headline, "headline", wrap=True, chars=34)
-        hl.set_margin_top(7)
-        v.append(hl)
-        led = lbl(lede, "lede", wrap=True, chars=80)
-        led.set_margin_top(6)
-        v.append(led)
-        erk = Gtk.Expander(margin_top=10)
-        erk.set_label_widget(lbl(_("Was ist Proton?"), "row-detail"))
-        erk.set_child(lbl(
-            _("Windows-Spiele laufen unter Linux nicht direkt. Proton "
-              "übersetzt sie und liegt in mehreren Fassungen vor. Weil jede "
-              "Fassung andere Bibliotheken braucht, läuft sie selbst in einem "
-              "abgeschlossenen Container, den Steam getrennt herunterlädt. "
-              "Fehlt der Container oder ist die Fassung unvollständig "
-              "entpackt, startet das Spiel nicht, und Steam sagt dazu nichts "
-              "weiter als dass es gleich wieder beendet wurde. Diese Seite "
-              "sieht in den Dateien nach, woran es liegt."),
-            "row-detail", wrap=True, chars=88))
-        v.append(erk)
-        self.pro_box.append(card(v, 20))
+        if have_steam:
+            stack = Gtk.Stack()
+            stack.set_vhomogeneous(False)
+            stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+            stack.set_transition_duration(140)
+            stack.add_titled(self._proton_games_view(games), "games",
+                             _("Spiele {n}").format(n=len(games)))
+            stack.add_titled(self._proton_versions_view(versions, managers),
+                             "versions",
+                             _("Fassungen {n}").format(n=len(versions)))
+            tab = getattr(self, "pro_tab", "games")
+            if not games and versions:
+                tab = "versions"
+            stack.set_visible_child_name(tab)
+            stack.connect("notify::visible-child-name", lambda s, _p:
+                          setattr(self, "pro_tab",
+                                  s.get_visible_child_name() or "games"))
+            tabs_bar = box()
+            tabs_bar.add_css_class("pro-tabs")
+            tabs = Gtk.StackSwitcher(halign=Gtk.Align.START)
+            tabs.set_stack(stack)
+            tabs_bar.append(tabs)
+            self.pro_box.append(tabs_bar)
+            self.pro_box.append(stack)
+        self.pro_box.append(self._proton_help())
 
-        # Zu klaeren gibt es die Karte nur, wenn wirklich etwas ansteht. Die
-        # fruehere Beruhigungszeile an dieser Stelle sagte dasselbe wie das
-        # Verdikt und stand ausgerechnet ueber einer Liste von Eintraegen.
-        if bad:
-            inhalt = box()
-            for r in bad:
-                row = self._pro_row(r)
-                inhalt.append(sep_row(row) if inhalt.get_first_child() else row)
-            self.pro_box.append(group(_("Was zu klären ist"), inhalt,
-                                      self._pro_bulk(results, bad)))
-        if hints:
-            inhalt = box()
-            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_top=8,
-                               margin_bottom=12)
-            exp.set_label_widget(lbl(_("Ansehen"), "row-detail"))
-            innen = box()
-            for r in hints:
-                row = self._pro_row(r)
-                innen.append(sep_row(row) if innen.get_first_child() else row)
-            exp.set_child(innen)
-            inhalt.append(exp)
-            self.pro_box.append(group(_("Hinweise ohne Handlungsbedarf"),
-                                      inhalt, len(hints)))
-
-        # Seit in der ersten Karte Knoepfe stehen, zieht GTK die Ansicht beim
-        # Aufbau dorthin und der Seitenkopf war weg. Nach dem Neueinlesen
-        # gehoert der Anfang der Seite nach oben.
         oben = self.pro_box.get_ancestor(Gtk.ScrolledWindow)
         if oben:
             GLib.idle_add(oben.get_vadjustment().set_value, 0.0)
+        return False
 
-        # Der Verwalter-Knopf wohnt im Kopf der Bestandsliste, nicht in einer
-        # eigenen Gruppe: er handelt von genau diesen Fassungen.
+    def _proton_status(self, results, bad, versions, games, have_steam):
+        crit = [r for r in bad if r["sev"] == "crit"]
+        crit_games = sum(g["sev"] == "crit" for g in games)
+        if not have_steam:
+            title = _("Steam wurde nicht gefunden")
+            detail = _("dynotiq kann Proton erst prüfen, wenn Steam installiert "
+                       "und mindestens einmal gestartet wurde.")
+            sev = "info"
+        elif crit_games:
+            title = (_("1 Spiel kann gerade nicht starten") if crit_games == 1
+                     else _("{n} Spiele können gerade nicht starten").format(
+                         n=crit_games))
+            detail = (bad[0]["short"] if len(bad) == 1 else
+                      _("{n} Prüfungen melden einen Fehler oder brauchen eine "
+                        "Entscheidung.").format(n=len(bad)))
+            sev = "crit"
+        elif crit:
+            title = _("Eine Proton-Fassung ist nicht einsatzbereit")
+            detail = (bad[0]["short"] if len(bad) == 1 else
+                      _("{n} Prüfungen melden einen Fehler oder brauchen eine "
+                        "Entscheidung.").format(n=len(bad)))
+            sev = "crit"
+        elif games:
+            title = (_("1 Spiel hat eine gültige Fassung") if len(games) == 1 else
+                     _("Alle {n} Spiele haben eine gültige Fassung").format(
+                         n=len(games)))
+            detail = (bad[0]["short"] if len(bad) == 1 else
+                      _("{n} Prüfungen brauchen noch eine Entscheidung.").format(
+                          n=len(bad)) if bad else
+                      _("Steam erkennt alle installierten Fassungen, die für "
+                        "Steam bestimmt sind."))
+            sev = "warn" if bad else "ok"
+        else:
+            title = _("Keine Proton-Spiele gefunden")
+            detail = (_("Proton-Fassungen sind installiert, aber keinem "
+                        "installierten Windows-Spiel zugeordnet.") if versions else
+                      _("Steam hat noch keine Proton-Fassung installiert."))
+            sev = "warn" if bad else "info"
+
+        shell = box(True)
+        shell.add_css_class("pro-status")
+        shell.append(bar({"crit": "bullet-crit", "warn": "bullet-warn",
+                          "ok": "bullet-ok"}.get(sev, "bullet-info")))
+        inner = box(spacing=10, hexpand=True, margin_top=18, margin_bottom=18,
+                    margin_start=18, margin_end=18)
+        top = box(True, 16)
+        text = box(spacing=4, hexpand=True)
+        text.append(lbl(title, "pro-status-title", wrap=True, chars=58))
+        text.append(lbl(detail, "pro-status-copy", wrap=True, chars=78))
+        top.append(text)
+        if bad:
+            actions = box(True, 8, valign=Gtk.Align.CENTER)
+            bulk = self._pro_bulk(results)
+            if bulk is not None:
+                actions.append(bulk)
+            reveal = Gtk.Revealer()
+            reveal.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+            reveal.set_transition_duration(160)
+            details = Gtk.ToggleButton(label=_("Details"))
+            details.add_css_class("btn-ghost")
+
+            def show_details(button):
+                shown = button.get_active()
+                reveal.set_reveal_child(shown)
+                button.set_label(_("Weniger") if shown else _("Details"))
+
+            details.connect("toggled", show_details)
+            actions.append(details)
+            top.append(actions)
+            issues = box()
+            for finding in bad:
+                row = self._pro_row(finding)
+                issues.append(sep_row(row) if issues.get_first_child() else row)
+            reveal.set_child(issues)
+            inner.append(top)
+            inner.append(reveal)
+        else:
+            inner.append(top)
+        shell.append(inner)
+        return shell
+
+    def _proton_games_view(self, games):
+        view = box(spacing=12, margin_top=14)
+        if not games:
+            view.append(lbl(_("Keine installierten Proton-Spiele gefunden."),
+                            "empty"))
+            return view
+
+        search = Gtk.SearchEntry()
+        search.add_css_class("pro-search")
+        search.set_placeholder_text(_("Spiel suchen"))
+        view.append(search)
+        grid = Gtk.Grid(column_spacing=24)
+        game_head = lbl(_("Spiel"), "pro-colhead")
+        game_head.set_hexpand(True)
+        tool_head = lbl(_("Fassung"), "pro-colhead")
+        tool_head.set_size_request(185, -1)
+        state_head = lbl(_("Status"), "pro-colhead")
+        state_head.set_size_request(250, -1)
+        grid.attach(game_head, 0, 0, 1, 1)
+        grid.attach(tool_head, 1, 0, 1, 1)
+        grid.attach(state_head, 2, 0, 1, 1)
+        first_sep = Gtk.Box(margin_top=8)
+        first_sep.add_css_class("rowsep")
+        grid.attach(first_sep, 0, 1, 3, 1)
+
+        rows = []
+        for i, game in enumerate(games):
+            row = 2 + i * 2
+            name = box(True, 12, hexpand=True, margin_top=8, margin_bottom=8)
+            if game["icon"] and os.path.isfile(game["icon"]):
+                icon = Gtk.Image.new_from_file(game["icon"])
+                icon.add_css_class("pro-game-icon")
+            else:
+                icon = Gtk.Image.new_from_icon_name("applications-games-symbolic")
+                icon.set_pixel_size(24)
+                icon.add_css_class("pro-game-icon-fallback")
+            icon.set_size_request(32, 32)
+            name.append(icon)
+            name.append(lbl(game["name"], "row-title", wrap=True, chars=36))
+            tool = lbl(game["tool"], "row-detail", wrap=True, chars=24)
+            tool.set_size_request(185, -1)
+            state = box(True, 10)
+            state.set_size_request(250, -1)
+            dot = Gtk.Box(valign=Gtk.Align.CENTER)
+            dot.add_css_class("pro-state-dot")
+            dot.add_css_class(game["sev"])
+            state.append(dot)
+            state_label = lbl(game["status"], "row-detail", wrap=True, chars=32)
+            if game["sev"] in ("warn", "crit"):
+                state_label.add_css_class("state-" + game["sev"])
+            state.append(state_label)
+            state.set_tooltip_text(game["detail"])
+            grid.attach(name, 0, row, 1, 1)
+            grid.attach(tool, 1, row, 1, 1)
+            grid.attach(state, 2, row, 1, 1)
+            line = Gtk.Box()
+            line.add_css_class("rowsep")
+            grid.attach(line, 0, row + 1, 3, 1)
+            haystack = "\n".join((game["name"], game["tool"], game["status"],
+                                    game["detail"])).casefold()
+            rows.append((haystack, (name, tool, state, line)))
+        view.append(grid)
+        empty = lbl(_("Kein Spiel passt zur Suche."), "empty")
+        empty.set_visible(False)
+        view.append(empty)
+
+        def filter_rows(entry):
+            query = entry.get_text().strip().casefold()
+            visible = 0
+            for haystack, widgets in rows:
+                show = not query or query in haystack
+                visible += show
+                for widget in widgets:
+                    widget.set_visible(show)
+            empty.set_visible(not visible)
+
+        search.connect("search-changed", filter_rows)
+        return view
+
+    def _proton_versions_view(self, versions, managers):
+        view = box(spacing=16, margin_top=14)
         mgr_label, mgr_argv = managers[0] if managers else (
             "ProtonPlus", ["flatpak", "install", "-y", "--user", "flathub",
                            "com.vysp3r.ProtonPlus"])
@@ -12033,77 +12676,54 @@ class App(Gtk.Application):
         mgr.add_css_class("btn-ghost")
         mgr.connect("clicked", self._appcheck_fix, _("Fassungen verwalten"),
                     mgr.get_label(), mgr_argv, self._proton_reload)
-        for title, rows, note, recht in (
-                (_("Selbst installierte Fassungen"), eigen,
-                 _("Von Hand oder über ein Werkzeug wie ProtonPlus "
-                   "eingespielt. Updates kommen nicht über Steam."), mgr),
-                (_("Fassungen von Valve"),
-                 [v for v in versions if v["valve"]],
-                 _("Lädt und aktualisiert Steam selbst."), None)):
-            if not rows:
-                continue
-            inhalt = box()
-            inhalt.append(self._pro_note(note, small=True))
-            liste = box()
-            for r in rows:
-                line = listrow(r["name"], r["facts"], pill=r["runtime"],
-                               sev="ok" if r["ok"] else "crit",
-                               mono=r["path"])
-                liste.append(sep_row(line))
-            # Eingeklappt, solange alles laeuft: die Pfade und Buildnummern
-            # braucht ein Laie erst, wenn etwas klemmt. Offen fuellten die
-            # zwei Gruppen allein die halbe Seite.
-            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_top=8,
-                               margin_bottom=12)
-            exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
-            exp.set_expanded(any(not r["ok"] for r in rows))
-            exp.set_child(liste)
-            inhalt.append(exp)
-            kopf = box(True, 12)
-            zahl = lbl(str(len(rows)), "grouphead")
-            zahl.set_valign(Gtk.Align.CENTER)
-            kopf.append(zahl)
-            if recht is not None:
-                kopf.append(recht)
-            self.pro_box.append(group(title, inhalt, kopf))
-        if not eigen and have_steam:
-            m = box()
-            m.append(self._pro_note(
-                _("Eigene Fassungen wie GE-Proton bringt ein Werkzeug wie "
-                  "ProtonPlus auf den Rechner, hält sie aktuell und räumt alte "
-                  "wieder weg.") + ("" if managers else " "
-                  + _("Hier ist keins davon installiert."))))
-            reihe = box(True, 10, margin_start=18, margin_end=18, margin_top=4,
-                        margin_bottom=16, halign=Gtk.Align.START)
-            reihe.append(mgr)
-            m.append(reihe)
-            self.pro_box.append(group(_("Eigene Fassungen"), m))
+        visible = [v for v in versions if v.get("scope") == "steam"]
+        outside = [v for v in versions if v.get("scope") == "outside"]
+        managed = [v for v in versions if v.get("scope") == "umu"]
+        top = box(True, 16)
+        note = lbl(_("Steam kann {visible} von {installed} installierten "
+                     "Fassungen auswählen.").format(
+                         visible=len(visible), installed=len(versions)),
+                   "row-detail", wrap=True, chars=72)
+        note.set_hexpand(True)
+        top.append(note)
+        top.append(mgr)
+        view.append(top)
+        if not versions:
+            view.append(lbl(_("Keine Proton-Fassungen gefunden."), "empty"))
+            return view
 
-        if games:
-            g = box()
-            exp = Gtk.Expander(margin_start=18, margin_end=18, margin_bottom=14,
-                               margin_top=8)
-            exp.set_label_widget(lbl(_("Liste ansehen"), "row-detail"))
-            exp.set_expanded(any(sev != "ok" for _n, _t, _l, sev in games))
-            inner = box(spacing=0)
-            for name, tool, line, sev in games:
-                r = box(True, 11, margin_top=8, margin_bottom=8)
-                dot = bar({"crit": "bullet-crit",
-                           "warn": "bullet-warn"}.get(sev, "bullet-ok"))
-                r.append(dot)
-                txt = box(spacing=2, hexpand=True)
-                txt.append(lbl(name, "row-title", wrap=True, chars=46))
-                txt.append(lbl(line, "row-detail", wrap=True, chars=54))
-                r.append(txt)
-                pill = lbl(tool, "pill")
-                pill.set_valign(Gtk.Align.CENTER)
-                r.append(pill)
-                inner.append(sep_row(r))
-            exp.set_child(inner)
-            g.append(exp)
-            self.pro_box.append(group(_("Welches Spiel nutzt welche Fassung"),
-                                      g, len(games)))
-        return False
+        for title, entries in (
+                (_("In Steam verfügbar"), visible),
+                (_("Nicht in Steam verfügbar"), outside),
+                (_("Von anderen Werkzeugen verwaltet"), managed)):
+            if not entries:
+                continue
+            content = box()
+            for version in entries:
+                sev = ("crit" if not version["ok"] else "warn"
+                       if version.get("scope") == "outside" else "ok"
+                       if version.get("scope") == "steam" else "")
+                row = listrow(version["name"], version["facts"],
+                              pill=version["runtime"], sev=sev,
+                              mono=version["path"])
+                content.append(sep_row(row) if content.get_first_child() else row)
+            view.append(group(title, content, len(entries)))
+        return view
+
+    def _proton_help(self):
+        exp = Gtk.Expander(margin_top=2, margin_bottom=4)
+        exp.set_label_widget(lbl(_("Was prüft dynotiq hier?"), "row-detail"))
+        text = lbl(
+            _("Proton übersetzt Windows-Spiele für Linux. dynotiq vergleicht "
+              "die installierten Fassungen mit ihren Laufzeitumgebungen, den "
+              "Zuordnungen deiner Spiele und den vorhandenen Windows-Ablagen. "
+              "Geändert wird erst etwas, wenn du einen Reparaturknopf "
+              "bestätigst."),
+            "row-detail", wrap=True, chars=88)
+        text.set_margin_top(8)
+        text.set_margin_start(18)
+        exp.set_child(text)
+        return exp
 
     def _pro_row(self, r):
         """Eine Befundzeile: Balken, Titel mit Kosten-Pill, Kurztext, die
@@ -12162,40 +12782,25 @@ class App(Gtk.Application):
             row.append(b)
         return row
 
-    def _pro_bulk(self, results, bad):
-        """Die rechte Seite des Kartenkopfs: Zahl, und wo es lohnt ein Knopf.
+    def _pro_bulk(self, results):
+        """Ein Sammelknopf, wenn mehrere Spiele denselben Steam-Neustart teilen.
 
         Gesammelt wird nur das Umstellen der Fassung. Jeder dieser Knöpfe
         beendet Steam und startet es wieder, und dreimal hintereinander wäre
         das dreimal dieselbe Wartezeit. Alles andere bleibt einzeln, weil es
         nichts teilt.
         """
-        zahl = lbl(_("1 Punkt") if len(bad) == 1 else
-                   _("{n} Punkte").format(n=len(bad)) if bad
-                   else _("nichts"), "sub")
         paare = [r["pair"] for r in results if r.get("pair")]
         argv = set_mappings_argv(paare) if len(paare) > 1 else None
         if not argv:
-            return zahl
+            return None
         b = Gtk.Button(label=_("Alle {n} Spiele umstellen").format(n=len(paare)),
                        valign=Gtk.Align.CENTER)
         b.add_css_class("btn-fix")
         b.connect("clicked", self._appcheck_fix, _("Fassungen umstellen"),
                   b.get_label(), argv, self._proton_reload, None,
                   _(PREFIX_SWITCH_NOTE))
-        r = box(True, 12, halign=Gtk.Align.END)
-        zahl.set_valign(Gtk.Align.CENTER)
-        r.append(zahl)
-        r.append(b)
-        return r
-
-    def _pro_note(self, text, small=False):
-        t = lbl(text, "row-detail" if small else "lede", wrap=True, chars=88)
-        t.set_margin_start(18)
-        t.set_margin_end(18)
-        t.set_margin_bottom(4 if small else 16)
-        t.set_margin_top(2)
-        return t
+        return b
 
     # Autostart
 
@@ -13747,6 +14352,65 @@ def selftest():
     assert [e["t"] for e in got] == [100.0, 200.0]
     assert all(isinstance(e["t"], float) for e in got)
     assert update_effect(got) is None and bench_vs_first(got, "cpun") == (0.8, 100.0)
+    # Dieselbe Prüfung für die Vorfälle. Jeder Verbraucher greift dort direkt
+    # zu, und der watch-Dienst rief das vor seiner Schleife ungeschützt auf:
+    # eine unbrauchbare Zeile nahm ihn beim Start mit, alle zehn Sekunden neu.
+    heil = {"t": 100.0, "cat": "Systemd", "sev": "crit",
+            "title": "systemd-Unit fehlgeschlagen", "detail": "foo.service"}
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+        f.write(json.dumps(heil) + "\n")
+        f.write('{"t": 101.0}\n')                          # abgebrochene Zeile
+        f.write('{"cat": "GPU", "sev": "crit", "title": "x", "detail": "y"}\n')
+        f.write('"nur ein string"\n')
+        f.write('[1, 2, 3]\n')
+        f.write('kein json\n')
+        broken_inc = f.name
+    real_inc = INCIDENTS_FILE
+    try:
+        globals()["INCIDENTS_FILE"] = broken_inc
+        inc = incidents_read()
+        # Was durchkommt, muss jeden Verbraucher überstehen
+        keys = {incident_key(i) for i in inc}
+        crit = [i for i in inc if i["sev"] == "crit" and i["t"] > 0]
+    finally:
+        globals()["INCIDENTS_FILE"] = real_inc
+        os.unlink(broken_inc)
+    assert inc == [heil], inc
+    assert keys == {"unit|foo.service|100"} and len(crit) == 1
+    # Verzeichnis und Dateien bleiben beim eigenen Konto: darin stehen
+    # Journalzeilen und Dienstnamen. Auch das, was aus einer aelteren Fassung
+    # schon mit 0775 beziehungsweise 0664 dalag.
+    real_dir, real_hist2, real_inc2 = DATA_DIR, HISTORY_FILE, INCIDENTS_FILE
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            weit = os.path.join(td, "weit")
+            os.makedirs(weit, mode=0o775)
+            globals()["DATA_DIR"] = weit
+            globals()["HISTORY_FILE"] = os.path.join(weit, "history.jsonl")
+            globals()["INCIDENTS_FILE"] = os.path.join(weit, "incidents.jsonl")
+            open(HISTORY_FILE, "w").close()
+            os.chmod(HISTORY_FILE, 0o664)          # Stand vor dieser Fassung
+            history_append({"t": 1.0, "kind": "scan"})
+            append_line(INCIDENTS_FILE, "{}\n")
+            moden = [os.stat(p).st_mode & 0o777
+                     for p in (weit, HISTORY_FILE, INCIDENTS_FILE)]
+        finally:
+            globals()["DATA_DIR"] = real_dir
+            globals()["HISTORY_FILE"] = real_hist2
+            globals()["INCIDENTS_FILE"] = real_inc2
+    assert moden == [0o700, 0o600, 0o600], [oct(m) for m in moden]
+    # Der Body einer Benachrichtigung traegt rohe Journalzeilen, und
+    # gnome-shell wertet dort Auszeichnung aus. Die Ueberschrift nicht: die
+    # ist reiner Text, ein escaptes & stuende dort woertlich auf dem Schirm.
+    gerufen = []
+    real_sh = sh
+    try:
+        globals()["sh"] = lambda argv, **kw: gerufen.append(argv) or ""
+        notify("Speicher & Swap", 'kernel: <b>fett</b> & <3>')
+    finally:
+        globals()["sh"] = real_sh
+    assert gerufen[0][-2:] == ["Speicher & Swap",
+                               "kernel: &lt;b&gt;fett&lt;/b&gt; &amp; &lt;3&gt;"], gerufen
 
     # MangoHud-Mitschrift: der Zeitraum wird aus Dateiname und `elapsed`
     # geschnitten, damit ein Bericht auch waehrend des Spielens Zahlen hat
@@ -13931,6 +14595,25 @@ def selftest():
     assert update_cmd("apt", ["a"])[:3] == ["pkexec", "/usr/bin/env",
                                             "DEBIAN_FRONTEND=noninteractive"]
     assert update_cmd("snap", ["a"])[-3:] == ["refresh", "--", "a"]
+    combined = update_steps({"flatpak": ["org.foo.App/x86_64/stable"],
+                             "apt": ["z", "a", "--option"], "snap": ["code"],
+                             "fwupd": ["feed0000"], "other": ["ignored"],
+                             "apt-bad": ["--option"]},
+                            {("apt", "z")}, snapshot=True)
+    assert combined[0] == SNAPSHOT_CMD
+    assert combined[1][3] == "apt-get" and combined[2][1] == "snap"
+    assert combined[3][0] == "flatpak" and combined[4][0] == "fwupdmgr"
+    assert "--only-upgrade" not in combined[1] and "--" in combined[1]
+    assert "--option" not in combined[1]
+    targets = {"apt": {"items": [("a", "A", "1", "2", 10)], "error": None},
+               "snap": {"items": [("code", "Code", "1", "3", 20)],
+                        "error": None}}
+    assert update_targets(targets) == {("apt", "a"): "2",
+                                       ("snap", "code"): "3"}
+    assert update_changes(targets, {("apt", "a"): "2"}) == []
+    assert update_changes(targets, {("apt", "a"): "3",
+                                    ("flatpak", "x"): "1"}) == [
+                                        ("apt", "a"), ("flatpak", "x")]
     # Gescheiterte Flatpaks: der Grund kommt uebersetzt, der Rahmen nicht
     assert parse_flatpak_fails(
         "Updating…\n"
@@ -14222,6 +14905,17 @@ def selftest():
     # den Namen. Wer die gegen Namen haelt, behauptet, eine installierte
     # Fassung gaebe es nicht mehr.
     with tempfile.TemporaryDirectory() as td:
+        cache = os.path.join(td, "appcache", "librarycache", "123")
+        os.makedirs(cache)
+        icon = os.path.join(cache, "a" * 40 + ".jpg")
+        with open(icon, "wb") as fh:
+            fh.write(b"icon")
+        with open(os.path.join(cache, "library_header.jpg"), "wb") as fh:
+            fh.write(b"header")
+        assert steam_game_icon("123", td) == icon
+        assert not steam_game_icon("../123", td)
+        assert not steam_game_icon("999", td)
+
         def fassung(name, build, unter=""):
             p = os.path.join(td, unter, name) if unter else os.path.join(td, name)
             os.makedirs(p, exist_ok=True)
@@ -15355,6 +16049,14 @@ def selftest():
         == ("snap", "x", "1.39.0")
     assert older_install([("snap", "x", "1.39.0"), ("deb", "x", "1.39.0-2")]) is None
     assert older_install([("snap", "x", "stable"), ("deb", "x", "2024-06")]) is None
+    # Der Entfernen-Befehl wird kopiert und eingefuegt. Die Kennung stammt aus
+    # einem Dateinamen, ein Semikolon darin darf dort kein zweiter Befehl werden.
+    assert APP_REMOVE["flatpak"].format(id=shlex.quote("org.x$(id)")) \
+        == "flatpak uninstall 'org.x$(id)'"
+    assert APP_REMOVE["snap"].format(id=shlex.quote("foo;reboot")) \
+        == "sudo snap remove 'foo;reboot'"
+    assert APP_REMOVE["flatpak"].format(id=shlex.quote("org.mozilla.firefox")) \
+        == "flatpak uninstall org.mozilla.firefox"
     # Und beide muessen waehlbar bleiben: vorher fiel die zweite Anwendung
     # gleichen Namens aus der Auswahl des App-Checks.
     with tempfile.TemporaryDirectory() as td:
@@ -15400,7 +16102,9 @@ def selftest():
         assert all("&&" not in a and ";" not in a and "$" not in a
                    for a in rest), step
 
-    for chk in (check_journal, check_filesystems, check_gpu_driver):
+    # Über alle Checks, nicht über eine Auswahl: sonst fällt ein neuer Check
+    # mit eigenem argv aus dieser Zusicherung heraus, ohne dass es auffällt.
+    for chk in CHECKS:
         f = chk({"gpu": {"vendor": "nvidia", "driver": "1.0"}})
         if f and f.argv:
             for step in cmd_steps(f.argv):
@@ -15413,6 +16117,36 @@ def selftest():
         check_argv(step)
     for step in cmd_steps(flatpak_ppa_argv()):
         check_argv(step)
+    # Dieselbe Zusicherung noch einmal über den Syntaxbaum der ganzen Datei.
+    # Zur Laufzeit ist nur zu sehen, was auf dieser Maschine gerade anschlägt;
+    # hier fällt jede Shell unter pkexec auf, auch eine nie ausgelöste.
+    # ast steht hier und nicht oben: der Import kostet jeden Start 7 ms, und
+    # gebraucht wird er allein in dieser Zusicherung.
+    import ast
+    baum = ast.parse(read(os.path.abspath(__file__)) or "")
+    shells = []
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.List) or len(knoten.elts) < 4:
+            continue
+        vorn = [e.value if isinstance(e, ast.Constant) else None
+                for e in knoten.elts[:3]]
+        if vorn[0] != "pkexec" or vorn[2] != "-c" \
+                or not str(vorn[1] or "").endswith("sh"):
+            continue
+        shells.append(knoten.lineno)
+        skript = knoten.elts[3]
+        # Namen in der Bedingung eines a-wenn-b-sonst-c sind in Ordnung: sie
+        # wählen zwischen festen Texten, sie bringen keinen Wert hinein.
+        bedingt = {id(x) for t in ast.walk(skript) if isinstance(t, ast.IfExp)
+                   for x in ast.walk(t.test)}
+        for k in ast.walk(skript):
+            assert id(k) in bedingt \
+                or not isinstance(k, (ast.JoinedStr, ast.Call, ast.Name,
+                                      ast.Attribute, ast.Subscript)), \
+                f"Zeile {knoten.lineno}: der Skripttext ist nicht wörtlich"
+    # SECURITY.md nennt diese Zahl. Kommt eine fünfte Shell dazu, gehört sie
+    # dort beschrieben, statt still mitzulaufen.
+    assert len(shells) == 4, shells
     # Units über einer Minute oder Stunde sind genau die, die man sehen will
     assert parse_blame("11h 26min 16.414s snapd.service\n"
                        "1min 5.432s snapd.seeded.service\n"
@@ -15657,13 +16391,29 @@ def selftest():
     assert scan_window(1000.0, now=1000.0 + 60) == "@1000"
     assert scan_window(9e9, now=1000.0) == "-24h"          # Uhr in der Zukunft
 
+    # Der "Neu in"-Dialog ist das einzige, was ein Nutzer nach dem Update
+    # sieht. Bei 0.3~beta stand dort von vierzehn Commits keiner drin.
+    assert VERSION in RELEASE_NOTES, VERSION
+
     # Jede Seite braucht ihr Symbol, und die Datei dazu muss daliegen. Fehlt
     # eine, zeigt GTK stumm ein leeres Kaestchen in der Navigation.
     assert set(NAV_ICONS) == set(NAV), sorted(set(NAV) ^ set(NAV_ICONS))
-    fehlend = [n for n in NAV_ICONS.values() if not os.path.exists(
-        os.path.join(APP_DIR, "icons", "ui", "hicolor", "scalable", "actions",
-                     f"{n}.svg"))]
+    symbole = os.path.join(APP_DIR, "icons", "ui", "hicolor", "scalable",
+                           "actions")
+    fehlend = [n for n in NAV_ICONS.values()
+               if not os.path.exists(os.path.join(symbole, f"{n}.svg"))]
     assert not fehlend, fehlend
+    # GTK ab 4.20 liest fill und stroke nicht mehr, es geht nach class. Ohne
+    # das fuellt es jede Kontur aus und das Symbol wird ein schwarzer Klumpen.
+    ohne_klasse = []
+    for datei in sorted(glob.glob(os.path.join(symbole, "*.svg"))):
+        with open(datei, encoding="utf-8") as f:
+            inhalt = f.read()
+        for element in re.findall(r"<(?:path|circle|rect)\b[^>]*>", inhalt):
+            if "foreground-fill" not in element and \
+                    "foreground-stroke" not in element:
+                ohne_klasse.append((os.path.basename(datei), element[:40]))
+    assert not ohne_klasse, ohne_klasse
 
     assert alpha("#FF6B2C", .13) == "rgba(255,107,44,0.13)"
     assert lighten("#000000", .5) == "#7F7F7F"

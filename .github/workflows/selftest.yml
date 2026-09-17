@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Der Selftest liest nur. Ohne diesen Block gilt die Voreinstellung des Repos,
+# und die steht im Web, nicht hier: wer sie auf write stellt, gibt jedem Lauf
+# ein Schreibtoken, ohne dass im Repo etwas davon sichtbar waere.
+permissions:
+  contents: read
+
 jobs:
   selftest:
     runs-on: ubuntu-latest
