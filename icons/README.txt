@@ -35,6 +35,18 @@ app-icon/     App-Icon
   Glyph steht auf 80 % der Kachelkante, der Rest ist Schutzraum.
 
 
+ui/           Symbole in der Oberfläche
+  hicolor/scalable/actions/dq-*-symbolic.svg    Strichzeichnung, 24er Raster
+
+  Jedes Element braucht ein class-Attribut, sonst füllt GTK ab 4.20 die
+  Kontur aus und das Symbol wird ein schwarzer Klumpen:
+    Kontur   class="transparent-fill foreground-stroke"
+    Fläche   class="foreground-fill"
+  fill und stroke am Element wertet GTK bei diesen Dateien nicht aus, sie
+  bleiben für Browser und Mockups drin. Die Strichstärke setzt GTK selbst
+  auf 2, stroke-width im SVG gilt nur außerhalb der App.
+
+
 BENENNUNG
   light = für helle Flächen · dark = für dunkle Flächen
   -bg   = mit deckender Fläche · ohne = transparent

@@ -9740,13 +9740,29 @@ class App(Gtk.Application):
         self.win = Gtk.ApplicationWindow(application=self, default_width=1180,
                                          default_height=860, title="dynotiq",
                                          icon_name="dynotiq")
-        hb = Gtk.HeaderBar(show_title_buttons=True)
+        hb = Gtk.HeaderBar(show_title_buttons=False)
+        # Die eingebauten Knöpfe der Titelleiste ziehen sich seit GTK 4.22 auf
+        # deren ganze Höhe, aus den Kreisen wurden Ovale. Eigene WindowControls
+        # bleiben bei ihrer Größe. Beide Seiten, weil die Knopfreihenfolge im
+        # System auch links stehen kann. Aus dem Layout fliegt das Programmsymbol,
+        # sonst steht es unter Wayland links neben dem Logo ein zweites Mal.
+        layout = ":".join(
+            ",".join(teil for teil in seite.split(",")
+                     if teil not in ("icon", "appmenu", "menu"))
+            for seite in (Gtk.Settings.get_default().props.gtk_decoration_layout
+                          or ":minimize,maximize,close").split(":"))
+        hb.pack_start(Gtk.WindowControls(side=Gtk.PackType.START,
+                                         valign=Gtk.Align.CENTER,
+                                         decoration_layout=layout))
         t = box(True, 10)
         t.append(self._logo(18))
         t.append(lbl("dynotiq", "hb-title"))
         t.append(lbl(self._distro(), "hb-sub"))
         hb.set_title_widget(Gtk.Box())
         hb.pack_start(t)
+        hb.pack_end(Gtk.WindowControls(side=Gtk.PackType.END,
+                                       valign=Gtk.Align.CENTER,
+                                       decoration_layout=layout))
         self.win.set_titlebar(hb)
 
         root = box(True)
@@ -16350,10 +16366,22 @@ def selftest():
     # Jede Seite braucht ihr Symbol, und die Datei dazu muss daliegen. Fehlt
     # eine, zeigt GTK stumm ein leeres Kaestchen in der Navigation.
     assert set(NAV_ICONS) == set(NAV), sorted(set(NAV) ^ set(NAV_ICONS))
-    fehlend = [n for n in NAV_ICONS.values() if not os.path.exists(
-        os.path.join(APP_DIR, "icons", "ui", "hicolor", "scalable", "actions",
-                     f"{n}.svg"))]
+    symbole = os.path.join(APP_DIR, "icons", "ui", "hicolor", "scalable",
+                           "actions")
+    fehlend = [n for n in NAV_ICONS.values()
+               if not os.path.exists(os.path.join(symbole, f"{n}.svg"))]
     assert not fehlend, fehlend
+    # GTK ab 4.20 liest fill und stroke nicht mehr, es geht nach class. Ohne
+    # das fuellt es jede Kontur aus und das Symbol wird ein schwarzer Klumpen.
+    ohne_klasse = []
+    for datei in sorted(glob.glob(os.path.join(symbole, "*.svg"))):
+        with open(datei, encoding="utf-8") as f:
+            inhalt = f.read()
+        for element in re.findall(r"<(?:path|circle|rect)\b[^>]*>", inhalt):
+            if "foreground-fill" not in element and \
+                    "foreground-stroke" not in element:
+                ohne_klasse.append((os.path.basename(datei), element[:40]))
+    assert not ohne_klasse, ohne_klasse
 
     assert alpha("#FF6B2C", .13) == "rgba(255,107,44,0.13)"
     assert lighten("#000000", .5) == "#7F7F7F"
