@@ -1,70 +1,52 @@
-dynotiq: Wortmarke + App-Icon
+dynotiq: wordmark and app icon
 
-Der Name wird immer kleingeschrieben: dynotiq.
-
-FARBEN
-  Ink      #12161B
-  Akzent   #F5C242
-
-SCHRIFT
-  Space Grotesk Bold, Laufweite −0.03 em
-  In den SVGs eingebettet, sieht überall gleich aus, auch ohne installierte Fonts.
+The name is always written in lower case: dynotiq.
 
 
-wordmark/     Schriftzug
-  Das „o“ ist der Tacho selbst, auf Versalhöhe gezogen (Strichstärke ×1.25),
-  damit sein Strich genauso dick ist wie die Buchstabenstämme.
+MASTERS
+  app-icon/dynotiq-app-dark-master.png     navy tile, 1254 px, transparent corners
+                                           (rendered in the dark app tone #161A20,
+                                           only the gauge yellow keeps its colour)
+  wordmark/dynotiq-wordmark-dark-master.png  white letters for dark surfaces
 
-  png/dynotiq-wordmark-light-w600|1200|2400.png    dunkle Schrift, transparent
-  png/dynotiq-wordmark-dark-…                      weiße Schrift, transparent
-  png/…-light-bg-… / …-dark-bg-…                   mit Fläche (weiß bzw. #12161B)
-  svg/…                                            Vektor
-
-  w = Breite des Schriftzugs in Pixel.
-  Mindestbreite 150 px, darunter läuft der Zeiger im Tacho zu.
+  Everything under png/ is rendered from these two. After changing a master:
+    python3 icons/render.py icons
+  (needs python3-numpy and python3-pil, only for rendering, not at runtime)
 
 
-app-icon/     App-Icon
-  png/dynotiq-app-<größe>.png        deckend, weiße Kachel, 16-1024 px  ← installieren
-  png/dynotiq-app-dark-<größe>.png   deckend, dunkle Kachel
-  png/dynotiq-<größe>.png            transparent, 16-512 px
-  svg/dynotiq-app.svg / -dark.svg    Kachel als Vektor, Eckradius 30 %
-  svg/dynotiq-app-square*.svg        ohne Eckrundung (wenn die Umgebung selbst maskiert)
-  svg/dynotiq-icon-mono*.svg         einfarbig: Top-Bar / Tray / Favicon
+wordmark/png/
+  dynotiq-wordmark-dark-w600|w1200.png       white letters, transparent
+  dynotiq-wordmark-light-w600|w1200.png      dark letters, transparent
+  …-bg-…                                     on a solid surface (#12161B / white)
 
-  Glyph steht auf 80 % der Kachelkante, der Rest ist Schutzraum.
-
-
-ui/           Symbole in der Oberfläche
-  hicolor/scalable/actions/dq-*-symbolic.svg    Strichzeichnung, 24er Raster
-
-  Jedes Element braucht ein class-Attribut, sonst füllt GTK ab 4.20 die
-  Kontur aus und das Symbol wird ein schwarzer Klumpen:
-    Kontur   class="transparent-fill foreground-stroke"
-    Fläche   class="foreground-fill"
-  fill und stroke am Element wertet GTK bei diesen Dateien nicht aus, sie
-  bleiben für Browser und Mockups drin. Die Strichstärke setzt GTK selbst
-  auf 2, stroke-width im SVG gilt nur außerhalb der App.
+  dark = for dark surfaces, light = for light surfaces.
+  The light version is derived: the white letters recoloured to ink #12161B,
+  shading kept, the gauge yellow left as it is.
+  w = width in pixels. The app loads the w1200 files.
 
 
-BENENNUNG
-  light = für helle Flächen · dark = für dunkle Flächen
-  -bg   = mit deckender Fläche · ohne = transparent
+app-icon/png/
+  dynotiq-app-dark-<size>.png    16-1024 px, installed as the app icon
+
+app-icon/svg/
+  dynotiq-icon-mono-white.svg    single colour, tray and top bar
+  dynotiq-icon-mono.svg          single colour, dark
+  dynotiq-icon.svg / -light.svg  flat gauge without tile, for small print
 
 
-INSTALLATION UNTER UBUNTU
-  for s in 16 24 32 48 64 128 256 512; do
-    sudo install -Dm644 app-icon/png/dynotiq-app-$s.png \
-      /usr/share/icons/hicolor/${s}x${s}/apps/dynotiq.png
-  done
-  sudo install -Dm644 app-icon/svg/dynotiq-app.svg \
-    /usr/share/icons/hicolor/scalable/apps/dynotiq.svg
-  sudo gtk-update-icon-cache /usr/share/icons/hicolor
+ui/
+  hicolor/scalable/actions/dq-*-symbolic.svg    line icons, 24 px grid
 
-  In der .desktop-Datei:  Icon=dynotiq
+  Every element needs a class attribute, otherwise GTK 4.20 and later fills
+  the outline and the symbol turns into a black blob:
+    outline   class="transparent-fill foreground-stroke"
+    area      class="foreground-fill"
+  fill and stroke on the element are ignored by GTK for these files, they
+  stay in for browsers and mockups. GTK sets the stroke width to 2 itself.
 
 
-REGELN
-  Das „o“ nie durch ein normales o ersetzen.
-  Tacho nie drehen, spiegeln, verzerren oder umfärben.
-  Ab 24 px farbig nicht mehr verlässlich, dort dynotiq-icon-mono verwenden.
+RULES
+  Never replace the gauge "o" with a normal o.
+  Never rotate, mirror, stretch or recolour the gauge.
+  The tile stays readable down to 16 px. Where only one colour works (tray,
+  top bar), use dynotiq-icon-mono-white.

@@ -9,9 +9,7 @@ install -Dm644 dynotiq.py "$DEST/usr/lib/dynotiq/dynotiq.py"
 
 # Nur die Dateien, die die App zur Laufzeit oeffnet. icons/ enthaelt daneben
 # das Designmaterial in Groessen und Varianten, die nie geladen werden.
-for f in app-icon/svg/dynotiq-app-dark.svg \
-         app-icon/svg/dynotiq-icon-mono-white.svg \
-         app-icon/svg/dynotiq-icon-light.svg \
+for f in app-icon/svg/dynotiq-icon-mono-white.svg \
          wordmark/png/dynotiq-wordmark-dark-w1200.png \
          wordmark/png/dynotiq-wordmark-light-w1200.png; do
   install -Dm644 "icons/$f" "$DEST/usr/lib/dynotiq/icons/$f"
@@ -37,8 +35,6 @@ for s in 16 24 32 48 64 128 256 512; do
   install -Dm644 "icons/app-icon/png/dynotiq-app-dark-$s.png" \
     "$DEST/usr/share/icons/hicolor/${s}x${s}/apps/dynotiq.png"
 done
-install -Dm644 icons/app-icon/svg/dynotiq-app-dark.svg \
-  "$DEST/usr/share/icons/hicolor/scalable/apps/dynotiq.svg"
 install -Dm644 icons/app-icon/svg/dynotiq-icon-mono-white.svg \
   "$DEST/usr/share/icons/hicolor/scalable/apps/dynotiq-tray.svg"
 
