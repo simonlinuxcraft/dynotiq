@@ -66,7 +66,7 @@ cmp -s "$OUT/dynotiq.gpg" packaging/dynotiq.gpg || {
 # App-Zeichen als Favicon.
 cp icons/wordmark/png/dynotiq-wordmark-dark-w600.png "$OUT/wordmark-dark.png"
 cp icons/wordmark/png/dynotiq-wordmark-light-w600.png "$OUT/wordmark-light.png"
-cp icons/app-icon/svg/dynotiq-app.svg "$OUT/icon.svg"
+cp icons/app-icon/png/dynotiq-app-dark-64.png "$OUT/icon.png"
 
 # Die Seite ist das Erste, was jemand von dynotiq sieht. Sie traegt deshalb
 # dieselbe Schrift, dieselben Toene und dieselbe Ampel wie die App, und sie
@@ -80,7 +80,7 @@ cat > "$OUT/index.html" <<HTML
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dynotiq apt repository</title>
 <meta name="description" content="System diagnostics and tuning for Ubuntu.">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon.png" type="image/png">
 <style>
 :root{
   --bg:#0E1116; --card:#161A20; --raised:#1B2027; --text:#F2F3F5;

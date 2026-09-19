@@ -19,10 +19,12 @@ import datetime
 import fcntl
 import gettext
 import glob
+import grp
 import hashlib
 import json
 import math
 import os
+import pwd
 import re
 import resource
 import shlex
@@ -43,7 +45,8 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # noqa: E402
 
 VERSION = "0.5~beta"
 APP_ID = "de.dynotiq.dynotiq"
@@ -118,13 +121,13 @@ THEMES = {
         "scroll": "rgba(255,255,255,.16)", "chrome-edge": "rgba(0,0,0,.6)",
     },
     "light": {
-        "bg": "#F4F1EC", "ink": "#EAE6DE", "surface": "#FFFDFA",
-        "raised": "#F5F2ED", "surface-disabled": "#DDD8CE",
-        "chrome-top": "#EFEBE4", "chrome-bottom": "#E4DFD6",
-        "control": "#D6D0C5", "control-hover": "#C9C2B5",
+        "bg": "#EAECEE", "ink": "#DCDFE2", "surface": "#F9F9FA",
+        "raised": "#F1F2F4", "surface-disabled": "#D2D4D8",
+        "chrome-top": "#E4E6E9", "chrome-bottom": "#D7D9DD",
+        "control": "#C8CBD0", "control-hover": "#B9BDC3",
         "text": "#12161B", "strong": "#1A1F26", "title": "#232932",
         "body": "#2E353E", "muted": "#454D57", "text-icon": "#5E656E",
-        "dim": "#5E656E", "text-arrow": "#767C85", "faint": "#767C85",
+        "dim": "#5E656E", "text-arrow": "#767C85", "faint": "#70767F",
         "fainter": "#8A9099", "label": "#9AA1AA", "disabled": "#A8AEB6",
         "detail": "#5A626C",
         "ok": "#177544", "warn": "#9C5800",
@@ -385,11 +388,21 @@ def ensure_icons():
     jobs = [] if packaged else (
         [(f"{png}/dynotiq-app-dark-{s}.png", f"{HICOLOR}/{s}x{s}/apps/dynotiq.png")
          for s in ICON_SIZES]
-        + [(f"{svg}/dynotiq-app-dark.svg", f"{HICOLOR}/scalable/apps/dynotiq.svg"),
-           (mono, f"{HICOLOR}/scalable/apps/dynotiq-tray.svg")])
+        + [(mono, f"{HICOLOR}/scalable/apps/dynotiq-tray.svg")])
     jobs.append((mono, f"{TRAY_ICON_DIR}/dynotiq-tray.svg"))
     jobs.append((f"{png}/dynotiq-app-dark-256.png", f"{TRAY_ICON_DIR}/dynotiq.png"))
     changed = False
+    # Kopien im Home gehen dem Paket vor. Liegen dort noch welche aus einem
+    # Start aus dem Quellordner, zeigt das Menue nach einem Logowechsel das
+    # alte Zeichen. Die Kachel gibt es seit dem neuen Logo nur als Raster,
+    # ein altes SVG stuende sonst fuer jede Groesse ohne eigenes PNG.
+    stale = [f"{HICOLOR}/scalable/apps/dynotiq.svg"] + (
+        [f"{HICOLOR}/{s}x{s}/apps/dynotiq.png" for s in ICON_SIZES]
+        if packaged else [])
+    for p in stale:
+        if os.path.exists(p):
+            os.remove(p)
+            changed = True
     for src, dst in jobs:
         if not os.path.exists(src):
             continue
@@ -407,13 +420,22 @@ def ensure_icons():
                     and not os.path.exists(dst):
                 continue
             changed = True
-    if changed and not packaged:
+    if changed and os.path.isdir(HICOLOR):
         sh(["gtk-update-icon-cache", "-f", "-t", HICOLOR], timeout=20)
     return changed
 
 
+def exec_line():
+    """Exec-Zeile, die dynotiq startet, von wo es auch läuft. dynotiq.py ist
+    nicht ausführbar, deshalb mit Interpreter. Pfade mit Leerzeichen stehen
+    nach der Desktop-Spezifikation in Anführungszeichen."""
+    return " ".join(f'"{p}"' if " " in p else p
+                    for p in (sys.executable, os.path.join(APP_DIR, "dynotiq.py")))
+
+
 def ensure_desktop():
-    """StartupWMClass muss zur WM_CLASS passen, sonst bleibt das Dock-Icon generisch.
+    """StartupWMClass muss zu WM_CLASS (X11) und app_id (Wayland) passen, sonst
+    bleibt das Dock-Icon generisch. Beide sind APP_ID, siehe set_prgname.
 
     Aus einem Systempfad gestartet gehört der Starter zum Paket. Ein zweiter im
     Home würde ihn überdecken und nach dem Deinstallieren liegenbleiben.
@@ -424,12 +446,12 @@ def ensure_desktop():
              "Type=Application\n"
              "Name=dynotiq\n"
              "Comment=Systemdiagnose und Optimierung\n"
-             f"Exec={sys.executable} {os.path.join(APP_DIR, 'dynotiq.py')}\n"
+             f"Exec={exec_line()}\n"
              "Icon=dynotiq\n"
              "Terminal=false\n"
              "Categories=System;Settings;Monitor;\n"
              "StartupNotify=true\n"
-             "StartupWMClass=dynotiq\n")
+             f"StartupWMClass={APP_ID}\n")
     if read(DESKTOP_FILE) == entry.strip():
         return False
     os.makedirs(os.path.dirname(DESKTOP_FILE), exist_ok=True)
@@ -539,21 +561,25 @@ def swapinfo():
     return d.get("SwapTotal", 0) / 1048576, d.get("SwapFree", 0) / 1048576
 
 
-def hwmon_temp(chips, labels=None):
+def hwmon_temp(chips, labels=None, field="input"):
+    """Erster passender Temperaturwert. field "crit" oder "max" liefert die
+    Grenze, die der Sensor selbst nennt."""
     for d in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
         if read(f"{d}/name") not in chips:
             continue
         for inp in sorted(glob.glob(f"{d}/temp*_input")):
             if labels and (read(inp.replace("_input", "_label")) or "") not in labels:
                 continue
-            v = read(inp)
+            v = read(inp.replace("_input", f"_{field}"))
             if v:
                 return int(v) / 1000
     return None
 
 
 def cpu_temp():
-    return (hwmon_temp({"k10temp", "zenpower"}, {"Tctl", "Tdie"})
+    # Tdie zuerst: bei Ryzen 1000/2000 X liegt Tctl 10 bis 20 °C darüber
+    return (hwmon_temp({"k10temp", "zenpower"}, {"Tdie"})
+            or hwmon_temp({"k10temp", "zenpower"}, {"Tctl"})
             or hwmon_temp({"coretemp"}, {"Package id 0"})
             or hwmon_temp({"k10temp", "coretemp", "acpitz"}))
 
@@ -608,7 +634,11 @@ def gpu():
                 g["throttle_why"] = throttle_why(bits)
                 break
         return g
-    for card in sorted(glob.glob("/sys/class/drm/card*/device/gpu_busy_percent")):
+    # Auf APU plus Grafikkarte melden beide amdgpu. Gemessen wird die mit dem
+    # meisten Grafikspeicher, das ist die, auf der gespielt wird.
+    for card in sorted(glob.glob("/sys/class/drm/card*/device/gpu_busy_percent"),
+                       key=lambda c: -_sysfs(os.path.join(os.path.dirname(c),
+                                                          "mem_info_vram_total")))[:1]:
         dev = os.path.dirname(card)
         # amdgpu meldet Bytes und Mikrowatt, und einen Drosselstatus gibt es
         # ohne debugfs nicht. Am Wattbudget zu hängen ist der Teil davon, der
@@ -618,7 +648,7 @@ def gpu():
         cap = _amd_hwmon(dev, "power1_cap") / 1e6
         g = {"vendor": "amd", "name": "AMD GPU", "driver": "amdgpu",
              "util": _f(read(card)), "clock": _amd_clock(dev),
-             "temp": hwmon_temp({"amdgpu"}, {"edge"}) or 0.0,
+             "temp": _amd_hwmon(dev, "temp1_input") / 1000,
              "mem_used": used / 2**20, "mem_total": total / 2**20,
              "power": power, "power_cap": cap}
         if cap and power >= cap * 0.98:
@@ -757,6 +787,13 @@ def unit_disable_cmd(unit, scope=()):
     return ["pkexec", "systemctl", "disable", "--now", unit]
 
 
+def desktop_name(e):
+    """Name aus einem Starter in der Sprache des Systems, wie die Desktops
+    ihn zeigen: de_DE, dann de, dann ohne Sprache."""
+    return next((e[f"Name[{sprache}]"] for sprache in GLib.get_language_names()
+                 if f"Name[{sprache}]" in e), e.get("Name", ""))
+
+
 def autostart_entries():
     entries = {}
     for base, scope in (("/etc/xdg/autostart", "system"), (AUTOSTART_DIR, "user")):
@@ -767,7 +804,7 @@ def autostart_entries():
             name = os.path.basename(path)
             entries[name] = {
                 "file": name, "path": path, "scope": scope,
-                "name": e.get("Name[de]") or e.get("Name") or name,
+                "name": desktop_name(e) or name,
                 "exec": e.get("Exec", ""),
                 "enabled": (e.get("Hidden", "false").lower() != "true"
                             and e.get("X-GNOME-Autostart-enabled", "true").lower() != "false"),
@@ -794,13 +831,15 @@ def autostart_set(entry, enabled):
     entry["path"], entry["scope"], entry["enabled"] = target, "user", enabled
 
 
-def mounts():
-    keep = {"ext4", "ext3", "btrfs", "xfs", "vfat", "exfat", "ntfs3", "ntfs", "f2fs"}
+def mounts(proc="/proc/mounts"):
+    keep = {"ext4", "ext3", "btrfs", "xfs", "vfat", "exfat", "ntfs3", "ntfs", "f2fs",
+            "zfs"}
     out = []
-    with open("/proc/mounts") as f:
+    with open(proc) as f:
         for line in f:
             src, target, fstype = line.split()[:3]
-            if fstype not in keep or not src.startswith("/dev/"):
+            # ZFS nennt statt eines Geräts das Dataset, etwa rpool/ROOT/ubuntu
+            if fstype not in keep or not (src.startswith("/dev/") or fstype == "zfs"):
                 continue
             target = target.replace("\\040", " ")
             try:
@@ -813,7 +852,33 @@ def mounts():
                 continue
             out.append({"target": target, "src": src, "fs": fstype,
                         "total": total, "free": free, "used": total - free})
-    return sorted(out, key=lambda m: m["target"])
+    return sorted(zfs_pools(out), key=lambda m: m["target"])
+
+
+def zfs_pools(ms):
+    """ZFS hängt jedes Dataset einzeln ein, und jedes sieht nur seinen eigenen
+    Teil plus den freien Platz des Pools. Je Pool bleibt der kürzeste
+    Einhängepunkt, mit Größe und Belegung des ganzen Pools."""
+    erster = {}
+    for m in ms:
+        pool = m["src"].split("/")[0]
+        if m["fs"] == "zfs" and (pool not in erster or
+                                 len(m["target"]) < len(erster[pool]["target"])):
+            erster[pool] = m
+    if not erster:
+        return ms
+    pools = {}
+    for line in sh(["zpool", "list", "-Hp", "-o", "name,size,free"]).splitlines():
+        teile = line.split("\t")
+        if len(teile) == 3 and teile[1].isdigit() and teile[2].isdigit():
+            pools[teile[0]] = (int(teile[1]), int(teile[2]))
+    out = [m for m in ms if m["fs"] != "zfs"]
+    for pool, m in erster.items():
+        if pool in pools:
+            total, free = pools[pool]
+            m = dict(m, total=total, free=free, used=total - free)
+        out.append(m)
+    return out
 
 
 def dir_size(path, timeout=20):
@@ -1265,6 +1330,39 @@ def cmd_steps(cmd):
     return cmd if cmd and isinstance(cmd[0], list) else [cmd]
 
 
+# Was ein Schritt tut, in Worten statt als Befehl. Die erste passende Zeile
+# gewinnt, deshalb steht das Aktualisieren vor dem Installieren.
+STEP_TITLES = (
+    (r"\btimeshift\b", N_("Sicherungspunkt wird angelegt")),
+    (r"\bfwupdmgr\b", N_("Firmware wird aktualisiert")),
+    (r"\bflatpak (update|install)\b", N_("Flatpaks werden aktualisiert")),
+    (r"\bflatpak uninstall\b", N_("Flatpak wird entfernt")),
+    (r"\bflatpak override\b", N_("Rechte werden gesetzt")),
+    (r"\bsnap refresh\b", N_("Snaps werden aktualisiert")),
+    (r"\bsnap remove\b", N_("Snap wird entfernt")),
+    (r"\bsnap connect\b", N_("Freigabe wird erteilt")),
+    (r"--only-upgrade|apt-get .*\b(dist-|full-)?upgrade\b",
+     N_("Pakete werden aktualisiert")),
+    (r"apt-get .*\b(remove|purge|autoremove)\b", N_("Pakete werden entfernt")),
+    (r"apt-get .*\binstall\b", N_("Pakete werden installiert")),
+    (r"apt-get .*\bupdate\b", N_("Paketlisten werden geladen")),
+    (r"\bgio trash\b", N_("Dateien kommen in den Papierkorb")),
+    (r"--vacuum", N_("Journal wird verkleinert")),
+    (r"\bcoredumpctl\b", N_("Absturzbericht wird gelesen")),
+    (r"\bjournalctl\b", N_("Journal wird gelesen")),
+    (r"\bsystemctl\b.*\brestart\b", N_("Dienst wird neu gestartet")),
+    (r"\bfind\b.*-delete|\brm -", N_("Dateien werden gelöscht")),
+)
+# Bei diesen ist die Ausgabe das Ergebnis, sie steht deshalb gleich offen.
+READ_STEPS = re.compile(r"\bcoredumpctl\b|\bjournalctl\b(?!.*--vacuum)")
+
+
+def step_title(step):
+    text = " ".join(map(str, step))
+    return next((_(t) for pat, t in STEP_TITLES if re.search(pat, text)),
+                _("Wird ausgeführt …"))
+
+
 def cmd_preview(steps, limit=70):
     """Die Befehle für eine Rückfrage, lange Teile durch … ersetzt.
 
@@ -1571,6 +1669,24 @@ def app_source(entry):
     return ("lokal", binary)
 
 
+WEB_BROWSERS = (("chromium", "Chromium"), ("google-chrome", "Chrome"),
+                ("brave", "Brave"), ("microsoft-edge", "Edge"),
+                ("vivaldi", "Vivaldi"))
+
+
+def web_app_browser(entry):
+    """Browser hinter einer Web-App, leer bei einem eigenen Programm.
+
+    Chromium legt für installierte Seiten Starter an, die nur den Browser mit
+    --app-id aufrufen. Nach der Exec-Zeile allein wäre ChatGPT dann ein Snap
+    namens chromium, und Deinstallieren nähme den ganzen Browser mit.
+    """
+    ex = entry.get("Exec", "")
+    if not re.search(r"(^|\s)--app(-id)?=", ex):
+        return ""
+    return next((n for t, n in WEB_BROWSERS if t in ex.lower()), _("Browser"))
+
+
 def desktop_entries():
     """{Dateiname: Eintrag} aller sichtbaren Anwendungen.
 
@@ -1612,7 +1728,8 @@ def desktop_apps():
     for e in entries:
         name = e["Name"]
         if zahl[name] > 1:
-            kanal = app_channel(e["Path"], owners)[0]
+            kanal = ("webapp" if web_app_browser(e)
+                     else app_channel(e["Path"], owners)[0])
             name = f"{name} ({APP_KIND_LABEL.get(kanal, kanal)})"
         if name in apps:
             name = f"{e['Name']} ({os.path.basename(e['Path'])[:-len('.desktop')]})"
@@ -1669,7 +1786,10 @@ def duplicate_apps(entries=None):
     """
     nach_name = {}
     for e in (desktop_entries() if entries is None else entries).values():
-        nach_name.setdefault(e["Name"], []).append(e["Path"])
+        # Eine Web-App liegt nicht auf der Platte, sie ist ein Lesezeichen
+        # des Browsers und neben der echten App keine zweite Installation.
+        if not web_app_browser(e):
+            nach_name.setdefault(e["Name"], []).append(e["Path"])
     owners = deb_owners([p for pfade in nach_name.values() if len(pfade) > 1
                          for p in pfade])
     out = []
@@ -1832,7 +1952,7 @@ def parse_denials(text, label):
 SOURCE_KIND = {"apt": "APT", "flatpak": "Flatpak", "snap": "Snap"}
 APP_KIND_LABEL = {"snap": "Snap", "flatpak": "Flatpak", "deb": _("Paket"),
                   "lokal": _("manuell installiert"), "appimage": "AppImage",
-                  "steam": _("Steam-Titel")}
+                  "steam": _("Steam-Titel"), "webapp": _("Web-App")}
 
 # Snap-Schnittstellen in Alltagssprache. Die Namen sind Fachbegriffe, und ob
 # eine fehlende Freigabe stört, hängt davon ab, was man mit der App macht.
@@ -1885,6 +2005,11 @@ SNAP_IFACE = {
     "dvb": (_("TV-Karte"), _("Fernsehempfang geht nicht.")),
     "raw-input": (_("Eingabegeräte direkt"), _("Nötig für manche Tastatur- und "
                   "Controllerfunktionen.")),
+    "hidraw": (_("Spezielle USB-Geräte"), _("Nötig für manche Controller, "
+               "Sicherheitsschlüssel und Messgeräte.")),
+    "serial-port": (_("Serielle Schnittstelle"), _("Nötig für Mikrocontroller "
+                    "und ältere Messgeräte.")),
+    "timezone-control": (_("Zeitzone ändern"), _("Nur für Systemwerkzeuge nötig.")),
 }
 
 
@@ -1893,7 +2018,7 @@ def iface_text(name):
     known = SNAP_IFACE.get(name)
     if known:
         return known
-    return (name.replace("-", " "),
+    return (name.replace("-", " ").capitalize(),
             _("Was genau dahinter steckt, sagt die Beschreibung des Snaps."))
 
 
@@ -1934,9 +2059,15 @@ def app_dirs(names):
 
     Ein du fuer alle statt eins je Ordner: einzeln gemessen hat jeder sein
     eigenes Zeitlimit und die Wartezeit waechst mit der Anzahl.
+
+    Bei Flatpaks steht in der Exec-Zeile flatpak selbst, und ~/.local/share/
+    flatpak ist die ganze Benutzerinstallation, nicht die App. Ein Name mit /
+    oder aus Punkten zeigte auf einen fremden Ordner oder aufs Home.
     """
+    names = [n for n in dict.fromkeys(names) if n and "/" not in n
+             and n.strip(".") and n not in ("flatpak", "snap", "env")]
     paths = [p for base in (".config", ".local/share", ".cache", ".var/app", "snap")
-             for n in filter(None, dict.fromkeys(names))
+             for n in names
              for p in (os.path.expanduser(f"~/{base}/{n}"),) if os.path.isdir(p)]
     sizes = dir_sizes(paths, 60)
     return sorted(((p, sizes.get(p, 0)) for p in paths), key=lambda x: -x[1])
@@ -1970,7 +2101,9 @@ GL_CACHE_DEFAULT = 1 << 30
 MESA_CACHE_DEFAULT = 1 << 30
 
 STEAM_DIRS = ("~/.steam/steam", "~/.local/share/Steam", "~/.steam/root",
-              "~/.var/app/com.valvesoftware.Steam/data/Steam")
+              "~/.var/app/com.valvesoftware.Steam/data/Steam",
+              "~/snap/steam/common/.local/share/Steam",
+              "~/snap/steam/common/.steam/steam")
 # Steam schreibt für jeden Titel einen Starter, der nur die AppID kennt.
 STEAM_APPID = re.compile(r"steam://(?:rungameid|run)/(\d+)")
 
@@ -3082,7 +3215,7 @@ def launch_option_problems(games=None):
     Zuordnungstabelle.
     """
     out = []
-    for appid in (compat_mappings() if games is None else games):
+    for appid in (steam_installed_ids() if games is None else games):
         g = steam_game(appid)
         if not g:
             continue
@@ -4298,7 +4431,9 @@ def ntsync_check():
                  _("Proton wickelt die Threads von Windows-Spielen über den "
                    "Kernel ab. Das ist der schnellste Weg und spart vor allem "
                    "Mikroruckler."), None)]
-    if "CONFIG_NTSYNC" not in (read(f"/boot/config-{os.uname().release}") or ""):
+    # "# CONFIG_NTSYNC is not set" nennt den Namen auch, heißt aber aus
+    if not re.search(r"^CONFIG_NTSYNC=[my]$",
+                     read(f"/boot/config-{os.uname().release}") or "", re.M):
         return [("info", _("Der Kernel kennt ntsync noch nicht"),
                  _("Ab Linux 6.14 wickelt Proton die Threads von Windows-Spielen "
                    "über den Kernel ab, was Mikroruckler nimmt. Dieser Kernel "
@@ -4362,8 +4497,15 @@ def game_check(steam_total=True):
                       "Danach setzt es alles selbst wieder um. Im Spiel als "
                       "Startbefehl 'gamemoderun %command%' eintragen."),
                     (_("GameMode installieren"), pkexec_apt_argv(["gamemode"]))))
-    gov = cpu_governor()
-    if gov and gov != "performance":
+    boost = cpu_boost_advice()
+    if boost:
+        out.append(boost[:3] + ((_("Zur Problemseite"), "Probleme"),))
+    gov = cpu_governor() if governor_matters() else ""
+    # Mit arbeitendem GameMode ist powersave außerhalb des Spiels richtig
+    gm = gamemode_can_switch()
+    if gov and gov != "performance" and gm is False:
+        out.append(gamemode_group_advice())
+    elif gov and gov != "performance" and gm is None:
         out.append(("warn", _("CPU-Governor steht auf {gov}").format(gov=gov),
                     _("Der Takt geht erst hoch, wenn die Last schon da ist. Beim "
                       "Spielen kostet das genau in den Momenten Bilder, in denen "
@@ -4767,6 +4909,107 @@ def app_check_text(name, results):
     return "\n".join(lines)
 
 
+def uninstall_plan(entry):
+    """Was beim Deinstallieren dieser Anwendung wirklich wegginge.
+
+    kind ist snap, flatpak, deb, appimage, steam, webapp, starter oder leer,
+    wenn dynotiq es nicht sauber entfernen kann. Maßgeblich ist der Starter,
+    nicht die Exec-Zeile, siehe web_app_browser. files kommen immer in den
+    Papierkorb, dirs nur mit den Daten. tool_dir löscht snap oder flatpak
+    selbst, das gehört nicht in unsere Liste.
+    """
+    path = entry.get("Path", "")
+    kind, ident = app_source(entry)
+    plan = {"kind": "", "ident": ident, "files": [], "dirs": [],
+            "tool_dir": None, "running": False,
+            "user": "/.local/share/flatpak/" in path}
+    browser = web_app_browser(entry)
+    if browser:
+        return dict(plan, kind="webapp", ident=browser)
+    if kind == "steam":
+        return dict(plan, kind="steam")
+    if path.startswith(USER_APPS + "/"):
+        # Ein eigener Starter, der nur einen Systemeintrag ueberdeckt: dann
+        # gehoert die Anwendung dem Paket dahinter, und der Starter geht mit.
+        system = next((p for d in DESKTOP_DIRS if d != USER_APPS
+                       for p in (os.path.join(d, os.path.basename(path)),)
+                       if os.path.exists(p)), "")
+        if system:
+            plan = uninstall_plan(dict(entry, Path=system))
+            plan["files"].append(path)
+            return plan
+        if kind != "appimage" or not os.access(os.path.dirname(ident), os.W_OK):
+            return dict(plan, kind="starter", files=[path])
+        plan.update(kind="appimage", files=[ident] + [
+            f for f in sorted(glob.glob(os.path.join(USER_APPS, "*.desktop")))
+            if ident in (read(f) or "")])
+    else:
+        channel, cid = app_channel(path)
+        if channel not in ("snap", "flatpak", "deb"):
+            return plan
+        plan.update(kind=channel,
+                    ident=ident if channel == kind == "flatpak" else cid)
+    binary = exec_binary(entry.get("Exec", ""))
+    base = os.path.basename(binary).removesuffix(".AppImage")
+    name = entry.get("Name", "")
+    tool = {"snap": "~/snap/", "flatpak": "~/.var/app/"}.get(plan["kind"])
+    tool = os.path.expanduser(tool + plan["ident"]) if tool else ""
+    # Nichts, worin die Steam-Bibliothek steckt.
+    steam = os.path.realpath(steam_root()) + "/" if steam_root() else ""
+    for p, s in app_dirs([plan["ident"], base, name, name.lower(),
+                          entry.get("StartupWMClass", "")]):
+        if p == tool:
+            plan["tool_dir"] = (p, s)
+        elif not (steam and steam.startswith(os.path.realpath(p) + "/")):
+            plan["dirs"].append((p, s))
+    plan["running"] = bool(base) and any(
+        p["name"] == base[:15] for p in processes())
+    return plan
+
+
+def uninstall_argv(plan, purge=False, dirs=()):
+    """Die Schritte zum Plan. Erst das Paket, dann der Papierkorb: scheitert
+    das Entfernen, bleiben die Daten, wo sie sind."""
+    ident = plan["ident"]
+    steps = {
+        "snap": [["pkexec", "snap", "remove"] + (["--purge"] if purge else [])
+                 + [ident]],
+        "flatpak": [["flatpak", "uninstall", "-y", "--noninteractive",
+                     "--user" if plan["user"] else "--system"]
+                    + (["--delete-data"] if purge else []) + [ident]],
+        "deb": [["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+                 "apt-get", "purge" if purge else "remove", "-y", ident]],
+    }.get(plan["kind"], [])
+    trash = plan["files"] + (list(dirs) if purge else [])
+    if trash:
+        steps.append(["gio", "trash", "--"] + trash)
+    return steps
+
+
+def parse_system_packages(text):
+    """Pakete aus dpkg-query '${Package} ${Priority} ${Essential}', die zur
+    Grundausstattung gehoeren.
+
+    Eine Standard-App wie der Taschenrechner haengt an ubuntu-desktop. Nimmt
+    apt die mit, will ein spaeteres autoremove den halben Desktop entfernen.
+    """
+    out = []
+    for line in text.splitlines():
+        f = line.split()
+        if f and (re.match(r"\w*ubuntu-(desktop|minimal|standard)", f[0])
+                  or {"required", "important", "yes"} & set(f[1:])):
+            out.append(f[0])
+    return out
+
+
+def system_packages(pkgs):
+    if not pkgs:
+        return []
+    return parse_system_packages(sh(
+        ["dpkg-query", "-W", "-f=${Package} ${Priority} ${Essential}\n", *pkgs],
+        timeout=30))
+
+
 # Was beim ersten Start und nach einem Update gezeigt wird. Pro Version ein
 # Titel und die Punkte, die den Unterschied machen.
 
@@ -4940,6 +5183,80 @@ def cpu_governor():
     return "/".join(sorted(govs))
 
 
+def gamemode_can_switch():
+    """None ohne GameMode oder Gruppe, sonst ob der Nutzer umschalten darf.
+
+    gamemoded läuft als Nutzerdienst ohne aktive Sitzung, polkit lässt
+    cpugovctl dann nur für die Gruppe gamemode zu. Gelesen wird wie bei polkit
+    aus der Datenbank: os.getgroups() bleibt bis zur Neuanmeldung veraltet.
+    """
+    if not shutil.which("gamemoderun"):
+        return None
+    try:
+        gid = grp.getgrnam("gamemode").gr_gid
+        user = pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        return None
+    return gid in os.getgrouplist(user, os.getgid())
+
+
+def gamemode_group_advice():
+    user = pwd.getpwuid(os.getuid()).pw_name
+    return ("warn", _("GameMode darf den Governor nicht umschalten"),
+            _("GameMode läuft als Hintergrunddienst ohne eigene Sitzung. polkit "
+              "lässt es den CPU-Governor deshalb nur umstellen, wenn du in der "
+              "Gruppe gamemode stehst. Ohne sie bleibt der Takt auch im Spiel "
+              "träge. Der Knopf trägt dich ein, das wirkt sofort, eine neue "
+              "Anmeldung ist nicht nötig."),
+            (_("In Gruppe gamemode eintragen"),
+             ["pkexec", "usermod", "-aG", "gamemode", user]))
+
+
+def governor_matters():
+    """Bei amd-pstate-epp und intel_pstate regelt der Prozessor den Takt selbst.
+    powersave ist dort der Normalbetrieb, und power-profiles-daemon stellt ihn
+    ein. Nur bei den übrigen Treibern heißt powersave wirklich träge."""
+    return read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver") not in (
+        "amd-pstate-epp", "intel_pstate")
+
+
+CPU_BOOST = "/sys/devices/system/cpu/cpufreq/boost"
+NO_TURBO = "/sys/devices/system/cpu/intel_pstate/no_turbo"
+
+
+def on_battery():
+    """Der Systemakku entlädt sich. Am Akku selbst abgelesen, weil Laptops über
+    Hohlstecker, USB-C oder gar kein eigenes Netzteil-Gerät laden. Akkus von
+    Maus und Headset tragen scope Device und zählen nicht."""
+    return any(read(f"{d}/type") == "Battery" and read(f"{d}/scope") != "Device"
+               and read(f"{d}/status") == "Discharging"
+               for d in glob.glob("/sys/class/power_supply/*"))
+
+
+def cpu_boost_advice():
+    """Befund, wenn der Prozessor nie über seinen Nenntakt darf, sonst None."""
+    if read(CPU_BOOST) == "0":
+        cmd = f"echo 1 | sudo tee {CPU_BOOST}"
+    # turbo_pct 0 heißt: der Prozessor hat gar keinen Turbo
+    elif read(NO_TURBO) == "1" and read(
+            "/sys/devices/system/cpu/intel_pstate/turbo_pct") not in (None, "0"):
+        cmd = f"echo 0 | sudo tee {NO_TURBO}"
+    else:
+        return None
+    # Energiesparprofil und Akkubetrieb nehmen den Boost absichtlich weg
+    if on_battery() or sh(["powerprofilesctl", "get"], timeout=10).strip() == "power-saver":
+        return None
+    return ("warn", _("CPU-Boost ist aus"),
+            _("Der Prozessor bleibt beim Nenntakt und geht nie in den Boost. Die "
+              "schnellsten Kerne takten damit deutlich unter dem, was er kann, "
+              "und in Spielen hängt die Bildrate oft an genau einem Kern. "
+              "Abgeschaltet hat ihn entweder das UEFI, bei AMD 'Core "
+              "Performance Boost', bei Intel 'Turbo Boost', oder ein "
+              "Energiespar-Werkzeug wie TLP oder auto-cpufreq. Der Befehl "
+              "schaltet ihn bis zum nächsten Neustart ein. Meldet er einen "
+              "Fehler, sperrt das UEFI den Boost."), cmd)
+
+
 # Wartezeiten. Temperatur und Takt sagen, wie es dem Rechner ging, nicht ob er
 # gewartet hat. Diese drei Zähler laufen monoton weiter, ein Delta über die
 # Lastphase verliert deshalb nichts zwischen zwei Messpunkten, auch keinen
@@ -5002,6 +5319,7 @@ def record_sample(prev_cpu, pid=0):
     c = cpu_clock()
     if c:
         s["cpu_clock"] = round(c)
+    s["gov"] = cpu_governor()
     if g:
         s["gpu"] = round(g["util"], 1)
         s["gpu_temp"] = round(g["temp"], 1)
@@ -5080,9 +5398,12 @@ def record_summary(samples):
     secs = round(samples[-1]["t"] - samples[0]["t"])
     load = load_samples(samples)
     base = load or samples
+    # Im Lauf gemessen, nicht am Ende: nach dem Spiel hat GameMode schon
+    # zurückgestellt, und die Aufzeichnung im Hintergrund endet erst dann.
+    govs = [s["gov"] for s in base if s.get("gov")]
     out = {"n": len(samples), "secs": secs, "load_n": len(load),
            "load_secs": round(len(load) * secs / max(len(samples) - 1, 1)),
-           "gov": cpu_governor()}
+           "gov": statistics.mode(govs) if govs else cpu_governor()}
     for key in STAT_KEYS:
         vals = [s[key] for s in base if key in s]
         if vals:
@@ -5133,10 +5454,25 @@ RECORD_LABEL = {"gpu": (_("GPU-Last"), "%"), "gpu_clock": (_("GPU-Takt"), "MHz")
 # Achse von, Achse bis, warnt ab, kritisch ab. Wo nichts steht, kommt die
 # Achse aus den Messwerten und es gibt keine Bewertung: bei Takt und
 # Leistungsaufnahme ist mehr nicht schlechter, sondern besser.
+# Wo der Sensor seine Grenze selbst nennt, gilt sie: Tjmax bei Intel
+# (coretemp crit), die Warnschwelle der SSD (nvme max). k10temp nennt keine,
+# dort bleiben 95 °C. Unplausible Werte, etwa 65261 °C für "nicht gesetzt",
+# zählen nicht.
+def sensor_limit(chips, labels, field, lo, hi, default):
+    v = hwmon_temp(chips, labels, field)
+    return round(v) if v and lo <= v <= hi else default
+
+
+CPU_LIMIT = sensor_limit({"coretemp"}, {"Package id 0"}, "crit", 70, 115,
+                         sensor_limit({"k10temp", "zenpower"}, {"Tdie", "Tctl"},
+                                      "crit", 70, 115, 95))
+NVME_LIMIT = sensor_limit({"nvme"}, {"Composite"}, "max", 50, 100, 75)
 RECORD_SCALE = {"gpu": (0, 100, None, None), "cpu": (0, 100, None, None),
                 "core": (0, 100, 92, 99), "ram": (0, 100, 85, 93),
-                "vram": (0, 100, 88, 96), "cpu_temp": (30, 105, 88, 95),
-                "gpu_temp": (30, 95, 78, 84), "nvme_temp": (25, 90, 65, 75)}
+                "vram": (0, 100, 88, 96),
+                "cpu_temp": (30, max(105, CPU_LIMIT + 5), CPU_LIMIT - 7, CPU_LIMIT),
+                "gpu_temp": (30, 95, 78, 84),
+                "nvme_temp": (25, max(90, NVME_LIMIT + 5), NVME_LIMIT - 10, NVME_LIMIT)}
 
 
 def record_state(key, value):
@@ -5206,7 +5542,7 @@ def mangohud_conf(cfg, font="", height=1080):
         f"font_size={max(22, round(22 * height / 1080))}",
         "table_columns=3", "hud_no_margin",
         f"text_color={'D6DAE0'}",
-        f"background_color={'161A20'}",
+        f"background_color={THEMES['dark']['surface'].lstrip('#')}",
         f"gpu_color={acc}", f"cpu_color={acc}",
         f"vram_color={'8A9099'}", f"ram_color={'8A9099'}",
         f"engine_color={acc}", f"io_color={'8A9099'}",
@@ -5584,12 +5920,23 @@ def record_verdict(summary):
 
 # Werkzeuge für Lüfterkurve und Undervolting, in der Reihenfolge, in der sie
 # taugen. Die App startet sie nur, eingestellt wird dort von Hand.
-TUNING_TOOLS = (["lact", "gui"], ["corectrl"], ["nvidia-settings"])
+TUNING_TOOLS = {"amd": (["lact", "gui"], ["corectrl"]),
+                "nvidia": (["lact", "gui"], ["nvidia-settings"])}
 
 
-def tuning_tool():
-    """Aktion für das installierte Tuning-Werkzeug, sonst None."""
-    for argv in TUNING_TOOLS:
+def gpu_vendor():
+    """Hersteller der Karte, die gpu() misst. Ohne nvidia-smi, das weckt auf
+    Hybrid-Laptops die schlafende Karte."""
+    if glob.glob("/proc/driver/nvidia/gpus/*"):
+        return "nvidia"
+    if glob.glob("/sys/class/drm/card*/device/gpu_busy_percent"):
+        return "amd"
+    return ""
+
+
+def tuning_tool(vendor):
+    """Aktion für das installierte Tuning-Werkzeug dieser Karte, sonst None."""
+    for argv in TUNING_TOOLS.get(vendor, ()):
         if shutil.which(argv[0]):
             return (_("{tool} öffnen").format(tool=argv[0]), argv)
     return None
@@ -5622,7 +5969,9 @@ def record_advice(summary, now=None):
     # nvidia-smi, und das lief bisher auch fuer einen Aufruf, der zwei Zeilen
     # spaeter ohnehin eine leere Liste zurueckgibt.
     if now is None:
-        now = {"power_head": power_headroom(), "gov": cpu_governor()}
+        now = {"power_head": power_headroom(), "gov": cpu_governor(),
+               "gm": gamemode_can_switch(), "gov_matters": governor_matters(),
+               "vendor": gpu_vendor()}
     load_secs = summary.get("load_secs", 0)
     thr = summary.get("throttle_share", 0)
     gtemp = summary.get("gpu_temp", {}).get("max", 0)
@@ -5634,14 +5983,14 @@ def record_advice(summary, now=None):
                       "stellen (bei AMD über LACT, bei NVIDIA nur mit Coolbits "
                       "und erst nach erneutem Anmelden), Gehäuselüfter "
                       "nachrüsten. Jedes Grad weniger hält den Takt länger oben."),
-                    tuning_tool()))
+                    tuning_tool(now.get("vendor"))))
         out.append(("warn", _("Undervolting prüfen"),
                     _("Weniger Spannung bei gleichem Takt heißt weniger Abwärme. "
                       "Bei AMD stellt LACT das ein. NVIDIA hat unter Linux keinen "
                       "Kurveneditor dafür, dort wirkt stattdessen ein niedrigeres "
                       "Powerlimit: 10 bis 15 % weniger kosten kaum Bildrate und "
                       "senken die Temperatur deutlich."),
-                    tuning_tool()))
+                    tuning_tool(now.get("vendor"))))
     elif thr >= 5:
         head = now.get("power_head") or summary.get("power_head")
         was = summary.get("power_head")
@@ -5717,23 +6066,39 @@ def record_advice(summary, now=None):
                       "auszulagern, was sich als Hänger beim Nachladen zeigt. "
                       "Browser und Chat vor dem Spielen schließen.").format(v=ram),
                     (_("Speicherfresser zeigen"), "Live-Monitor")))
-    if ctemp >= 88:
-        out.append(("crit" if ctemp >= 95 else "warn",
+    _lo, _hi, cwarn, ccrit = RECORD_SCALE["cpu_temp"]
+    if ctemp >= cwarn:
+        out.append(("crit" if ctemp >= ccrit else "warn",
                     _("CPU wird sehr warm"),
-                    _("Spitze bei {v:.0f} °C. Ryzen darf bis 95 °C boosten, aber "
-                      "der Takt fällt schon vorher. Kühler und Wärmeleitpaste "
-                      "prüfen, Gehäuse-Airflow verbessern.").format(v=ctemp), None))
+                    _("Spitze bei {v:.0f} °C. Nahe an seiner Höchsttemperatur "
+                      "nimmt der Prozessor den Takt zurück. Kühler und "
+                      "Wärmeleitpaste prüfen, Gehäuse-Airflow verbessern.").format(
+                          v=ctemp), None))
     nvme = summary.get("nvme_temp", {}).get("max", 0)
-    if nvme >= 65:
+    _lo, _hi, nwarn, nlimit = RECORD_SCALE["nvme_temp"]
+    if nvme >= nwarn:
         out.append(("warn", _("SSD wird heiß"),
-                    _("Spitze bei {v:.0f} °C. Ab etwa 75 °C drosselt die NVMe und "
-                      "Ladezeiten steigen. Ein Kühlkörper oder Luftstrom über den "
-                      "M.2-Slot reicht meist.").format(v=nvme), None))
-    gov = summary.get("gov", "")
+                    _("Spitze bei {v:.0f} °C. Ab etwa {lim} °C drosselt die SSD "
+                      "und Ladezeiten steigen. Ein Kühlkörper oder Luftstrom über "
+                      "den M.2-Slot reicht meist.").format(v=nvme, lim=nlimit), None))
+    gov = summary.get("gov", "") if now.get("gov_matters", True) else ""
     if gov and gov != "performance" and now.get("gov") == "performance":
         out.append(("info", _("Governor steht schon auf performance"),
                     _("Im Lauf stand er noch auf {gov}. Zeichne noch einmal auf, "
                       "dann steht hier, was es gebracht hat.").format(gov=gov), None))
+    elif gov and gov != "performance" and now.get("gm"):
+        # Kein cpupower-Knopf: Dauer-performance überlebt jedes Spielende.
+        # performance/powersave heißt, GameMode stellte gerade um.
+        if "performance" not in gov.split("/"):
+            out.append(("warn", _("GameMode lief in diesem Spiel nicht"),
+                        _("Im Lauf stand der Governor auf {gov}. GameMode hätte "
+                          "ihn für die Dauer des Spiels auf performance gestellt "
+                          "und danach zurück. Bei Steam in den Startoptionen "
+                          "des Spiels 'gamemoderun %command%' eintragen, Lutris "
+                          "und Heroic haben dafür einen eigenen GameMode-"
+                          "Schalter.").format(gov=gov), None))
+    elif gov and gov != "performance" and now.get("gm") is False:
+        out.append(gamemode_group_advice())
     elif gov and gov != "performance":
         out.append(("warn", _("CPU-Governor stand auf {gov}").format(gov=gov),
                     _("Beim Spielen kostet das Takt in genau den Momenten, in "
@@ -5911,7 +6276,8 @@ def confirm_removal(items, was=None, eins=None):
 class Finding:
     def __init__(self, sev, title, detail, badge="", badge_ok=False, cmd=None,
                  argv=None, warn=None, report=None, key="", lines=None,
-                 actions=None, preview=None):
+                 actions=None, preview=None, cause="", solution="",
+                 fix_label="", expanded=False):
         self.sev, self.title, self.detail = sev, title, detail
         self.badge, self.badge_ok, self.cmd = badge, badge_ok, cmd
         # key benennt den Befund dauerhaft, unabhaengig vom Titel: darunter
@@ -5932,6 +6298,11 @@ class Finding:
         # laeuft sie vor dem Ausfuehren und ihr Ergebnis muss bestaetigt
         # werden. Sie darf auf die Platte, also nie im Zeichenthread rufen.
         self.preview = preview
+        # Ursache, Loesung und Knopftext sind getrennt vom Befundtext. So kann
+        # die Problemseite klar sagen, was erkannt wurde, was es bewirkt und
+        # welche konkrete Handlung folgt, ohne bestehende Checks umzubauen.
+        self.cause, self.solution = cause, solution
+        self.fix_label, self.expanded = fix_label, expanded
 
 
 def parse_driver_branches(text):
@@ -6002,7 +6373,8 @@ def check_gpu_driver(ctx):
                    preview=(lambda: apt_install_would_remove([pkg]),
                             _("Pakete"), _("Paket")),
                    warn=_("Der Treiber wird neu gebaut. Bis zum Neustart kann die "
-                          "Grafik unvollständig sein, deshalb vorher alles sichern."))
+                          "Grafik unvollständig sein, deshalb vorher alles sichern."),
+                   fix_label=_("Treiber installieren"))
 
 
 def check_missing_driver(ctx):
@@ -6088,17 +6460,30 @@ def check_driver_mismatch(ctx):
                        preview=(lambda: apt_install_would_remove([pkg]),
                                 _("Pakete"), _("Paket")),
                        warn=_("Der Treiber wird neu gebaut, danach ist ein "
-                              "Neustart nötig."))
+                              "Neustart nötig."),
+                       fix_label=_("Treiber installieren"))
     return Finding("crit", _("Grafiktreiber wartet auf einen Neustart"), detail,
                    _("Neustart"), False, "sudo reboot",
                    warn=_("Alles speichern, der Rechner startet sofort neu."),
-                   argv=["pkexec", "systemctl", "reboot"])
+                   argv=["pkexec", "systemctl", "reboot"],
+                   fix_label=_("Rechner neu starten"))
 
 
 def check_governor(ctx):
     govs = cpu_governor()
-    if not govs or govs == "performance":
+    if not govs or govs == "performance" or not governor_matters():
         return None
+    # Mit GameMode kein Dauer-performance anbieten: GameMode merkt sich den
+    # Stand vom Spielstart und stellt ihn danach wieder her, der Desktop bliebe
+    # dann auf vollem Takt.
+    gm = gamemode_can_switch()
+    if gm:
+        return None
+    if gm is False:
+        _sev, title, detail, (label, argv) = gamemode_group_advice()
+        return Finding("warn", title, detail, _("Takt"), False,
+                       "sudo " + shlex.join(argv[1:]), argv=argv,
+                       key="gamemode_group", fix_label=label)
     _label, action = governor_action()
     return Finding("warn", _("CPU-Governor steht auf {gov}").format(gov=govs),
                    _("Unter Last kostet das Takt. performance hält die Kerne oben."),
@@ -6108,7 +6493,15 @@ def check_governor(ctx):
                    # Nur mit cpupower gibt es etwas Ausfuehrbares. Sonst bleibt
                    # der Shell-Befehl zum Kopieren, mit Glob und tee.
                    argv=action if isinstance(action, list) else None,
-                   key="governor")
+                   key="governor", fix_label=_("Performance setzen"))
+
+
+def check_cpu_boost(ctx):
+    boost = cpu_boost_advice()
+    if not boost:
+        return None
+    sev, title, detail, cmd = boost
+    return Finding(sev, title, detail, _("Takt"), False, cmd, key="cpu_boost")
 
 
 def check_shader_cache(ctx):
@@ -6181,7 +6574,8 @@ def check_compat_tools(ctx):
         _("Spiele"), False, key="compat_tools",
         lines=[("applications-games-symbolic", "warn",
                 _("{game} ist auf {tool} eingestellt").format(game=g, tool=t))
-               for g, _a, t in affected])
+               for g, _a, t in affected],
+        actions=[(_("Proton öffnen"), "_goto_page", "Proton")])
 
 
 def check_steam_cef_gpu(ctx):
@@ -6239,17 +6633,29 @@ def check_orphan_prefixes(ctx):
         lines=[("folder-symbolic", "dim",
                 _("{appid}: {size} unter {path}").format(
                     appid=a, size=fmt_bytes(s), path=p))
-               for s, a, p in sized[:8]])
+               for s, a, p in sized[:8]],
+        cmd="\n".join("rm -rf -- " + shlex.quote(p) for _s, _a, p in sized),
+        argv=[prefix_remove_argv(p) for _s, _a, p in sized],
+        warn=_("Dabei werden auch Spielstände gelöscht, die nur im Prefix und "
+               "nicht in der Steam-Cloud liegen. Die Liste wird vor dem "
+               "Löschen noch einmal gezeigt."),
+        preview=(lambda: [_("{appid}: {size}").format(
+            appid=a, size=fmt_bytes(s)) for s, a, _p in sized],
+                 _("Proton-Prefixe"), _("Proton-Prefix")),
+        fix_label=_("Prefixe entfernen"))
 
 
 def check_cpu_temp(ctx):
     t = ctx.get("cpu_temp")
-    if not t or t < 85:
+    _lo, _hi, warn, crit = RECORD_SCALE["cpu_temp"]
+    if not t or t < warn:
         return None
-    return Finding("crit", _("CPU läuft mit {temp:.0f} °C heiß").format(temp=t),
-                   _("Ab etwa 90 °C drosselt der Takt. Lüfterkurve und Kühler "
-                     "prüfen. Der Live-Monitor zeigt, ob die Temperatur hält "
-                     "oder nur ein Ausschlag war."),
+    return Finding("crit" if t >= crit else "warn",
+                   _("CPU läuft mit {temp:.0f} °C heiß").format(temp=t),
+                   _("Nahe an seiner Höchsttemperatur nimmt der Prozessor den "
+                     "Takt zurück. Lüfterkurve und Kühler prüfen. Der "
+                     "Live-Monitor zeigt, ob die Temperatur hält oder nur ein "
+                     "Ausschlag war."),
                    f"{t:.0f} °C", False, key="cpu_temp",
                    actions=[(_("Live-Monitor öffnen"), "_goto_page",
                              "Live-Monitor")])
@@ -6282,7 +6688,14 @@ def check_filesystems(ctx):
                  if len(full) > 1 else ""))
     title = _("{mount} zu {pct:.0f} % voll").format(mount=worst["target"], pct=pct)
     badge = _("{free:.0f} GB frei").format(free=worst["free"] / 2**30)
-    if worst["target"] != "/":
+    if worst["target"] in ("/boot/efi", "/efi"):
+        return Finding(sev, title,
+                       detail + _(". Dort liegen die Startdateien der "
+                       "Betriebssysteme, nicht deine Daten. Der Befehl zeigt, "
+                       "welches wie viel belegt."),
+                       badge, False, f"sudo du -sh {worst['target']}/EFI/*",
+                       key="filesystems")
+    if worst["target"] not in ("/", "/boot"):
         # Auf einer Datenpartition liegt kein einziges Paket. Ein apt-Befehl
         # wuerde dort nichts freiraeumen, also nur melden statt etwas anzubieten.
         return Finding(sev, title,
@@ -6294,7 +6707,8 @@ def check_filesystems(ctx):
     return Finding(sev, title, detail, badge, False,
                    "sudo apt autoremove --purge && sudo apt clean",
                    argv=AUTOREMOVE_CMD, warn=autoremove_warning(),
-                   preview=(autoremove_list, _("Pakete")))
+                   preview=(autoremove_list, _("Pakete")),
+                   fix_label=_("Speicher freigeben"))
 
 
 AUTOREMOVE_CMD = ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
@@ -6346,16 +6760,17 @@ def parse_release_upgrade(text):
 
 # Erst gefunden, dann in dieser Reihenfolge probiert. Der Nachsatz ist das,
 # was vor das eigentliche Kommando gehoert.
-TERMINALS = [("kitty", []), ("gnome-terminal", ["--"]), ("konsole", ["-e"]),
-             ("xfce4-terminal", ["-x"]), ("x-terminal-emulator", ["-e"]),
-             ("xterm", ["-e"])]
+# Ptyxis, Standard seit Ubuntu 25.10, nimmt den Befehl nur als eine Zeile
+TERMINALS = [("kitty", []), ("gnome-terminal", ["--"]), ("ptyxis", ["-x"]),
+             ("konsole", ["-e"]), ("xfce4-terminal", ["-x"]), ("alacritty", ["-e"]),
+             ("x-terminal-emulator", ["-e"]), ("xterm", ["-e"])]
 
 
 def terminal_cmd(argv):
     """argv in einem sichtbaren Terminal starten. Leer, wenn keins da ist."""
     for name, prefix in TERMINALS:
         if shutil.which(name):
-            return [name] + prefix + argv
+            return [name] + prefix + ([shlex.join(argv)] if name == "ptyxis" else argv)
     return []
 
 
@@ -6985,7 +7400,9 @@ def check_release_upgrade(ctx):
         # vorzuschlagen waere das Gegenteil dessen, wonach er gefragt hat.
         return None
     state = state_read()
-    if 0 <= time.time() - state.get("release_checked", 0) < 24 * 3600:
+    # Nach einem Upgrade ist der Stand von gestern der des alten Release
+    if 0 <= time.time() - state.get("release_checked", 0) < 24 * 3600 \
+            and state.get("release_for") == current:
         offered = state.get("release_offered", "")
         exists = state.get("release_exists", "")
         codename = state.get("release_dist", "")
@@ -7003,7 +7420,7 @@ def check_release_upgrade(ctx):
         if liste:
             state_write({**state_read(), "release_checked": time.time(),
                          "release_offered": offered, "release_exists": exists,
-                         "release_dist": codename})
+                         "release_dist": codename, "release_for": current})
 
     def report():
         return upgrade_report(codename, exists or offered)
@@ -7022,7 +7439,8 @@ def check_release_upgrade(ctx):
                             "Terminalfenster bis zum Ende offen lassen, sonst "
                             "bricht das Upgrade mittendrin ab. Vorher einen "
                             "Timeshift-Snapshot anlegen."),
-                       report=report, key=SNOOZE_RELEASE)
+                       report=report, key=SNOOZE_RELEASE,
+                       fix_label=_("Upgrade starten"))
     if exists:
         # Bewusst ohne Beheben-Befehl: hier ist nichts kaputt. Was der Nutzer
         # tun kann, steht als eigene Schaltflaeche daneben.
@@ -7127,7 +7545,8 @@ def check_hwe_kernel(ctx, laufend=None):
                    preview=(lambda: apt_install_would_remove([pkg], True),
                             _("Pakete"), _("Paket")),
                    warn=_("Wechselt die Kernel-Serie. Fremde Kernelmodule wie "
-                        "VirtualBox oder NVIDIA werden neu gebaut."))
+                        "VirtualBox oder NVIDIA werden neu gebaut."),
+                   fix_label=_("Kernel installieren"))
 
 
 BENCH_LABEL = {"cpu1": _("Ein CPU-Kern"), "cpun": _("Alle CPU-Kerne"),
@@ -7179,6 +7598,15 @@ JOURNAL_KEEP = 500 * 2**20
 JOURNAL_DIRS = ("/var/log/journal/*/*.journal", "/run/log/journal/*/*.journal")
 
 
+def journal_usage_bytes(text=None):
+    """Vom Journal gemeldeter Platzbedarf in Byte, 0 wenn nicht lesbar."""
+    text = sh(["journalctl", "--disk-usage"]) if text is None else text
+    m = re.search(r"take up ([\d.]+)([KMGT])", text)
+    return int(float(m.group(1)) * {"K": 2**10, "M": 2**20,
+                                    "G": 2**30, "T": 2**40}[m.group(2)]) \
+        if m else 0
+
+
 def journal_files():
     """[(Zeit, Groesse, Pfad, archiviert)] aller Journaldateien.
 
@@ -7228,10 +7656,10 @@ def journal_vacuum_items(limit=JOURNAL_KEEP):
 
 
 def check_journal(ctx):
-    m = re.search(r"take up ([\d.]+)([KMG]) ", sh(["journalctl", "--disk-usage"]))
-    if not m:
+    used = journal_usage_bytes()
+    if not used:
         return None
-    gb = float(m.group(1)) * {"K": 1 / 2**20, "M": 1 / 1024, "G": 1}[m.group(2)]
+    gb = used / 2**30
     if gb < 2:
         return None
     _weg, frei, grenze = journal_vacuum_preview()
@@ -7247,7 +7675,7 @@ def check_journal(ctx):
                    "sudo journalctl --vacuum-size=500M",
                    argv=["pkexec", "journalctl", "--vacuum-size=500M"],
                    preview=(journal_vacuum_items, _("Logdateien"),
-                            _("Logdatei")))
+                            _("Logdatei")), fix_label=_("Journal verkleinern"))
 
 
 def snap_remove_argv(pairs):
@@ -7307,7 +7735,7 @@ def check_old_snaps(ctx):
                           "zurückrollen."),
                    preview=(lambda: [f"{n} Rev {r}" for _s, n, r in sizes],
                             _("Snap-Revisionen"), _("Snap-Revision")),
-                   key="old_snaps",
+                   key="old_snaps", fix_label=_("Revisionen entfernen"),
                    lines=[("package-x-generic-symbolic", "dim",
                            _("{name}, Revision {rev}, {size}").format(
                                name=n, rev=r, size=fmt_bytes(s)))
@@ -7351,7 +7779,7 @@ def check_proton(ctx):
     # kaputte Laufzeitumgebung alle ihre Fassungen zu einem Befund buendelt,
     # stand hier "1 Fassung", waehrend sechs nicht starteten.
     n = len({name for name, _p, _a, _s in runtime_problems()}
-            | {g for g, _a, _t in missing_compat_games()}
+            | {t for _g, _a, t in missing_compat_games()}
             | {name for name, _p, _w in broken_compat_tools()}) or len(bad)
     return Finding("warn",
                    _("1 Proton-Fassung startet kein Spiel") if n == 1
@@ -7534,7 +7962,11 @@ def check_failed_units(ctx):
                                unit=u, was=desc or _("ohne Beschreibung"))
                            + (f"\n{fehler}" if fehler else ""))
                           for u, desc, fehler in rows[:6]],
-                   actions=[(_("Journal ansehen"), "_journal_who", rows[0][0])])
+                   actions=[(_("Lösungen anzeigen"), "_failed_units_solutions",
+                             rows)],
+                   solution=_("dynotiq zeigt für jeden Dienst die letzte echte "
+                              "Fehlermeldung und bietet einen Neustart an, wo "
+                              "das gefahrlos geht."))
 
 
 def check_incidents(ctx):
@@ -7570,7 +8002,7 @@ def parse_journal_top(text):
     return out
 
 
-def journal_unit_top(unit):
+def journal_unit_top(unit, user=False):
     """Die haeufigsten Meldungen einer Unit aus den letzten fuenf Minuten.
 
     Auf 60 Zeichen gekuerzt: PIDs und Pfade weiter hinten zerlegen dieselbe
@@ -7578,9 +8010,55 @@ def journal_unit_top(unit):
     Shell, nicht in den Skripttext.
     """
     return parse_journal_top(sh(
-        ["bash", "-c", 'journalctl --since -5min --no-pager -o cat -u "$1" '
-         '| cut -c1-60 | sort | uniq -c | sort -rn | head -5', "sh", unit],
+        ["bash", "-c", 'journalctl --since -5min --no-pager -o cat "$2" "$1" '
+         '| cut -c1-60 | sort | uniq -c | sort -rn | head -5', "sh", unit,
+         "--user-unit" if user else "-u"],
         timeout=30))
+
+
+def journal_top_units(text, n=5):
+    """[(Anzahl, Unit)] aus journalctl -o json.
+
+    Die Nutzer-Unit zuerst: in _SYSTEMD_UNIT steht fuer alles aus der
+    Sitzung nur user@1000.service, und dessen Neustart beendet die Sitzung.
+    """
+    count = {}
+    for line in text.splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        unit = e.get("_SYSTEMD_USER_UNIT") or e.get("_SYSTEMD_UNIT")
+        if isinstance(unit, str):
+            count[unit] = count.get(unit, 0) + 1
+    return sorted(((c, u) for u, c in count.items()), reverse=True)[:n]
+
+
+# Ohne diese laeuft keine Anmeldung und keine Sitzung. Ein Neustart beendet
+# dort alles, was offen ist.
+SESSION_UNITS = re.compile(r"(user@|user-runtime-dir@|gdm|sddm|lightdm|display-manager|"
+                           r"systemd-logind|dbus|polkit|accounts-daemon|"
+                           r"org\.gnome\.Shell|gnome-session|init\.scope|"
+                           r"session-)")
+
+
+def display_manager():
+    """Der Anmeldedienst dieses Rechners, egal ob gdm3, sddm oder lightdm."""
+    return os.path.basename(
+        os.path.realpath("/etc/systemd/system/display-manager.service"))
+
+
+def unit_restartable(unit):
+    """Ob ein Neustart gefahrlos angeboten werden kann. Scopes gehen gar
+    nicht, sie sind keine Dienste, sondern laufende Programme."""
+    if not unit.endswith(".service") or SESSION_UNITS.match(unit) \
+            or unit == display_manager():
+        return False
+    # Was an der Sitzung hängt (Shell, Compositor, Plasma), reißt sie beim
+    # Neustart mit, egal unter welchem Namen der Desktop es führt
+    bindung = sh(["systemctl", "--user", "show", "-p", "PartOf", "-p", "BindsTo",
+                  "-p", "Requisite", "--value", unit], timeout=10)
+    return "session" not in bindung
 
 
 def check_journal_rate(ctx):
@@ -7599,24 +8077,73 @@ def check_journal_rate(ctx):
     # Befehls, der ihn nur nochmal sucht, zeigt der Knopf, was er schreibt.
     # Die Unit statt _COMM: bei einem Python-Dienst steht dort "python3", und
     # damit kann niemand etwas anfangen.
-    top = parse_journal_top(
-        sh(["bash", "-c", "journalctl --since -5min --no-pager -o json "
-            "--output-fields=_SYSTEMD_UNIT | "
-            "sed -n 's/.*\"_SYSTEMD_UNIT\":\"\\([^\"]*\\)\".*/\\1/p' "
-            "| sort | uniq -c | sort -rn | head -5"], timeout=30))
-    who = _(", überwiegend {prog}").format(prog=top[0][1]) if top else ""
-    return Finding("crit" if rate > 2000 else "warn",
-                   _("Journal wächst mit {rate:.0f} Zeilen pro Minute"
-                     ).format(rate=rate),
-                   _("Hochgerechnet {k:.0f} Tausend Zeilen pro Tag{who}. Das füllt "
-                     "die Platte und macht jede Journalsuche langsam.").format(
-                         k=rate * 1440 / 1000, who=who),
-                   f"{rate:.0f}/min", False, key="journal_rate",
-                   lines=[("utilities-terminal-symbolic", "dim",
-                           _("{prog}: {n} Zeilen in fünf Minuten").format(
-                               prog=p, n=c)) for c, p in top],
-                   actions=[(_("Nachsehen, was da steht"), "_journal_who",
-                             top[0][1])] if top else None)
+    top = journal_top_units(sh(
+        ["journalctl", "--since", "-5min", "--no-pager", "-o", "json",
+         "--output-fields=_SYSTEMD_UNIT,_SYSTEMD_USER_UNIT"], timeout=30))
+    unit = top[0][1] if top else ""
+    used = journal_usage_bytes()
+    try:
+        free = shutil.disk_usage("/var/log/journal" if os.path.isdir(
+            "/var/log/journal") else "/var/log").free
+    except OSError:
+        free = 0
+    tight = bool(free and free < 5 * 2**30)
+    name = "Proton VPN" if unit == "me.proton.vpn.split_tunneling.service" \
+        else (unit_info(unit, unit_scope(unit))[0] if unit else "") or unit
+    title = (_("{name} schreibt ungewöhnlich viele Logeinträge").format(name=name)
+             if name else
+             _("Journal wächst mit {rate:.0f} Zeilen pro Minute").format(
+                 rate=rate))
+    if used and free:
+        impact = (_("Das Journal belegt {used}, auf der Platte sind {free} frei. "
+                    "Das ist aktuell kein Speicherengpass. Bleibt die Rate so "
+                    "hoch, werden alte Einträge früher verdrängt und die Suche "
+                    "unübersichtlich.").format(used=fmt_bytes(used),
+                                                free=fmt_bytes(free))
+                  if not tight else
+                  _("Das Journal belegt {used}, aber auf der Platte sind nur "
+                    "noch {free} frei. Die vielen Einträge verschärfen den "
+                    "Speicherengpass.").format(used=fmt_bytes(used),
+                                               free=fmt_bytes(free)))
+    else:
+        impact = _("Die hohe Rate macht die Journalsuche unübersichtlich. Der "
+                   "aktuelle Platzbedarf ließ sich nicht ermitteln.")
+    facts = [("utilities-terminal-symbolic", "warn",
+              _("{unit}: {n} Einträge in fünf Minuten").format(
+                  unit=p, n=c)) for c, p in top]
+    if used and free:
+        facts.append(("drive-harddisk-system-symbolic", "ok" if not tight else "warn",
+                      _("Journal {used}, freier Speicher {free}").format(
+                          used=fmt_bytes(used), free=fmt_bytes(free))))
+    actions = [(_("Logauszug anzeigen"), "_journal_who", unit)] if unit else None
+    if not unit:
+        solution = ""
+    elif unit_restartable(unit):
+        solution = _("Starte den verursachenden Dienst neu. Bleibt die Rate "
+                     "danach hoch, zeigt der Logauszug die Meldung, die der "
+                     "Dienst fortlaufend schreibt.")
+        actions.insert(0, (_("Dienst neu starten"), "_restart_unit", unit))
+    elif unit.endswith(".scope") and not SESSION_UNITS.match(unit):
+        solution = _("{unit} ist ein laufendes Programm, kein Dienst. Meist "
+                     "hilft es, das Programm zu beenden und neu zu öffnen. Der "
+                     "Logauszug zeigt, was es fortlaufend schreibt.").format(
+                         unit=unit)
+    else:
+        solution = _("Der Logauszug zeigt, was {unit} fortlaufend schreibt. "
+                     "Einen Neustart bietet dynotiq dafür nicht an, weil davon "
+                     "die Anmeldung, die Sitzung oder das System selbst "
+                     "abhängt.").format(unit=unit)
+    if unit == "me.proton.vpn.split_tunneling.service":
+        solution = _("Wenn du Split Tunneling nicht brauchst, deaktiviere es in "
+                     "Proton VPN. dynotiq öffnet die App und prüft die "
+                     "Journalrate danach erneut.")
+        actions.insert(0, (_("Proton VPN öffnen"), "_open_desktop_app",
+                           "proton.vpn.app.gtk"))
+    cause = _("Ursache erkannt: {unit}").format(unit=unit) if unit else ""
+    return Finding("crit" if tight else "warn", title, impact,
+                   f"{rate:.0f}/min", False, key="journal_rate", lines=facts,
+                   actions=actions, cause=cause, solution=solution,
+                   expanded=True)
 
 
 def check_updates(ctx):
@@ -7662,7 +8189,8 @@ def check_self_update(ctx):
                        f"Signed-By: {REPO_KEYRING}\\n' | "
                        f"sudo tee {REPO_SOURCES} > /dev/null\n"
                        "sudo apt update && sudo apt install --reinstall dynotiq",
-                       key="self_update_source")
+                       key="self_update_source",
+                       fix_label=_("Anleitung anzeigen"))
     if not deb_newer(cand, inst):
         return None
     return Finding("info", _("dynotiq {v} ist verfügbar").format(v=cand),
@@ -7671,12 +8199,14 @@ def check_self_update(ctx):
                    cand, True, "sudo apt update && sudo apt install dynotiq",
                    argv=pkexec_apt_argv(["dynotiq"]),
                    warn=_("Dieses Fenster läuft bis zum Schließen mit der alten "
-                          "Fassung weiter."))
+                          "Fassung weiter."),
+                   fix_label=_("Update installieren"))
 
 
 CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_driver,
           check_cpu_temp,
-          check_filesystems, check_gpu_throttle, check_governor, check_journal,
+          check_filesystems, check_gpu_throttle, check_cpu_boost, check_governor,
+          check_journal,
           check_old_snaps, check_autostart, check_dead_launchers,
           check_duplicate_apps, check_swap,
           check_failed_units,
@@ -8579,6 +9109,20 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
 
 .card { background: none; border: none; border-radius: 0;
         box-shadow: inset 0 -1px @LINEFAINT@; }
+.problem-summary { background-color: @SURFACE@; border: 1px solid @LINE@;
+        border-radius: 10px; }
+.problem-summary.ok { box-shadow: inset 3px 0 @OK@; }
+.problem-summary.warn { box-shadow: inset 3px 0 @WARN@; }
+.problem-summary.crit { box-shadow: inset 3px 0 @CRIT@; }
+.finding-card { background-color: @SURFACE@; border: 1px solid @LINE@;
+        border-radius: 10px; }
+.finding-card.warn { box-shadow: inset 3px 0 @WARN@; }
+.finding-card.crit { box-shadow: inset 3px 0 @CRIT@; }
+.finding-card.info { box-shadow: inset 3px 0 @FAINTER@; }
+.finding-cause { font: 400 11.5px @MONO@; color: @DIM@; }
+.finding-solution { background-color: @TINT@; border: 1px solid @LINESTRONG@;
+        border-radius: 9px; }
+.finding-solution-title { font: 700 10.5px @SANS@; color: @ACCTEXT@; }
 .h1 { font: 700 22px @SANS@; color: @TEXT@; letter-spacing: -0.2px; }
 .sub { font: 400 11.5px @SANS@; color: @FAINT@; }
 .btn-ghost { font: 700 11.5px @SANS@; color: @MUTED@; background-color: transparent;
@@ -8586,6 +9130,13 @@ headerbar windowcontrols button.close { background-color: #C0402B; color: #fff; 
              border: 1px solid @LINESTRONG@; border-radius: 7px; padding: 8px 14px; }
 .btn-ghost:hover { background-color: @HOVERGHOST@; }
 .btn-ghost:disabled { color: @DISABLED@; }
+/* Beim MenuButton sitzt ein zweiter Knopf innen, der sonst grau aus dem
+   Systemtheme kommt. Der Rahmen bleibt aussen, innen nur die Flaeche. */
+menubutton.btn-ghost { padding: 0; }
+menubutton.btn-ghost > button { background: none; box-shadow: none; border: none;
+        min-height: 0; padding: 8px 12px; color: @MUTED@; border-radius: 7px; }
+menubutton.btn-ghost > button:hover,
+menubutton.btn-ghost > button:checked { background-color: @HOVERGHOST@; }
 /* Fuer den leisesten Weg aus einem Befund heraus: gleiche Groesse wie
    btn-ghost, aber ohne Rahmen, damit er nicht als Empfehlung gelesen wird. */
 .btn-quiet { font: 700 11.5px @SANS@; color: @FAINT@; background-color: transparent;
@@ -8917,6 +9468,29 @@ def lbl(text, css="", xalign=0.0, wrap=False, chars=52):
         if xalign == 0.0:
             w.set_halign(Gtk.Align.START)
     return w
+
+
+def titlebar(win):
+    """Titelleiste mit eigenen Fensterknöpfen, für das Hauptfenster und jeden
+    Dialog. Die eingebauten Knöpfe ziehen sich seit GTK 4.22 auf die ganze
+    Höhe der Leiste, aus den Kreisen werden Ovale. Eigene WindowControls
+    bleiben bei ihrer Größe. Beide Seiten, weil die Knopfreihenfolge im System
+    auch links stehen kann. Aus dem Layout fliegt das Programmsymbol, sonst
+    steht es unter Wayland neben dem Logo ein zweites Mal."""
+    layout = ":".join(
+        ",".join(teil for teil in seite.split(",")
+                 if teil not in ("icon", "appmenu", "menu"))
+        for seite in (Gtk.Settings.get_default().props.gtk_decoration_layout
+                      or ":minimize,maximize,close").split(":"))
+    hb = Gtk.HeaderBar(show_title_buttons=False)
+    hb.pack_start(Gtk.WindowControls(side=Gtk.PackType.START,
+                                     valign=Gtk.Align.CENTER,
+                                     decoration_layout=layout))
+    hb.pack_end(Gtk.WindowControls(side=Gtk.PackType.END,
+                                   valign=Gtk.Align.CENTER,
+                                   decoration_layout=layout))
+    win.set_titlebar(hb)
+    return hb
 
 
 def box(horiz=False, spacing=0, **kw):
@@ -9750,6 +10324,9 @@ class App(Gtk.Application):
             return
         ensure_icons()
         ensure_desktop()
+        # Ältere Fassungen schrieben einen Autostart, der nie startete
+        if os.path.exists(f"{AUTOSTART_DIR}/dynotiq.desktop"):
+            self._set_own_autostart(None, True)
         # Eigene Symbole. Der Ordner traegt die hicolor-Struktur, weil GTK ein
         # SVG nur darin als symbolisch erkennt und in der Textfarbe zeichnet.
         # Flach im Suchpfad abgelegt kaeme es in seiner eigenen Farbe an.
@@ -9768,30 +10345,13 @@ class App(Gtk.Application):
         self.win = Gtk.ApplicationWindow(application=self, default_width=1180,
                                          default_height=860, title="dynotiq",
                                          icon_name="dynotiq")
-        hb = Gtk.HeaderBar(show_title_buttons=False)
-        # Die eingebauten Knöpfe der Titelleiste ziehen sich seit GTK 4.22 auf
-        # deren ganze Höhe, aus den Kreisen wurden Ovale. Eigene WindowControls
-        # bleiben bei ihrer Größe. Beide Seiten, weil die Knopfreihenfolge im
-        # System auch links stehen kann. Aus dem Layout fliegt das Programmsymbol,
-        # sonst steht es unter Wayland links neben dem Logo ein zweites Mal.
-        layout = ":".join(
-            ",".join(teil for teil in seite.split(",")
-                     if teil not in ("icon", "appmenu", "menu"))
-            for seite in (Gtk.Settings.get_default().props.gtk_decoration_layout
-                          or ":minimize,maximize,close").split(":"))
-        hb.pack_start(Gtk.WindowControls(side=Gtk.PackType.START,
-                                         valign=Gtk.Align.CENTER,
-                                         decoration_layout=layout))
+        hb = titlebar(self.win)
         t = box(True, 10)
-        t.append(self._logo(18))
+        t.append(self._logo(16))
         t.append(lbl("dynotiq", "hb-title"))
         t.append(lbl(self._distro(), "hb-sub"))
         hb.set_title_widget(Gtk.Box())
         hb.pack_start(t)
-        hb.pack_end(Gtk.WindowControls(side=Gtk.PackType.END,
-                                       valign=Gtk.Align.CENTER,
-                                       decoration_layout=layout))
-        self.win.set_titlebar(hb)
 
         root = box(True)
         root.append(self._sidebar())
@@ -9889,10 +10449,11 @@ class App(Gtk.Application):
         return area
 
     def _logo(self, size):
-        path = os.path.join(APP_DIR, "icons", "app-icon", "svg",
-                            "dynotiq-icon-light.svg")
-        img = (Gtk.Image.new_from_file(path) if os.path.exists(path)
-               else Gtk.Image.new_from_icon_name("dynotiq"))
+        # Die Kachel aus dem Icon-Theme, dieselbe wie im Menue. Der weisse
+        # Tacho davor verschwand im hellen Theme auf der hellen Titelleiste,
+        # und das Theme liefert die passende Rastergroesse statt einer
+        # heruntergerechneten 512er.
+        img = Gtk.Image.new_from_icon_name("dynotiq")
         img.set_pixel_size(size)
         img.set_valign(Gtk.Align.CENTER)
         return img
@@ -10074,6 +10635,7 @@ class App(Gtk.Application):
         """
         win = Gtk.Window(transient_for=self.win, modal=True, default_width=620,
                          title="dynotiq")
+        titlebar(win)
         win.add_css_class("page")
         inner = box(spacing=0, margin_top=26, margin_bottom=22,
                     margin_start=28, margin_end=28)
@@ -10174,17 +10736,100 @@ class App(Gtk.Application):
         """Befund, der nichts zu beheben hat, aber eine Seite, die es kann."""
         self._nav_clicked(self.nav_buttons[page], page)
 
+    def _open_desktop_app(self, _b, f, desktop_id):
+        """Eine erkannte Anwendung öffnen und die geführte Lösung nachprüfen."""
+        # Ueber Gio statt gtk-launch: das kommt aus libgtk-3-bin, und fehlt
+        # die Starterdatei, scheitert es still im Hintergrund.
+        info = Gio.DesktopAppInfo.new(desktop_id + ".desktop")
+        try:
+            if info is None:
+                raise GLib.Error(_("{app} ist hier nicht installiert.").format(
+                    app=desktop_id))
+            info.launch([], None)
+        except GLib.Error as e:
+            self._alert(_("Anwendung nicht gestartet"), e.message)
+            return
+        GLib.timeout_add_seconds(30, lambda: self.rescan() or False)
+
+    def _restart_unit(self, _b, f, unit):
+        if not unit_restartable(unit):
+            return
+        scope = unit_scope(unit)
+        argv = (["systemctl", *scope, "restart", unit] if scope else
+                ["pkexec", "systemctl", "restart", unit])
+        detail = _(
+            "{unit} wird einmal neu gestartet. Davon abhängige Funktionen "
+            "sind kurz nicht verfügbar. Danach scannt dynotiq erneut."
+        ).format(unit=unit)
+        if unit == "me.proton.vpn.split_tunneling.service":
+            detail += "\n\n" + _("Die VPN-Verbindung kann dabei kurz "
+                                 "unterbrochen werden.")
+        self._confirm(_("Dienst neu starten?"), detail,
+                      [_("Abbrechen"), _("Neu starten")],
+                      lambda: self._run_log(f.title, argv, self._after_fix),
+                      default=0)
+
+    def _failed_units_solutions(self, _b, f, rows):
+        win = Gtk.Window(title=_("Lösungen für fehlgeschlagene Dienste"),
+                         transient_for=self.win, modal=True, default_width=720,
+                         default_height=480)
+        titlebar(win)
+        win.add_css_class("page")
+        content = box(spacing=10, margin_top=16, margin_bottom=16,
+                      margin_start=16, margin_end=16)
+        content.append(lbl(
+            _("Die letzte aussagekräftige Fehlermeldung steht direkt beim "
+              "Dienst. Ein Neustart ändert nichts dauerhaft, danach prüft "
+              "dynotiq noch einmal. Dienste, an denen Anmeldung oder Sitzung "
+              "hängen, haben keinen Neustart-Knopf."),
+            "lede", wrap=True, chars=86))
+        listing = box(spacing=8)
+        for unit, desc, error in rows:
+            row = box(True, 12, margin_top=12, margin_bottom=12,
+                      margin_start=14, margin_end=14)
+            text = box(spacing=3, hexpand=True)
+            text.append(lbl(desc or unit, "row-title"))
+            text.append(lbl(unit, "mono-dim"))
+            if error:
+                text.append(lbl(error, "row-detail", wrap=True, chars=62))
+            row.append(text)
+            journal = Gtk.Button(label=_("Logauszug"), valign=Gtk.Align.CENTER)
+            journal.add_css_class("btn-ghost")
+            journal.connect("clicked", self._journal_who, f, unit)
+            row.append(journal)
+            if unit_restartable(unit):
+                restart = Gtk.Button(label=_("Neu starten"),
+                                     valign=Gtk.Align.CENTER)
+                restart.add_css_class("btn-fix")
+                restart.connect("clicked", self._restart_unit, f, unit)
+                row.append(restart)
+            card = box()
+            card.add_css_class("finding-card")
+            card.add_css_class("warn")
+            card.append(row)
+            listing.append(card)
+        scroll = Gtk.ScrolledWindow(child=listing, vexpand=True)
+        content.append(scroll)
+        close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END)
+        close.add_css_class("btn-ghost")
+        close.connect("clicked", lambda *_: win.close())
+        content.append(close)
+        win.set_child(content)
+        win.present()
+
     def _journal_who(self, _b, _f, unit):
         self.work(self._journal_who_read, None, unit)
 
     def _journal_who_read(self, unit):
-        top = journal_unit_top(unit)
+        flag = "--user-unit" if unit_scope(unit) else "-u"
+        top = journal_unit_top(unit, flag == "--user-unit")
         body = "\n".join(_("{n}x  {msg}").format(n=c, msg=m) for c, m in top) \
             or _("Im Moment nichts, der Dienst ist inzwischen still.")
         GLib.idle_add(
             self._alert, unit,
             body + "\n\n"
-            + _("Ganze Zeilen: journalctl -u {unit} -n 100").format(unit=unit)
+            + _("Ganze Zeilen: journalctl {flag} {unit} -n 100").format(
+                flag=flag, unit=unit)
             + "\n"
             + _("Wiederholt sich dieselbe Meldung, liegt es an dem Dienst, "
                 "nicht am Journal. Ob er hier gebraucht wird, zeigt die Seite "
@@ -10368,39 +11013,92 @@ class App(Gtk.Application):
         warn = [f for f in self.findings if f.sev == "warn"]
         info = [f for f in self.findings if f.sev == "info"]
         self.prob_sub.set_text(
-            _("{crit} kritisch · {warn} Hinweise").format(
-                crit=len(crit), warn=len(warn) + len(info)))
+            _("{crit} dringend · {warn} empfohlen · {info} zur Information").format(
+                crit=len(crit), warn=len(warn), info=len(info)))
         if not self.findings:
             e = box(spacing=6, halign=Gtk.Align.CENTER)
-            e.append(lbl(_("Keine Befunde. Das System läuft sauber."), "empty"))
+            text = (_("Scan läuft …") if getattr(self, "scan_running", False)
+                    else _("Keine Befunde. Das System läuft sauber."))
+            e.append(lbl(text, "empty"))
             self.prob_box.append(card(e, 40))
             return
-        for title, group in ((_("Kritisch"), crit), (_("Hinweise"), warn),
-                             (_("Zur Kenntnis"), info)):
+        self.prob_box.append(self._problem_summary(crit, warn, info))
+        for title, group in ((_("Dringend"), crit),
+                             (_("Empfohlene Schritte"), warn),
+                             (_("Nur Information"), info)):
             if not group:
                 continue
-            c = HeadedCard(title, len(group))
+            c = box(spacing=8)
+            c.append(grouphead(title, len(group)))
             for f in group:
-                c.append(self._finding_row(f))
+                c.append(self._finding_row(f, standalone=True))
             self.prob_box.append(c)
 
-    def _finding_row(self, f):
+    def _problem_summary(self, crit, warn, info):
+        state = "crit" if crit else "ok"
+        wrap = box(True, 12, margin_top=14, margin_bottom=14,
+                   margin_start=18, margin_end=18)
+        icon = Gtk.Image.new_from_icon_name(
+            "dialog-error-symbolic" if crit else "emblem-ok-symbolic")
+        icon.add_css_class(f"state-{state}")
+        icon.set_pixel_size(18)
+        wrap.append(icon)
+        text = box(spacing=2, hexpand=True)
+        if crit:
+            title = (_("1 Befund braucht sofort Aufmerksamkeit") if len(crit) == 1
+                     else _("{n} Befunde brauchen sofort Aufmerksamkeit").format(
+                         n=len(crit)))
+        else:
+            title = _("Keine akute Gefahr")
+        text.append(lbl(title, "row-title"))
+        actionable = sum(bool(f.cmd or f.actions) for f in crit + warn + info)
+        if actionable:
+            text.append(lbl(
+                _("dynotiq hat für 1 Befund eine konkrete nächste Handlung "
+                  "gefunden.") if actionable == 1 else
+                _("dynotiq hat für {n} Befunde eine konkrete nächste Handlung "
+                  "gefunden.").format(n=actionable),
+                "row-detail", wrap=True, chars=76))
+        wrap.append(text)
+        # Die Zeit des Scans, nicht die des Seitenaufbaus: wer die Seite erst
+        # spaeter oeffnet, saehe sonst eine Pruefung, die es nie gab.
+        stamp = box(spacing=1, halign=Gtk.Align.END)
+        stamp.append(lbl(getattr(self, "scan_time", ""), "mono-dim", xalign=1.0))
+        stamp.append(lbl(_("zuletzt geprüft"), "sub", xalign=1.0))
+        wrap.append(stamp)
+        outer = box()
+        outer.add_css_class("problem-summary")
+        outer.add_css_class(state)
+        outer.append(wrap)
+        return outer
+
+    def _finding_row(self, f, standalone=False):
         wrap = box()
-        wrap.append(sep())
+        if standalone:
+            wrap.add_css_class("finding-card")
+            wrap.add_css_class(f.sev)
+        else:
+            wrap.append(sep())
         r = box(True, 14, margin_top=14, margin_bottom=14, margin_start=18, margin_end=18)
         # Bei einer Zeile mittig, bei einem aufgeklappten Befund oben: sonst
         # steht der Punkt neben dem Aufklapper statt neben dem Titel.
         tall = bool(f.lines or f.actions)
         top = Gtk.Align.START if tall else Gtk.Align.CENTER
-        dot = bar({"crit": "bullet-crit", "warn": "bullet-warn"}
-                  .get(f.sev, "bullet-info"))
-        r.append(dot)
+        # Als eigene Karte traegt deren Kante die Farbe, ein Balken daneben
+        # waere dieselbe Aussage zweimal.
+        if not standalone:
+            r.append(bar({"crit": "bullet-crit", "warn": "bullet-warn"}
+                         .get(f.sev, "bullet-info")))
         txt = box(spacing=2, hexpand=True)
         txt.append(lbl(f.title, "row-title"))
+        if f.cause:
+            txt.append(lbl(f.cause, "finding-cause", wrap=True, chars=76))
         txt.append(lbl(f.detail, "row-detail", wrap=True, chars=70))
         if f.lines:
-            txt.append(self._finding_details(f))
-        if f.actions:
+            txt.append(self._finding_details(f, standalone and f.expanded))
+        if standalone and f.solution:
+            txt.append(self._finding_solution(f))
+        elif f.actions:
             txt.append(self._finding_actions(f))
         r.append(txt)
         if f.badge:
@@ -10417,7 +11115,8 @@ class App(Gtk.Application):
         # Wo der Befund eigene Schaltflaechen mitbringt, waere ein Beheben-Knopf
         # daneben eine falsche Aussage: da ist nichts zu beheben.
         if not f.actions:
-            b = Gtk.Button(label=_("Beheben") if f.cmd else _("Details"),
+            b = Gtk.Button(label=f.fix_label or
+                           (_("Lösung ansehen") if f.cmd else _("Details")),
                            valign=Gtk.Align.CENTER)
             b.add_css_class("btn-fix")
             b.connect("clicked", self._show_fix, f)
@@ -10425,7 +11124,7 @@ class App(Gtk.Application):
         wrap.append(r)
         return wrap
 
-    def _finding_details(self, f):
+    def _finding_details(self, f, expanded=False):
         """Aufklappbarer Teil, eine Zeile je Aussage."""
         exp = Gtk.Expander(margin_top=8)
         exp.set_label_widget(lbl(_("Was das für diesen Rechner heißt"), "row-detail"))
@@ -10439,9 +11138,22 @@ class App(Gtk.Application):
             row.append(lbl(text, "row-detail", wrap=True, chars=64))
             det.append(row)
         exp.set_child(det)
+        exp.set_expanded(expanded)
         return exp
 
-    def _finding_actions(self, f):
+    def _finding_solution(self, f):
+        inner = box(spacing=4, margin_top=12, margin_bottom=12,
+                    margin_start=14, margin_end=14)
+        inner.append(lbl(_("Empfohlene Lösung"), "finding-solution-title"))
+        inner.append(lbl(f.solution, "row-detail", wrap=True, chars=72))
+        if f.actions:
+            inner.append(self._finding_actions(f, primary=True))
+        panel = box(margin_top=10)
+        panel.add_css_class("finding-solution")
+        panel.append(inner)
+        return panel
+
+    def _finding_actions(self, f, primary=False):
         """Kein Akzentgelb: das bleibt Befunden, bei denen etwas kaputt ist."""
         bar = box(True, 8, margin_top=12)
         for i, (label, method, arg) in enumerate(f.actions):
@@ -10449,7 +11161,8 @@ class App(Gtk.Application):
             # Nur wo es mehrere gibt, rueckt der letzte nach rechts ab. Ein
             # einzelner Knopf gehoert an den Text, nicht ans Zeilenende.
             last = i and i == len(f.actions) - 1
-            b.add_css_class("btn-quiet" if last else "btn-ghost")
+            b.add_css_class("btn-fix" if primary and i == 0 else
+                            "btn-quiet" if last else "btn-ghost")
             if last:
                 b.set_hexpand(True)
                 b.set_halign(Gtk.Align.END)
@@ -10470,6 +11183,7 @@ class App(Gtk.Application):
         Netz, die Oberfläche bleibt währenddessen bedienbar."""
         win = Gtk.Window(title=title, transient_for=self.win, modal=True,
                          default_width=680, default_height=520)
+        titlebar(win)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
@@ -11544,25 +12258,40 @@ class App(Gtk.Application):
                  safe_cancel=False):
         """Führt cmd aus und zeigt die Ausgabe live. Kein Shell, cmd ist eine
         Liste von Argumenten oder eine Liste solcher Listen."""
+        steps = cmd_steps(cmd)
         win = Gtk.Window(title=title, transient_for=self.win, modal=True,
-                         default_width=780, default_height=460)
+                         default_width=640)
+        titlebar(win)
+        win.add_css_class("page")
+        # Vorne steht in Worten, was gerade passiert. Die Ausgabe der Befehle
+        # ist fuer die meisten nur Rauschen und liegt zugeklappt darunter.
+        head = lbl(step_title(steps[0]), "h1", wrap=True, chars=40)
+        now = lbl("", "mono-dim")
+        now.set_ellipsize(Pango.EllipsizeMode.END)
+        now.set_margin_top(4)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
-        scroll = Gtk.ScrolledWindow(child=view, vexpand=True)
-        bar = Gtk.ProgressBar(show_text=True, text=_("startet …"), margin_top=10,
+        scroll = Gtk.ScrolledWindow(child=view, vexpand=True,
+                                    min_content_height=280)
+        details = Gtk.Expander(child=scroll, margin_top=12, expanded=any(
+            READ_STEPS.search(" ".join(map(str, s))) for s in steps))
+        details.set_label_widget(lbl(_("Details"), "row-detail"))
+        bar = Gtk.ProgressBar(show_text=True, text=_("startet …"), margin_top=14,
                               pulse_step=0.06)
         stop = Gtk.Button(label=_("Nach diesem Schritt stoppen") if safe_cancel
                           else _("Abbrechen"), halign=Gtk.Align.END)
         close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END, sensitive=False)
         close.connect("clicked", lambda *_: win.close())
-        row = box(True, 8, margin_top=10, halign=Gtk.Align.END)
+        row = box(True, 8, margin_top=14, halign=Gtk.Align.END)
         row.append(stop)
         row.append(close)
-        wrap = box(spacing=0, margin_top=14, margin_bottom=14,
-                   margin_start=14, margin_end=14)
-        wrap.append(scroll)
+        wrap = box(spacing=0, margin_top=22, margin_bottom=18,
+                   margin_start=24, margin_end=24)
+        wrap.append(head)
+        wrap.append(now)
         wrap.append(bar)
+        wrap.append(details)
         wrap.append(row)
         win.set_child(wrap)
         # Solange dpkg läuft, darf das Fenster nicht weg, sonst läuft der Lauf
@@ -11573,7 +12302,7 @@ class App(Gtk.Application):
 
         seen = set()
         run = {"start": time.monotonic(), "last": time.monotonic(), "done": False,
-               "step": "", "pct": 0.0, "stop_after_step": False}
+               "step": "", "pct": 0.0, "stop_after_step": False, "i": 0}
 
         def append(line):
             run["last"] = time.monotonic()
@@ -11585,6 +12314,8 @@ class App(Gtk.Application):
                 return False
             if line.startswith("$ "):
                 run["pct"] = 0.0     # neuer Schritt, der alte Stand gilt nicht
+            elif line.strip() and not run["done"]:
+                now.set_text(line.strip()[:300])
             if sink is not None:
                 sink.append(line)
             buf.insert(buf.get_end_iter(), line + "\n")
@@ -11606,6 +12337,9 @@ class App(Gtk.Application):
             secs = int(time.monotonic() - run["start"])
             idle = int(time.monotonic() - run["last"])
             parts = [mmss(secs)]
+            if len(steps) > 1:
+                parts.append(_("Schritt {i} von {n}").format(
+                    i=run["i"] + 1, n=len(steps)))
             if run["pct"] and not seen:
                 # flatpak zaehlt in Prozent statt in Paketen. Ohne das stuende
                 # der Balken den ganzen Lauf ueber auf null.
@@ -11625,11 +12359,27 @@ class App(Gtk.Application):
 
         GLib.timeout_add(250, heartbeat)
 
-        def finish(msg):
+        def begin(i):
+            run["i"] = i
+            head.set_text(step_title(steps[i]))
+            now.set_text("")
+            return False
+
+        def finish(msg, state="ok"):
             run["done"] = True
             append("\n" + msg)
+            head.set_text({"ok": _("Fertig"), "fail": _("Fehlgeschlagen")}.get(
+                state, msg.rstrip(".")))
+            head.add_css_class({"ok": "state-ok", "fail": "state-crit"}.get(
+                state, "state-warn"))
+            if state == "fail":
+                # Dann ist die Ausgabe der Grund, und die gehoert nach vorn.
+                details.set_expanded(True)
+            elif state == "ok":
+                now.set_text("")
             if os.path.exists("/run/reboot-required"):
                 append(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
+                now.set_text(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
             secs = int(time.monotonic() - run["start"])
             bar.set_fraction(1.0)
             bar.set_text(_("{what} nach {time}").format(
@@ -11682,7 +12432,8 @@ class App(Gtk.Application):
         stop.connect("clicked", cancel)
 
         def worker():
-            for step in steps:
+            for i, step in enumerate(steps):
+                GLib.idle_add(begin, i)
                 GLib.idle_add(append, "$ " + " ".join(step))
                 try:
                     pr = subprocess.Popen(step, stdout=subprocess.PIPE,
@@ -11691,7 +12442,8 @@ class App(Gtk.Application):
                                           errors="replace")
                 except OSError as e:
                     GLib.idle_add(finish,
-                              _("Start fehlgeschlagen: {err}").format(err=e))
+                                  _("Start fehlgeschlagen: {err}").format(err=e),
+                                  "fail")
                     return
                 proc["p"] = pr
                 for line in pr.stdout:
@@ -11699,16 +12451,17 @@ class App(Gtk.Application):
                 rc = pr.wait()
                 if rc != 0:
                     # 126/127: pkexec-Dialog abgebrochen oder nicht startbar
-                    GLib.idle_add(finish, _("Abgebrochen.")
-                                  if rc in (126, 127) or rc < 0
-                                  else _("Beendet mit Code {rc}.").format(rc=rc))
+                    stopped = rc in (126, 127) or rc < 0
+                    GLib.idle_add(finish, _("Abgebrochen.") if stopped
+                                  else _("Beendet mit Code {rc}.").format(rc=rc),
+                                  "stop" if stopped else "fail")
                     return
                 if run["stop_after_step"]:
-                    GLib.idle_add(finish, _("Nach diesem Schritt beendet."))
+                    GLib.idle_add(finish, _("Nach diesem Schritt beendet."),
+                                  "stop")
                     return
             GLib.idle_add(finish, _("Fertig."))
 
-        steps = cmd_steps(cmd)
         threading.Thread(target=worker, daemon=True).start()
 
     def _unit_disable(self, _b, unit):
@@ -12231,7 +12984,12 @@ class App(Gtk.Application):
 
     def _page_appcheck(self):
         p = box(spacing=16)
-        head, self.app_sub = self._head(_("App-Check"), _("Anwendung wählen und prüfen"))
+        self.app_copy = Gtk.Button(label=_("Bericht kopieren"), sensitive=False)
+        self.app_copy.add_css_class("btn-ghost")
+        self.app_copy.connect(
+            "clicked", lambda *_: self._clip(app_check_text(*self.app_report)))
+        head, self.app_sub = self._head(_("App-Check"), _("Anwendung wählen und prüfen"),
+                                        self.app_copy)
         p.append(head)
         # Die Liste kommt aus dem Hintergrund: alle Starter zu lesen kostet
         # rund eine fuenftel Sekunde, und die haette das Fenster beim ersten
@@ -12256,6 +13014,9 @@ class App(Gtk.Application):
         btn = Gtk.Button(label=_("Prüfen"), valign=Gtk.Align.CENTER)
         btn.add_css_class("btn-accent")
         btn.connect("clicked", lambda *_: self._appcheck_run())
+        rm = Gtk.Button(label=_("Deinstallieren"), valign=Gtk.Align.CENTER)
+        rm.add_css_class("btn-ghost")
+        rm.connect("clicked", lambda *_: self._appcheck_uninstall())
 
         self.app_icon = Gtk.Image()
         self.app_icon.set_pixel_size(44)
@@ -12269,6 +13030,7 @@ class App(Gtk.Application):
                   margin_start=18, margin_end=18)
         row.append(self.app_icon)
         row.append(who)
+        row.append(rm)
         row.append(btn)
         c = box()
         c.add_css_class("card")
@@ -12283,27 +13045,31 @@ class App(Gtk.Application):
 
         self.app_box = box(spacing=16)
         p.append(self.app_box)
+        self._appcheck_reload()
+        return self._scroll(p)
+
+    def _appcheck_reload(self):
         self._appcheck_hint(_("Anwendungen werden gelesen …"))
         self.work(lambda: GLib.idle_add(self._appcheck_apps, desktop_apps()),
                   self.app_sub)
-        return self._scroll(p)
 
     def _appcheck_apps(self, apps):
         """Die gelesenen Starter in das Aufklappmenue, laeuft ueber idle_add."""
         self.apps = apps
         namen = sorted(apps, key=str.lower) or [_("nichts gefunden")]
         self.app_names.splice(0, self.app_names.get_n_items(), namen)
-        self._appcheck_hint(
-            _("{n} Anwendungen gefunden. Gesucht wird nach fehlenden "
-              "Bibliotheken, abgeschnittenen Rechten in der Sandbox, "
-              "blockierten Zugriffen, Abstürzen und Fehlern im Journal. "
-              "Wo es eine Lösung gibt, steht ein Knopf daneben."
-              ).format(n=len(apps)))
+        self.app_intro = _("{n} Anwendungen gefunden. Gesucht wird nach fehlenden "
+                           "Bibliotheken, abgeschnittenen Rechten in der Sandbox, "
+                           "blockierten Zugriffen, Abstürzen und Fehlern im Journal. "
+                           "Wo es eine Lösung gibt, steht ein Knopf daneben."
+                           ).format(n=len(apps))
+        self._appcheck_hint(self.app_intro)
         self._appcheck_preview()
         return False
 
     def _appcheck_hint(self, text):
         clear(self.app_box)
+        self.app_copy.set_sensitive(False)
         c = box()
         c.add_css_class("card")
         body = lbl(text, "lede", wrap=True, chars=95)
@@ -12341,9 +13107,18 @@ class App(Gtk.Application):
         else:
             self.app_icon.set_from_icon_name(icon or "application-x-executable")
         kind, ident = app_source(entry)
+        if web_app_browser(entry):
+            kind, ident = "webapp", web_app_browser(entry)
         self.app_name.set_text(entry.get("Name", ""))
         self.app_kind.set_text(APP_KIND_LABEL.get(kind, kind)
                                + (f" · {ident}" if ident else ""))
+        # Untertitel, Ergebnis und Bericht gehören zur geprüften Anwendung. Wer
+        # eine andere wählt, soll nicht die alten Probleme unter ihrem Namen sehen.
+        report = getattr(self, "app_report", None)
+        if report and report[0] != entry.get("Name", ""):
+            self.app_report = None
+            self.app_sub.set_text(_("Anwendung wählen und prüfen"))
+            self._appcheck_hint(self.app_intro)
 
     def _appcheck_run(self):
         entry = self._appcheck_entry()
@@ -12372,33 +13147,247 @@ class App(Gtk.Application):
         else:
             state = _("alles in Ordnung")
         self.app_sub.set_text(f"{name}: {state}")
-        c = box()
-        c.add_css_class("card")
-        copy = Gtk.Button(label=_("Bericht kopieren"), valign=Gtk.Align.CENTER)
-        copy.add_css_class("btn-ghost")
-        copy.connect("clicked",
-                     lambda *_: self._clip(app_check_text(name, results)))
-        c.append(card_head(_("Ergebnis"), copy))
-        for sev, title, detail, fix in results:
-            r = box(True, 14, margin_top=13, margin_bottom=13,
-                    margin_start=18, margin_end=18)
-            dot = bar({"crit": "bullet-crit", "warn": "bullet-warn",
-                       "info": "bullet-info"}.get(sev, "bullet-ok"))
-            r.append(dot)
-            t = box(spacing=2, hexpand=True)
-            t.append(lbl(title, "row-title"))
-            t.append(lbl(detail, "row-detail", wrap=True, chars=78))
-            r.append(t)
-            if fix:
-                label, argv = fix[0], fix[1]
-                b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
-                b.add_css_class("btn-fix")
-                b.connect("clicked", self._appcheck_fix, title, label, argv,
-                          None, fix[2] if len(fix) > 2 else None)
-                r.append(b)
-            c.append(sep_row(r))
-        self.app_box.append(c)
+        self.app_report = (name, results)
+        self.app_copy.set_sensitive(True)
+        # Offene Snap-Freigaben kommen in eine Zeile. Einzeln fuellten sie bei
+        # Chromium neun Zeilen, obwohl eine fehlende Freigabe erst Schutz ist.
+        gaps = [r for r in results
+                if r[3] and r[3][1][:3] == ["pkexec", "snap", "connect"]]
+        gaps = gaps if len(gaps) > 1 else []
+        for title, sevs in ((_("Probleme"), ("crit", "warn")),
+                            (_("Hinweise"), ("info",)),
+                            (_("In Ordnung"), ("ok",))):
+            rows = [r for r in results
+                    if r[0] in sevs and not any(r is g for g in gaps)]
+            more = gaps if "info" in sevs else []
+            if not rows and not more:
+                continue
+            c = HeadedCard(title, len(rows) + len(more))
+            for r in rows:
+                c.append(sep_row(self._appcheck_row(*r)))
+            if more:
+                c.append(sep_row(self._appcheck_gaps(more)))
+            self.app_box.append(c)
         return False
+
+    def _appcheck_row(self, sev, title, detail, fix):
+        r = box(True, 14, margin_top=13, margin_bottom=13,
+                margin_start=18, margin_end=18)
+        r.append(bar({"crit": "bullet-crit", "warn": "bullet-warn",
+                      "info": "bullet-info"}.get(sev, "bullet-ok")))
+        t = box(spacing=2, hexpand=True)
+        t.append(lbl(title, "row-title"))
+        t.append(lbl(detail, "row-detail", wrap=True, chars=78))
+        r.append(t)
+        if fix:
+            label, argv = fix[0], fix[1]
+            b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
+            # Akzentgelb nur, wo etwas kaputt ist.
+            b.add_css_class("btn-fix" if sev in ("warn", "crit") else "btn-ghost")
+            b.connect("clicked", self._appcheck_fix, title, label, argv,
+                      None, fix[2] if len(fix) > 2 else None)
+            r.append(b)
+        return r
+
+    def _appcheck_gaps(self, gaps):
+        r = box(True, 14, margin_top=13, margin_bottom=13,
+                margin_start=18, margin_end=18)
+        r.append(bar("bullet-info"))
+        t = box(spacing=2, hexpand=True)
+        t.append(lbl(_("{n} Freigaben nicht erteilt").format(n=len(gaps)),
+                     "row-title"))
+        t.append(lbl(_("Eine fehlende Freigabe schützt erst einmal. Freigeben "
+                       "lohnt nur, wenn dir in der App genau diese Funktion "
+                       "fehlt."), "row-detail", wrap=True, chars=78))
+        exp = Gtk.Expander(margin_top=8)
+        exp.set_label_widget(lbl(_("Alle anzeigen"), "row-detail"))
+        inner = box()
+        for g in gaps:
+            row = self._appcheck_row(*g)
+            row.set_margin_start(0)
+            row.set_margin_end(0)
+            row.set_margin_top(9)
+            row.set_margin_bottom(9)
+            inner.append(row)
+        exp.set_child(inner)
+        t.append(exp)
+        r.append(t)
+        return r
+
+    def _appcheck_uninstall(self):
+        entry = self._appcheck_entry()
+        if entry:
+            self.work(lambda: GLib.idle_add(self._uninstall_dialog, entry,
+                                            uninstall_plan(entry)), self.app_sub)
+
+    def _uninstall_dialog(self, entry, plan):
+        """Deinstallieren mit der Wahl, ob die Daten mitgehen.
+
+        Was dynotiq nicht sauber entfernen kann, erklärt der Dialog, statt
+        einen Knopf anzubieten: eine Web-App entfernt nur ihr Browser.
+        """
+        name, kind, ident = entry.get("Name", ""), plan["kind"], plan["ident"]
+        title = _("{app} deinstallieren").format(app=name)
+        win = Gtk.Window(transient_for=self.win, modal=True, default_width=580,
+                         title="dynotiq")
+        titlebar(win)
+        win.add_css_class("page")
+        inner = box(spacing=14, margin_top=24, margin_bottom=20,
+                    margin_start=26, margin_end=26)
+        inner.append(lbl(title, "h1", wrap=True, chars=40))
+        text = {
+            "webapp": _("{app} ist eine Web-App von {browser}, kein eigenes "
+                        "Programm, und lässt sich nur dort entfernen: "
+                        "{browser} öffnen, chrome://apps in die Adresszeile "
+                        "eingeben, {app} mit der rechten Maustaste anklicken "
+                        "und 'Aus {browser} entfernen' wählen. {browser} fragt "
+                        "dabei auch, ob die gespeicherten Daten der Seite "
+                        "mitgehen."),
+            "steam": _("Steam übernimmt das Deinstallieren und fragt selbst "
+                       "noch einmal nach. Spielstände in der Steam-Cloud "
+                       "bleiben erhalten."),
+            "starter": _("{app} ist ein eigener Eintrag im Menü, kein "
+                         "installiertes Paket. Entfernt wird nur dieser "
+                         "Eintrag, er landet im Papierkorb. Das Programm "
+                         "dahinter bleibt: {prog}"),
+            "": _("Der Starter {path} gehört zu keinem Paket. Wie {app} "
+                  "installiert wurde, weiß dynotiq deshalb nicht und fasst "
+                  "nichts an."),
+        }.get(kind)
+        purge, checks = None, []
+        if text is not None:
+            inner.append(lbl(text.format(
+                app=name, browser=ident, path=entry.get("Path", ""),
+                prog=exec_binary(entry.get("Exec", ""))), "lede", wrap=True,
+                chars=62))
+        else:
+            def option(label, detail, group=None):
+                c = Gtk.CheckButton(group=group)
+                t = box(spacing=2, margin_start=6)
+                t.append(lbl(label, "row-title"))
+                if detail:
+                    t.append(lbl(detail, "row-detail", wrap=True, chars=60))
+                c.set_child(t)
+                return c
+            keep = option(_("Nur die App entfernen"), {
+                "snap": _("Snap löscht dabei auch ~/snap/{id}, bewahrt die "
+                          "Daten aber 31 Tage als Sicherung auf. Nach einer "
+                          "Neuinstallation zeigt 'snap saved' die Nummer, "
+                          "'snap restore <Nummer>' holt sie zurück."),
+                "flatpak": _("Einstellungen und Anmeldungen in ~/.var/app/{id} "
+                             "bleiben liegen. Installierst du die App wieder, "
+                             "ist alles wie vorher."),
+            }.get(kind, _("Einstellungen und Anmeldungen in deinem Home bleiben "
+                          "liegen. Installierst du die App wieder, ist alles "
+                          "wie vorher.")).format(id=ident))
+            keep.set_active(True)
+            inner.append(keep)
+            if kind != "appimage" or plan["dirs"]:
+                tool = plan["tool_dir"]
+                purge = option(_("App und alle Daten entfernen"), {
+                    "snap": _("Ohne Sicherung, das lässt sich nicht rückgängig "
+                              "machen."),
+                    "flatpak": _("Flatpak löscht dazu {path} endgültig."),
+                    "deb": _("Dazu die Einstellungen des Pakets unter /etc."),
+                }.get(kind, "").format(path=f"~/.var/app/{ident}" + (
+                    f" ({fmt_bytes(tool[1])})" if tool else "")), keep)
+                inner.append(purge)
+            if plan["dirs"]:
+                folders = box(spacing=4, margin_start=30)
+                folders.append(lbl(_("Diese Ordner kommen in den Papierkorb:"),
+                                   "row-detail"))
+                home = os.path.expanduser("~")
+                for p, s in plan["dirs"]:
+                    c = Gtk.CheckButton(active=True, label="{path}  {size}".format(
+                        path=p.replace(home, "~", 1), size=fmt_bytes(s)))
+                    checks.append((p, c))
+                    folders.append(c)
+                inner.append(folders)
+        if plan["running"]:
+            warn = box(True, 12)
+            warn.append(bar("bullet-warn"))
+            warn.append(lbl(_("{app} läuft gerade. Schließ die App vorher, sonst "
+                              "geht ungespeicherte Arbeit verloren.").format(
+                                  app=name), "row-detail", wrap=True, chars=60))
+            inner.append(warn)
+        cmd = lbl("", "mono-dim", wrap=True, chars=62)
+
+        def chosen():
+            on = bool(purge and purge.get_active())
+            return uninstall_argv(plan, on, [p for p, c in checks
+                                             if on and c.get_active()])
+
+        def refresh(*_a):
+            for _p, c in checks:
+                c.set_sensitive(bool(purge and purge.get_active()))
+            cmd.set_text("\n".join(s.strip() for s in cmd_preview(chosen())))
+        if kind in ("snap", "flatpak", "deb", "appimage", "starter"):
+            for c in [purge] + [c for _p, c in checks]:
+                if c:
+                    c.connect("toggled", refresh)
+            refresh()
+            inner.append(cmd)
+
+        foot = box(True, 8, margin_top=6, halign=Gtk.Align.END)
+        close = Gtk.Button(label=_("Schließen") if kind in ("", "webapp")
+                           else _("Abbrechen"))
+        close.add_css_class("btn-ghost")
+        close.connect("clicked", lambda *_: win.close())
+        foot.append(close)
+        label = {"webapp": _("Adresse kopieren"),
+                 "steam": _("In Steam deinstallieren"),
+                 "starter": _("Eintrag entfernen"),
+                 "": None}.get(kind, _("Deinstallieren"))
+        if label:
+            go = Gtk.Button(label=label)
+            go.add_css_class("btn-accent")
+            if kind == "webapp":
+                go.connect("clicked", lambda b: (
+                    Gdk.Display.get_default().get_clipboard().set("chrome://apps"),
+                    b.set_label(_("Kopiert"))))
+            else:
+                go.connect("clicked", lambda *_: self._uninstall_go(
+                    win, plan, title, chosen()))
+            foot.append(go)
+        inner.append(foot)
+        win.set_child(inner)
+        win.present()
+        return False
+
+    def _uninstall_go(self, win, plan, title, argv):
+        win.close()
+        if plan["kind"] == "steam":
+            try:
+                Gio.AppInfo.launch_default_for_uri(
+                    f"steam://uninstall/{plan['ident']}", None)
+            except GLib.Error as e:
+                self._alert(_("Steam nicht erreichbar"), e.message)
+            return
+
+        def after():
+            self._appcheck_reload()
+            self._after_fix()
+        if plan["kind"] == "deb":
+            self.work(self._uninstall_deb_check, None, title, argv, after)
+        else:
+            self._run_log(title, argv, after)
+
+    def _uninstall_deb_check(self, title, argv, after):
+        """Trockenlauf vor apt. Was zur Grundausstattung gehört, bleibt."""
+        items = apt_would_remove(["remove" if a == "purge" else a
+                                  for a in argv[0]])
+        blocked = system_packages(items)
+        if blocked:
+            GLib.idle_add(self._alert, _("Nicht deinstalliert"), _(
+                "Mit dem Paket würde apt auch {pkgs} entfernen. Das gehört zur "
+                "Grundausstattung von Ubuntu, ein späteres Aufräumen nähme "
+                "danach große Teile des Desktops mit. dynotiq deinstalliert "
+                "das deshalb nicht.").format(pkgs=", ".join(blocked[:5])))
+        elif set(items) <= {argv[0][-1]}:
+            GLib.idle_add(self._run_log, title, argv, after)
+        else:
+            GLib.idle_add(self._confirm_appcheck_removal, title, argv, after,
+                          items, _("Pakete"))
 
     def _appcheck_fix(self, _b, title, label, argv, after=None, preview=None,
                       note=""):
@@ -13696,7 +14685,7 @@ class App(Gtk.Application):
         if state:
             with open(path, "w") as f:
                 f.write("[Desktop Entry]\nType=Application\nName=dynotiq\n"
-                        f"Exec={os.path.abspath(sys.argv[0])}\nTerminal=false\n")
+                        f"Exec={exec_line()}\nTerminal=false\n")
         elif os.path.exists(path):
             os.unlink(path)
         return False
@@ -13750,6 +14739,7 @@ class App(Gtk.Application):
             history_append(entry)
 
         self.scan_running = False
+        self.scan_time = time.strftime("%H:%M")
         self.ring.set_busy(False)
         self.ring.set_value(score)
         state = (_("gut") if score >= 85
@@ -14790,6 +15780,14 @@ def selftest():
     f = check_filesystems(root)
     assert f and f.preview and callable(f.preview[0]), f
     assert "autoremove" in check_filesystems(root).cmd
+    # /boot ist keine Datenpartition: dort liegen alte Kernel, und die nimmt
+    # autoremove weg. Auf der EFI-Partition liegen Startdateien.
+    boot = {"mounts": [dict(root["mounts"][0], target="/boot")]}
+    assert check_filesystems(boot).argv == AUTOREMOVE_CMD
+    efi = check_filesystems({"mounts": [dict(root["mounts"][0], target="/boot/efi")]})
+    assert efi.argv is None and "/boot/efi" in efi.cmd and not efi.actions
+    efi = check_filesystems({"mounts": [dict(root["mounts"][0], target="/efi")]})
+    assert efi.cmd == "sudo du -sh /efi/EFI/*" and not efi.actions, efi.cmd
     # Release-Upgrade nur melden, wenn do-release-upgrade wirklich eins nennt
     assert parse_release_upgrade("New release '26.04.1 LTS' available.\n"
                                  "Run 'do-release-upgrade' to upgrade to it.") \
@@ -14814,7 +15812,8 @@ def selftest():
     try:
         globals()["STATE_FILE"] = fd[1]
         state_write({"release_checked": time.time(), "release_offered": "",
-                     "release_exists": "", "release_dist": ""})
+                     "release_exists": "", "release_dist": "",
+                     "release_for": os_release("VERSION_ID")})
         before = state_read()
         assert release_notify() is None
         assert state_read().get("last_check") == before.get("last_check")
@@ -14876,6 +15875,15 @@ def selftest():
                 ("99.04 LTS", "zzz", True)]
             f = check_release_upgrade({})
             assert f and state_read().get("release_checked"), (f, state_read())
+            assert state_read().get("release_for") == os_release("VERSION_ID")
+            # Gemerkt fuer das alte Release: nach dem Upgrade stuende sonst bis
+            # zu einen Tag das laufende Release als "steht bereit" da
+            globals()["fetch_releases"] = lambda *a, **k: []
+            state_write({**state_read(), "release_offered": "99.04",
+                         "release_exists": "", "release_for": "00.04"})
+            assert check_release_upgrade({}) is None
+            state_write({**state_read(), "release_for": os_release("VERSION_ID")})
+            assert check_release_upgrade({}).badge == "99.04"
         finally:
             globals()["STATE_FILE"] = alt_state
             globals()["fetch_releases"] = alt_fetch
@@ -15173,8 +16181,9 @@ def selftest():
     assert record_verdict(su)[0] == _("HITZE")
     # Der Rat vergleicht mit dem jetzigen Stand des Rechners. Im Test wird der
     # mitgegeben, sonst haengt das Ergebnis daran, wie diese Maschine gerade
-    # eingestellt ist. Leer heisst: seit dem Lauf hat sich nichts geaendert.
-    NOW = {"power_head": None, "gov": ""}
+    # eingestellt ist. Leer heisst: seit dem Lauf hat sich nichts geaendert,
+    # gm None heisst ohne GameMode.
+    NOW = {"power_head": None, "gov": "", "gm": None}
     titles = [t for _s, t, _d, _a in record_advice(su, NOW)]
     assert _("Kühlung der Grafikkarte angehen") in titles, titles
     assert _("Undervolting prüfen") in titles
@@ -15204,6 +16213,354 @@ def selftest():
         dict(pw, power_head=(170, 180), gov="powersave"), NOW)]
     assert _("Powerlimit ist der Deckel") in open_
     assert _("CPU-Governor stand auf {gov}").format(gov="powersave") in open_
+    # Mit GameMode ist powersave ausserhalb des Spiels richtig. Den
+    # cpupower-Knopf gibt es nur ohne GameMode: Dauer-performance stellt
+    # GameMode nach jedem Spiel wieder her.
+    ps = dict(pw, gov="powersave")
+    stand = _("CPU-Governor stand auf {gov}").format(gov="powersave")
+    lief = _("GameMode lief in diesem Spiel nicht")
+    gruppe = _("GameMode darf den Governor nicht umschalten")
+    def gov_rat(gm, now=NOW):
+        return {t: a for _s, t, _d, a in record_advice(ps, dict(now, gm=gm))}
+    r = gov_rat(None)
+    assert stand in r and lief not in r and gruppe not in r, r
+    r = gov_rat(True)
+    assert lief in r and r[lief] is None and stand not in r and gruppe not in r, r
+    r = gov_rat(False)
+    assert gruppe in r and stand not in r and lief not in r, r
+    assert r[gruppe][1][:4] == ["pkexec", "usermod", "-aG", "gamemode"], r[gruppe]
+    assert _("Governor steht schon auf performance") in gov_rat(True, done)
+    # Beim Abschluss nach Spielende stellt GameMode gerade zurueck, das ist
+    # kein Lauf ohne GameMode
+    ps = dict(pw, gov="performance/powersave")
+    gemischt = _("CPU-Governor stand auf {gov}").format(gov=ps["gov"])
+    assert not {gemischt, lief, gruppe} & set(gov_rat(True)), gov_rat(True)
+    assert gemischt in gov_rat(None)
+    # Der Governor zaehlt aus der Lastphase: die Aufzeichnung im Hintergrund
+    # endet erst nach dem Spiel, dann hat GameMode schon zurueckgestellt.
+    assert record_summary([dict(s, gov="leerlauf") for s in idle] +
+                          [dict(s, gov="im-lauf") for s in hot])["gov"] == "im-lauf"
+    # Dieselbe Unterscheidung auf der Problemseite und im App-Check
+    alt_gm, alt_gov, alt_gm2 = gamemode_can_switch, cpu_governor, governor_matters
+    jetzt = _("CPU-Governor steht auf {gov}").format(gov="powersave")
+    def gc_titel():
+        return {t for _s, t, _d, _a in game_check(steam_total=False)}
+    try:
+        globals()["governor_matters"] = lambda: True
+        globals()["cpu_governor"] = lambda: "powersave"
+        globals()["gamemode_can_switch"] = lambda: None
+        f = check_governor({})
+        assert f and f.key == "governor" and jetzt in gc_titel()
+        globals()["gamemode_can_switch"] = lambda: True
+        assert check_governor({}) is None
+        assert not {jetzt, gruppe} & gc_titel()
+        globals()["gamemode_can_switch"] = lambda: False
+        f = check_governor({})
+        assert f and f.key == "gamemode_group" and f.title == gruppe
+        assert f.argv[:4] == ["pkexec", "usermod", "-aG", "gamemode"], f.argv
+        assert f.cmd == "sudo " + shlex.join(f.argv[1:]), f.cmd
+        assert gruppe in gc_titel() and jetzt not in gc_titel()
+        # Auf performance gibt es nichts zu sagen, auch ohne Gruppe
+        globals()["cpu_governor"] = lambda: "performance"
+        assert check_governor({}) is None and gruppe not in gc_titel()
+        # Bei amd-pstate-epp und intel_pstate ist powersave Normalbetrieb,
+        # power-profiles-daemon stellt ihn ein. Kein Befund, kein cpupower.
+        globals()["cpu_governor"] = lambda: "powersave"
+        globals()["gamemode_can_switch"] = lambda: None
+        globals()["governor_matters"] = lambda: False
+        assert check_governor({}) is None
+        assert not {jetzt, gruppe} & gc_titel()
+    finally:
+        globals()["gamemode_can_switch"], globals()["cpu_governor"] = alt_gm, alt_gov
+        globals()["governor_matters"] = alt_gm2
+    ps = dict(pw, gov="powersave")
+    assert not {stand, lief, gruppe} & set(gov_rat(None, dict(NOW, gov_matters=False)))
+    alt_read = read
+    try:
+        for drv, zaehlt in (("amd-pstate-epp", False), ("intel_pstate", False),
+                            ("acpi-cpufreq", True), ("intel_cpufreq", True),
+                            (None, True)):
+            globals()["read"] = lambda p, d=drv: (
+                d if p.endswith("/scaling_driver") else alt_read(p))
+            assert governor_matters() is zaehlt, drv
+    finally:
+        globals()["read"] = alt_read
+    # Boost aus ist der Befund, den der Governor-Name nie gezeigt hat
+    alt_read, alt_sh, alt_bat = read, sh, on_battery
+    boost_titel = _("CPU-Boost ist aus")
+    def sysfs(werte):
+        globals()["read"] = lambda p: werte.get(p, alt_read(p) if "/cpufreq/" not in p
+                                               and "intel_pstate" not in p else None)
+    try:
+        globals()["on_battery"] = lambda: False
+        globals()["sh"] = lambda a, timeout=15: "balanced"
+        sysfs({CPU_BOOST: "0"})
+        b = cpu_boost_advice()
+        assert b and b[1] == boost_titel and b[3] == f"echo 1 | sudo tee {CPU_BOOST}", b
+        f = check_cpu_boost({})
+        assert f and f.key == "cpu_boost" and f.cmd == b[3] and f.argv is None
+        g = [a for _s, t, _d, a in game_check(steam_total=False) if t == boost_titel]
+        assert g == [(_("Zur Problemseite"), "Probleme")], g
+        sysfs({CPU_BOOST: "1"})
+        assert cpu_boost_advice() is None and check_cpu_boost({}) is None
+        # Intel: no_turbo, aber nur wo es ueberhaupt einen Turbo gibt
+        tp = "/sys/devices/system/cpu/intel_pstate/turbo_pct"
+        sysfs({NO_TURBO: "1", tp: "30"})
+        assert cpu_boost_advice()[3] == f"echo 0 | sudo tee {NO_TURBO}"
+        sysfs({NO_TURBO: "1", tp: "0"})
+        assert cpu_boost_advice() is None
+        sysfs({NO_TURBO: "0", tp: "30"})
+        assert cpu_boost_advice() is None
+        # Absichtlich aus: Energiesparprofil oder Akku
+        sysfs({CPU_BOOST: "0"})
+        globals()["sh"] = lambda a, timeout=15: "power-saver"
+        assert cpu_boost_advice() is None
+        globals()["sh"] = lambda a, timeout=15: ""
+        assert cpu_boost_advice()
+        globals()["on_battery"] = lambda: True
+        assert cpu_boost_advice() is None
+    finally:
+        globals()["read"], globals()["sh"], globals()["on_battery"] = alt_read, alt_sh, alt_bat
+    # Akkubetrieb heisst: der Systemakku entlaedt sich. Wie geladen wird, ist
+    # egal, und Akkus von Maus und Headset zaehlen nicht.
+    alt_read, alt_glob = read, glob.glob
+    try:
+        for geraete, akku in (
+                # Desktop mit Funkmaus, deren Akku leer laeuft, und einem
+                # Geraet, das kein Akku ist, aber einen Status meldet
+                ({"maus": ("Battery", "Device", "Discharging")}, False),
+                ({"funk": ("Wireless", None, "Discharging")}, False),
+                # Laptop am Hohlstecker oder an USB-C, voll oder ladend
+                ({"AC": ("Mains", None, None), "BAT0": ("Battery", None, "Charging")}, False),
+                ({"ucsi": ("USB", None, None), "BAT1": ("Battery", None, "Not charging")}, False),
+                # Laptop am Akku, ob mit oder ohne Netzteil-Geraet
+                ({"AC": ("Mains", None, None), "BAT0": ("Battery", None, "Discharging")}, True),
+                ({"BAT0": ("Battery", "System", "Discharging")}, True)):
+            glob.glob = lambda pat, g=geraete: [f"/ps/{n}" for n in g]
+            globals()["read"] = lambda p, g=geraete: dict(
+                zip(("type", "scope", "status"), g[p.split("/")[2]])).get(p.split("/")[3])
+            assert on_battery() is akku, geraete
+    finally:
+        globals()["read"], glob.glob = alt_read, alt_glob
+    # Tdie vor Tctl: bei Ryzen 1000/2000 X traegt Tctl einen Versatz
+    alt_hw = hwmon_temp
+    try:
+        globals()["hwmon_temp"] = lambda chips, labels=None: (
+            65.0 if labels == {"Tdie"} else 85.0)
+        assert cpu_temp() == 65.0
+    finally:
+        globals()["hwmon_temp"] = alt_hw
+    # CPU-Temperatur mit den Schwellen des Pruefstands, ein Ausschlag knapp
+    # ueber 85 ist noch kein roter Befund
+    assert check_cpu_temp({"cpu_temp": 86}) is None
+    assert check_cpu_temp({"cpu_temp": 90}).sev == "warn"
+    assert check_cpu_temp({"cpu_temp": 96}).sev == "crit"
+    # Proton: gezaehlt werden Fassungen. Zwei Spiele auf derselben fehlenden
+    # Fassung sind eine Fassung.
+    alt_pc = proton_check, runtime_problems, missing_compat_games, broken_compat_tools
+    try:
+        globals()["proton_check"] = lambda: [{"sev": "crit", "title": "t", "short": "s"}]
+        globals()["runtime_problems"] = lambda: []
+        globals()["broken_compat_tools"] = lambda: []
+        globals()["missing_compat_games"] = lambda: [
+            ("Spiel A", "1", "GE-Proton9-1"), ("Spiel B", "2", "GE-Proton9-1")]
+        assert check_proton({}).title == _("1 Proton-Fassung startet kein Spiel")
+    finally:
+        (globals()["proton_check"], globals()["runtime_problems"],
+         globals()["missing_compat_games"], globals()["broken_compat_tools"]) = alt_pc
+    # Startoptionen: jedes installierte Spiel, auch ohne eigene Proton-Zuordnung
+    alt_lo = steam_installed_ids, compat_mappings, steam_game, steam_launch_options
+    try:
+        globals()["steam_installed_ids"] = lambda: {"4711"}
+        globals()["compat_mappings"] = lambda: {}
+        globals()["steam_game"] = lambda a: {"name": "Testspiel"}
+        globals()["steam_launch_options"] = lambda a: "gibt-es-nicht-4711 %command%"
+        assert launch_option_problems() == [
+            ("Testspiel", "missing", "gibt-es-nicht-4711")], launch_option_problems()
+    finally:
+        (globals()["steam_installed_ids"], globals()["compat_mappings"],
+         globals()["steam_game"], globals()["steam_launch_options"]) = alt_lo
+    # Jedes System ist anders: die Faelle, die es auf dem Entwicklerrechner
+    # nicht gibt, per Patch.
+    # Autostart und Starter mit Interpreter, dynotiq.py ist nicht ausfuehrbar
+    assert exec_line().split()[0] == sys.executable, exec_line()
+    alt_dir = APP_DIR
+    try:
+        globals()["APP_DIR"] = "/pfad mit leer"
+        assert exec_line().endswith(' "/pfad mit leer/dynotiq.py"'), exec_line()
+    finally:
+        globals()["APP_DIR"] = alt_dir
+    alt_auto = AUTOSTART_DIR
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            globals()["AUTOSTART_DIR"] = td
+            App._set_own_autostart(None, None, True)
+            assert f"Exec={exec_line()}\n" in read(f"{td}/dynotiq.desktop") + "\n"
+            App._set_own_autostart(None, None, False)
+            assert not os.path.exists(f"{td}/dynotiq.desktop")
+        finally:
+            globals()["AUTOSTART_DIR"] = alt_auto
+    # Anmeldedienst und Sitzungsdienste, egal wie der Desktop sie nennt
+    alt_dm, alt_sh = display_manager, sh
+    try:
+        globals()["sh"] = lambda a, timeout=15: ""
+        globals()["display_manager"] = lambda: "ly.service"
+        assert not unit_restartable("ly.service")
+        assert not any(unit_restartable(u) for u in ("sddm.service", "lightdm.service"))
+        assert unit_restartable("foo.service")
+        globals()["sh"] = lambda a, timeout=15: "graphical-session.target\n\n"
+        assert not unit_restartable("plasma-kwin_wayland.service")
+    finally:
+        globals()["display_manager"], globals()["sh"] = alt_dm, alt_sh
+    # Steam als Snap
+    alt_home = os.environ.get("HOME")
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            os.environ["HOME"] = td
+            snap = os.path.join(td, "snap/steam/common/.local/share/Steam")
+            os.makedirs(os.path.join(snap, "steamapps"))
+            assert steam_root() == snap, steam_root()
+        finally:
+            os.environ["HOME"] = alt_home
+    # Ptyxis nimmt den Befehl als eine Zeile, Alacritty wie xterm
+    alt_which = shutil.which
+    try:
+        for term, erwartet in (
+                ("ptyxis", ["ptyxis", "-x", "sudo do-release-upgrade -d"]),
+                ("alacritty", ["alacritty", "-e", "sudo", "do-release-upgrade", "-d"])):
+            shutil.which = lambda n, t=term: f"/usr/bin/{n}" if n == t else None
+            assert terminal_cmd(["sudo", "do-release-upgrade", "-d"]) == erwartet, term
+    finally:
+        shutil.which = alt_which
+    # ZFS: je Pool ein Eintrag mit den Zahlen des Pools
+    alt_sh = sh
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            for d in ("home", "var"):
+                os.makedirs(os.path.join(td, d))
+            with open(os.path.join(td, "mounts"), "w") as fh:
+                fh.write(f"rpool/ROOT/ubuntu {td} zfs rw 0 0\n"
+                         f"rpool/USERDATA/home {td}/home zfs rw 0 0\n"
+                         f"bpool/BOOT/ubuntu {td}/var zfs rw 0 0\n"
+                         "tmpfs /run tmpfs rw 0 0\n")
+            globals()["sh"] = lambda a, timeout=15: (
+                "rpool\t1000\t100\n" if a[0] == "zpool" else "")
+            ms = {m["src"]: m for m in mounts(os.path.join(td, "mounts"))}
+            assert set(ms) == {"rpool/ROOT/ubuntu", "bpool/BOOT/ubuntu"}, ms
+            assert ms["rpool/ROOT/ubuntu"]["used"] == 900
+            assert ms["rpool/ROOT/ubuntu"]["target"] == td
+        finally:
+            globals()["sh"] = alt_sh
+    # NTSYNC: abgeschaltet heisst nicht eingebaut
+    alt_read, alt_exists = read, os.path.exists
+    try:
+        os.path.exists = lambda p: False if p == "/dev/ntsync" else alt_exists(p)
+        for cfg, titel in (("# CONFIG_NTSYNC is not set\n", "Der Kernel kennt ntsync noch nicht"),
+                           ("CONFIG_NTSYNC=m\n", "ntsync ist da, aber nicht geladen"),
+                           ("", "Der Kernel kennt ntsync noch nicht")):
+            globals()["read"] = lambda p, c=cfg: c if p.startswith("/boot/config-") else alt_read(p)
+            assert ntsync_check()[0][1] == _(titel), (cfg, ntsync_check())
+    finally:
+        globals()["read"], os.path.exists = alt_read, alt_exists
+    # Tuning-Werkzeug passend zur Karte
+    alt_which = shutil.which
+    try:
+        shutil.which = lambda n: f"/usr/bin/{n}" if n in ("corectrl", "nvidia-settings") else None
+        assert tuning_tool("amd")[1] == ["corectrl"]
+        assert tuning_tool("nvidia")[1] == ["nvidia-settings"]
+        assert tuning_tool("") is None and tuning_tool(None) is None
+    finally:
+        shutil.which = alt_which
+    # Grenzen aus dem Sensor, Unsinn zaehlt nicht
+    alt_hw = hwmon_temp
+    try:
+        for wert, erwartet in ((100.0, 100), (65261.85, 95), (None, 95)):
+            globals()["hwmon_temp"] = lambda c, l=None, f="input", w=wert: w
+            assert sensor_limit({"coretemp"}, None, "crit", 70, 115, 95) == erwartet, wert
+    finally:
+        globals()["hwmon_temp"] = alt_hw
+    # Der Rat folgt denselben Grenzen wie die Skala. Mit Werten, die dieser
+    # Rechner nicht hat: ein Intel mit Tjmax 100, eine SSD mit Grenze 70.
+    alt_scale = dict(RECORD_SCALE)
+    def temp_rat(**werte):
+        su = dict(pw, **{k: {"max": v} for k, v in werte.items()})
+        return {t: sv for sv, t, _d, _a in record_advice(su, NOW)}
+    try:
+        RECORD_SCALE.update(cpu_temp=(30, 105, 93, 100), nvme_temp=(25, 90, 60, 70))
+        assert temp_rat(cpu_temp=93)[_("CPU wird sehr warm")] == "warn"
+        assert temp_rat(cpu_temp=97)[_("CPU wird sehr warm")] == "warn"
+        assert temp_rat(cpu_temp=100)[_("CPU wird sehr warm")] == "crit"
+        assert _("CPU wird sehr warm") not in temp_rat(cpu_temp=92)
+        assert _("SSD wird heiß") in temp_rat(nvme_temp=60)
+        assert _("SSD wird heiß") not in temp_rat(nvme_temp=59)
+    finally:
+        RECORD_SCALE.clear()
+        RECORD_SCALE.update(alt_scale)
+    # AMD mit Prozessorgrafik und Grafikkarte: gemessen wird die Karte, und
+    # zwar Auslastung und Temperatur derselben
+    alt = sh, glob.glob, _sysfs, _amd_hwmon, read, _amd_clock
+    try:
+        globals()["sh"] = lambda a, timeout=15: ""
+        glob.glob = lambda pat: (["/k/card0/device/gpu_busy_percent",
+                                  "/k/card1/device/gpu_busy_percent"]
+                                 if pat.endswith("gpu_busy_percent") else alt[1](pat))
+        globals()["_sysfs"] = lambda p: {"/k/card0/device/mem_info_vram_total": 512 << 20,
+                                         "/k/card1/device/mem_info_vram_total": 8 << 30}.get(p, 0)
+        globals()["_amd_hwmon"] = lambda dev, n: (
+            {"/k/card0/device": 50000, "/k/card1/device": 71000}[dev]
+            if n == "temp1_input" else 0)
+        globals()["read"] = lambda p: ("40" if p.startswith("/k/card1") else
+                                       "5" if p.startswith("/k/card0") else alt[4](p))
+        globals()["_amd_clock"] = lambda dev: 0
+        g = gpu()
+        assert g["util"] == 40 and g["temp"] == 71.0, g
+    finally:
+        (globals()["sh"], glob.glob, globals()["_sysfs"], globals()["_amd_hwmon"],
+         globals()["read"], globals()["_amd_clock"]) = alt
+    # Autostart-Namen in der Sprache des Systems
+    e = {"Name": "Update Notifier", "Name[de]": "Aktualisierung",
+         "Name[de_AT]": "Aktualisierung AT"}
+    alt_lang = GLib.get_language_names
+    try:
+        for langs, erwartet in ((["en_US.UTF-8", "en_US", "en", "C"], "Update Notifier"),
+                                (["de_DE.UTF-8", "de_DE", "de", "C"], "Aktualisierung"),
+                                (["de_AT.UTF-8", "de_AT", "de", "C"], "Aktualisierung AT")):
+            GLib.get_language_names = lambda l=langs: l
+            assert desktop_name(e) == erwartet, langs
+        # und so kommt er in der Autostart-Liste an
+        with tempfile.TemporaryDirectory() as td:
+            alt_auto = AUTOSTART_DIR
+            try:
+                globals()["AUTOSTART_DIR"] = td
+                with open(f"{td}/zz-test.desktop", "w") as fh:
+                    fh.write("[Desktop Entry]\nName=Update Notifier\n"
+                             "Name[de]=Aktualisierung\nExec=true\n")
+                GLib.get_language_names = lambda: ["en_US", "en", "C"]
+                assert [a["name"] for a in autostart_entries()
+                        if a["file"] == "zz-test.desktop"] == ["Update Notifier"]
+            finally:
+                globals()["AUTOSTART_DIR"] = alt_auto
+    finally:
+        GLib.get_language_names = alt_lang
+    # Die Gruppe kommt aus der Datenbank, nicht aus os.getgroups(): nach
+    # usermod steht sie nur dort, bis zur nächsten Anmeldung.
+    alt_which, alt_nam, alt_list = shutil.which, grp.getgrnam, os.getgrouplist
+    neu = 2**31 - 7
+    assert neu not in os.getgroups()
+    try:
+        globals()["shutil"].which = lambda p: None
+        assert gamemode_can_switch() is None
+        globals()["shutil"].which = lambda p: "/usr/bin/gamemoderun"
+        grp.getgrnam = lambda n: grp.struct_group((n, "x", neu, []))
+        os.getgrouplist = lambda u, g: [g, neu]
+        assert gamemode_can_switch() is True
+        os.getgrouplist = lambda u, g: [g]
+        assert gamemode_can_switch() is False
+        grp.getgrnam = lambda n: {}[n]
+        assert gamemode_can_switch() is None
+    finally:
+        globals()["shutil"].which, grp.getgrnam = alt_which, alt_nam
+        os.getgrouplist = alt_list
     # Ein Kern am Anschlag bei nicht ausgelasteter Karte ist das CPU-Limit
     bound = [{"t": 2.0 * i, "cpu": 30, "core": 99, "gpu": 55, "gpu_temp": 55,
               "gpu_clock": 1900} for i in range(80)]
@@ -15306,6 +16663,59 @@ def selftest():
     assert not game_launcher({"Exec": "/usr/bin/code"})
     assert app_source({"Exec": "steam steam://rungameid/1808500"}) == ("steam", "1808500")
     assert app_source({"Exec": "/usr/games/steam steam://open/main"})[0] != "steam"
+    # Eine Web-App laeuft ueber den Browser-Snap. Deinstallieren darf dann nie
+    # den Browser treffen, sondern nur auf den Weg in Chromium verweisen.
+    webapp = {"Exec": "/snap/bin/chromium --profile-directory=Default "
+                      "--app-id=cadlkienfkclaiaibeoongdcgmdikeeg",
+              "Name": "ChatGPT", "Path": USER_APPS + "/chrome-x-Default.desktop"}
+    assert web_app_browser(webapp) == "Chromium"
+    assert web_app_browser({"Exec": "/snap/bin/chromium %U"}) == ""
+    plan = uninstall_plan(webapp)
+    assert plan["kind"] == "webapp" and uninstall_argv(plan) == [], plan
+    snap = {"kind": "snap", "ident": "foo", "files": [], "user": False}
+    assert uninstall_argv(snap) == [["pkexec", "snap", "remove", "foo"]]
+    assert uninstall_argv(snap, True, ["/h/.config/foo"]) == [
+        ["pkexec", "snap", "remove", "--purge", "foo"],
+        ["gio", "trash", "--", "/h/.config/foo"]]
+    # Ohne Daten bleiben die Ordner, auch wenn sie uebergeben werden
+    assert uninstall_argv(snap, False, ["/h/.config/foo"]) == [
+        ["pkexec", "snap", "remove", "foo"]]
+    flat = dict(snap, kind="flatpak", ident="org.x.Y", user=True)
+    assert uninstall_argv(flat, True) == [
+        ["flatpak", "uninstall", "-y", "--noninteractive", "--user",
+         "--delete-data", "org.x.Y"]]
+    # Der eigene Starter ueber einem Systemeintrag geht auch ohne Daten mit
+    deb = dict(snap, kind="deb", files=["/h/apps/foo.desktop"])
+    assert uninstall_argv(deb) == [
+        ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+         "apt-get", "remove", "-y", "foo"],
+        ["gio", "trash", "--", "/h/apps/foo.desktop"]]
+    # Das Protokollfenster nennt den Schritt in Worten. Geprueft an den
+    # Befehlen, die die App wirklich baut, nicht an nachgebauten.
+    for argv, want in (
+            (["pkexec", "timeshift", "--create", "--comments", "dynotiq"],
+             "Sicherungspunkt wird angelegt"),
+            (update_cmd("apt", ["x"]), "Pakete werden aktualisiert"),
+            (pkexec_apt_argv(["x"]), "Pakete werden installiert"),
+            (AUTOREMOVE_CMD, "Pakete werden entfernt"),
+            (update_cmd("snap", ["x"]), "Snaps werden aktualisiert"),
+            (update_cmd("flatpak", ["x"]), "Flatpaks werden aktualisiert"),
+            (update_cmd("fwupd", ["x"]), "Firmware wird aktualisiert"),
+            (uninstall_argv(snap)[0], "Snap wird entfernt"),
+            (["gio", "trash", "--", "/h/x"], "Dateien kommen in den Papierkorb"),
+            (prefix_remove_argv("/h/pfx"), "Dateien werden gelöscht"),
+            (["pkexec", "journalctl", "--vacuum-size=500M"],
+             "Journal wird verkleinert"),
+            (["true"], "Wird ausgeführt …")):
+        assert step_title(argv) == _(want), (argv, step_title(argv))
+    assert READ_STEPS.search("coredumpctl info x")
+    assert not READ_STEPS.search("pkexec journalctl --vacuum-size=500M")
+    # Sonst stuende die ganze Benutzer-Flatpak-Installation im Papierkorb
+    assert app_dirs(["flatpak", "snap", "..", "a/b", ""]) == []
+    assert parse_system_packages(
+        "ubuntu-desktop optional\ngnome-calculator optional\n"
+        "bash required yes\nless important\nkubuntu-desktop optional\n") == [
+            "ubuntu-desktop", "bash", "less", "kubuntu-desktop"]
     # Ein Titel, den es nicht gibt, darf keinen erfundenen Bericht liefern
     nothing = steam_game_check("999999999")
     assert len(nothing) == 1 and nothing[0][0] == "info", nothing
@@ -15348,6 +16758,22 @@ def selftest():
     assert parse_journal_top("   42 foo\n  7 bar\nkaputt\n") == [(42, "foo"), (7, "bar")]
     # Meldungen haben Leerzeichen, nur die Zahl davor wird abgetrennt
     assert parse_journal_top("  9 watchdog: mount ok\n") == [(9, "watchdog: mount ok")]
+    # Aus der Sitzung kommt alles als user@1000.service. Zaehlt die Nutzer-Unit
+    # nicht zuerst, stuende der Sitzungsmanager als Verursacher da, samt
+    # Neustart-Knopf, der die ganze Sitzung beendet.
+    sitzung = '{"_SYSTEMD_UNIT":"user@1000.service","_SYSTEMD_USER_UNIT":"a.service"}'
+    assert journal_top_units("\n".join([sitzung] * 3 + [
+        '{"_SYSTEMD_UNIT":"b.service"}', "kaputt", '{"_SYSTEMD_UNIT":[1,2]}'])) \
+        == [(3, "a.service"), (1, "b.service")]
+    assert unit_restartable("me.proton.vpn.split_tunneling.service")
+    assert not any(unit_restartable(u) for u in (
+        "user@1000.service", "gdm.service", "dbus.service", "init.scope",
+        "app-discord-28353.scope", "systemd-logind.service",
+        "org.gnome.Shell@x11.service", "dbus-broker.service"))
+    assert journal_usage_bytes(
+        "Archived and active journals take up 633.8M in the file system.") \
+        == int(633.8 * 2**20)
+    assert journal_usage_bytes("keine Größenangabe") == 0
     # Der HWE-Kandidat muss wirklich neuer sein als der laufende Kernel.
     assert kernel_version_tuple("7.0.0-28-generic") == (7, 0, 0, 28)
     assert kernel_version_tuple("7.0.0-28.28~24.04.1") == (7, 0, 0, 28)
@@ -16015,7 +17441,7 @@ def selftest():
     assert iface_text("removable-media")[0] == _("USB-Sticks und externe "
                                                  "Laufwerke")
     assert iface_text("irgendwas-neues") == (
-        "irgendwas neues",
+        "Irgendwas neues",
         _("Was genau dahinter steckt, sagt die Beschreibung des Snaps."))
     # info ist ein Hinweis und darf im Bericht nicht wie ein Fehler aussehen
     assert app_check_text("X", [("info", "A", "B", None)]).endswith("·  A: B")
@@ -16043,6 +17469,9 @@ def selftest():
                  "Path": os.path.join(USER_APPS, "chromium.desktop")}
     assert duplicate_apps(zwei) == [("Chromium", [("snap", "chromium"),
                                                   ("lokal", "chromium")])]
+    # Die Web-App neben der echten App ist keine zweite Installation
+    zwei["c"]["Exec"] = "/snap/bin/chromium --app-id=abc"
+    assert duplicate_apps(zwei) == []
     # Eine aeltere nennt der Befund nur, wo die Zahlen es hergeben. Der
     # Paketstand hinter dem Bindestrich ist keine neuere Fassung.
     assert older_install([("snap", "x", "1.39.0"), ("deb", "x", "1.39.1")]) \
@@ -16424,7 +17853,8 @@ def selftest():
     # Gruen und Orange muessen auf ihrer Karte lesbar sein, sonst ist die
     # Ampel im hellen Bild eine Behauptung. 4,5:1 ist die Schwelle, unter der
     # Text als nicht mehr zugaenglich gilt.
-    for thema, karte in (("dark", "#161A20"), ("light", "#FFFDFA")):
+    for thema, karte in (("dark", THEMES["dark"]["surface"]),
+                         ("light", THEMES["light"]["surface"])):
         for schluessel in ("ok", "warn", "crit"):
             assert contrast(THEMES[thema][schluessel], karte) >= 4.5, \
                 (thema, schluessel, contrast(THEMES[thema][schluessel], karte))
@@ -16503,8 +17933,9 @@ if __name__ == "__main__":
         ensure_desktop()
         print(f"Icons in {HICOLOR}, Starter in {DESKTOP_FILE}")
     else:
-        # WM_CLASS kommt vom prgname und muss zum StartupWMClass im Starter passen.
-        GLib.set_prgname("dynotiq")
+        # X11 macht den prgname zur WM_CLASS, Wayland nimmt APP_ID als app_id.
+        # Beide gleich, damit StartupWMClass im Starter überall passt.
+        GLib.set_prgname(APP_ID)
         GLib.set_application_name("dynotiq")
         page = (sys.argv[sys.argv.index("--page") + 1]
                 if "--page" in sys.argv else "Übersicht")
