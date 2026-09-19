@@ -434,7 +434,8 @@ def exec_line():
 
 
 def ensure_desktop():
-    """StartupWMClass muss zur WM_CLASS passen, sonst bleibt das Dock-Icon generisch.
+    """StartupWMClass muss zu WM_CLASS (X11) und app_id (Wayland) passen, sonst
+    bleibt das Dock-Icon generisch. Beide sind APP_ID, siehe set_prgname.
 
     Aus einem Systempfad gestartet gehört der Starter zum Paket. Ein zweiter im
     Home würde ihn überdecken und nach dem Deinstallieren liegenbleiben.
@@ -450,7 +451,7 @@ def ensure_desktop():
              "Terminal=false\n"
              "Categories=System;Settings;Monitor;\n"
              "StartupNotify=true\n"
-             "StartupWMClass=dynotiq\n")
+             f"StartupWMClass={APP_ID}\n")
     if read(DESKTOP_FILE) == entry.strip():
         return False
     os.makedirs(os.path.dirname(DESKTOP_FILE), exist_ok=True)
@@ -17932,8 +17933,9 @@ if __name__ == "__main__":
         ensure_desktop()
         print(f"Icons in {HICOLOR}, Starter in {DESKTOP_FILE}")
     else:
-        # WM_CLASS kommt vom prgname und muss zum StartupWMClass im Starter passen.
-        GLib.set_prgname("dynotiq")
+        # X11 macht den prgname zur WM_CLASS, Wayland nimmt APP_ID als app_id.
+        # Beide gleich, damit StartupWMClass im Starter überall passt.
+        GLib.set_prgname(APP_ID)
         GLib.set_application_name("dynotiq")
         page = (sys.argv[sys.argv.index("--page") + 1]
                 if "--page" in sys.argv else "Übersicht")

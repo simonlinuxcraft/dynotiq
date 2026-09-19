@@ -8,4 +8,4 @@ Icon=dynotiq
 Terminal=false
 Categories=System;Settings;Monitor;
 StartupNotify=true
-StartupWMClass=dynotiq
+StartupWMClass=de.dynotiq.dynotiq
