@@ -1066,13 +1066,13 @@ def parse_apt_updates(text, uris=""):
 
 
 def parse_apt_removals(text):
-    """Pakete, die ein dist-upgrade wegnehmen wuerde: 'Remv name [ver]'.
+    """Pakete, die apt wegnehmen wuerde: 'Remv name' oder, mit --purge, 'Purg name'.
 
     Die Seite spielt so etwas nicht ein, `apt-get install --only-upgrade`
     kann es gar nicht. Verschwiegen werden darf es trotzdem nicht: dann bliebe
     das Update haengen und niemand wuesste warum.
     """
-    return sorted({m for m in re.findall(r"^Remv (\S+)", text, re.M)})
+    return sorted({m for m in re.findall(r"^(?:Remv|Purg) (\S+)", text, re.M)})
 
 
 # apt nennt die zurueckgehaltenen Pakete in der Simulation selbst, also kostet
@@ -1321,6 +1321,53 @@ def progress_name(line):
         if m:
             return m.group(1)
     return None
+
+
+# Was gerade passiert, in Worten statt in der Sprache des Paketmanagers.
+# {name} wird aus derselben Zeile geholt wie der Zaehlstand, damit beide
+# dasselbe Paket meinen. Die erste passende Zeile gewinnt.
+PROGRESS_PHASES = (
+    (r"^Setting up\b", N_("{name} wird eingerichtet")),
+    (r"^(?:Preparing to unpack|Unpacking)\b", N_("{name} wird ausgepackt")),
+    (r"^(?:Refreshing|Refresh)\b", N_("{name} wird aufgefrischt")),
+    (r"^(?:Installing|Updating)\b", N_("{name} wird eingespielt")),
+    (r"^(?:Get|Hit|Ign|Holen|OK|Ign):", N_("Paketlisten werden geladen")),
+    (r"^(?:Reading|Building dependency|Paketlisten werden gelesen)",
+     N_("Paketlisten werden gelesen")),
+    (r"^(?:Removing|Entferne)\b", N_("Pakete werden entfernt")),
+    (r"^(?:Processing triggers|Trigger)", N_("Nacharbeiten laufen")),
+    (r"^(?:Fetched|Es wurden)\b", N_("Alles geladen, jetzt wird eingespielt")),
+    (r"rsync|[Ss]yncing", N_("Dateien werden verglichen und kopiert")),
+    (r"[Ss]napshot|[Ss]icherungspunkt", N_("Sicherungspunkt wird geschrieben")),
+    (r"^(?:Scanning|Checking|Prüfe)", N_("Wird geprüft")),
+)
+
+
+def phase_text(line):
+    """Ein Satz zu dieser Ausgabezeile, leer wenn sie nichts hergibt.
+
+    Leer heisst: die Zeile davor bleibt stehen. Eine rohe Ausgabezeile vorn im
+    Fenster sagt einem Laien nichts, und eine leere Zeile sagt noch weniger.
+    """
+    line = line.strip()
+    for pat, text in PROGRESS_PHASES:
+        if re.search(pat, line):
+            t = _(text)
+            if "{name}" not in t:
+                return t
+            name = progress_name(line)
+            return t.format(name=name) if name else ""
+    return ""
+
+
+def overall_fraction(i, total, anteil):
+    """Fortschritt ueber alle Schritte zusammen, 0 bis 1.
+
+    Je Schritt bei null anzufangen hiesse, den Balken mitten im Lauf
+    zurueckzuwerfen. Er laeuft einmal durch, und ein Schritt ist ein Abschnitt
+    darin.
+    """
+    return min(1.0, (i + min(max(anteil, 0.0), 1.0)) / max(total, 1))
 
 
 def cmd_steps(cmd):
@@ -6715,6 +6762,19 @@ AUTOREMOVE_CMD = ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
                   "apt-get", "autoremove", "--purge", "-y"]
 
 
+def purge_argv(pkgs):
+    """Die genannten Pakete entfernen, samt ihrer Einstellungen."""
+    return ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+            "apt-get", "purge", "-y", "--", *pkgs]
+
+
+def purge_list(pkgs):
+    """Was ein purge dieser Pakete wirklich wegnehmen wuerde."""
+    return parse_apt_removals(sh(
+        ["apt-get", "-s", "-o", "Debug::NoLocking=1", "purge", "--", *pkgs],
+        timeout=60))
+
+
 def autoremove_list():
     """Was `apt autoremove --purge` jetzt wirklich wegnehmen wuerde."""
     return parse_apt_removals(sh(
@@ -8333,16 +8393,21 @@ def check_stale_packages(ctx):
           "Sie laufen weiter, aber Sicherheitslücken darin werden nicht mehr "
           "geschlossen."),
         _("{n} Pakete").format(n=len(stale)), False,
-        # Trockenlauf und ohne argv: was hier wegfaellt, kann an einer Stelle
-        # haengen, die niemand von aussen sieht. Das entscheidet der Nutzer.
-        "sudo apt purge --dry-run " + " ".join(n for n, _v in stale),
+        "sudo apt purge " + " ".join(n for n, _v in stale),
+        argv=purge_argv([n for n, _v in stale]),
+        # Was an so einem Paket noch haengt, sieht niemand von aussen. Deshalb
+        # der Trockenlauf vorweg: die Liste steht da, bevor etwas laeuft.
+        preview=(lambda: purge_list([n for n, _v in stale]),
+                 _("Pakete"), _("Paket")),
+        warn=_("Entfernt die Pakete samt ihrer Einstellungen."),
         key="stale_packages",
         lines=[("package-x-generic-symbolic", "dim", f"{name}  {ver}")
                for name, ver in stale[:10]],
-        solution=_("Der Befehl nimmt nichts weg, er zeigt nur, was mit jedem "
-                   "Paket zusammen verschwinden würde. Was noch gebraucht "
-                   "wird, bleibt besser stehen, der Rest fällt ohne "
-                   "'--dry-run' weg, am besten einer nach dem anderen."))
+        solution=_("Der Knopf entfernt sie. Vorher steht die vollständige "
+                   "Liste dessen da, was dabei mitgeht, und erst wenn die "
+                   "bestätigt ist, läuft etwas. Was noch gebraucht wird, "
+                   "bleibt besser stehen."),
+        fix_label=_("Pakete entfernen"))
 
 
 def check_self_update(ctx):
@@ -10009,7 +10074,10 @@ class Ring(Gtk.DrawingArea):
         if not self.busy:
             self.tick = None
             return GLib.SOURCE_REMOVE
-        self.angle = (clock.get_frame_time() / 1e6 * self.SPIN) % 6.2832
+        # Auf der Bahn bleiben. Unten ist die Luecke, dort gehoert kein
+        # Bogen hin: er laeuft links an, rechts aus und faengt links neu an.
+        p = (clock.get_frame_time() / 1e6 * self.SPIN / 6.2832) % 1.0
+        self.angle = self.START + self.SWEEP * p
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
@@ -10037,7 +10105,8 @@ class Ring(Gtk.DrawingArea):
             cr.set_line_cap(1)
             cr.set_line_width(12)
             cr.set_source_rgba(*rgb(COLORS["acc"]), .45)
-            cr.arc(cx, cy, r, self.angle, self.angle + 1.1)
+            cr.arc(cx, cy, r, self.angle,
+                   min(self.angle + 1.1, self.START + self.SWEEP))
             cr.stroke()
         elif self.value > 0:
             # Der Ring traegt die Ampel, nicht den Akzent. Er ist das Erste,
@@ -12449,12 +12518,14 @@ class App(Gtk.Application):
                          default_width=640)
         titlebar(win)
         win.add_css_class("page")
-        # Vorne steht in Worten, was gerade passiert. Die Ausgabe der Befehle
-        # ist fuer die meisten nur Rauschen und liegt zugeklappt darunter.
+        # Vorne steht in Worten, was gerade passiert: der Schritt als
+        # Ueberschrift, darunter der Satz zur laufenden Zeile. Die Ausgabe der
+        # Befehle ist fuer die meisten nur Rauschen und liegt zugeklappt
+        # darunter.
         head = lbl(step_title(steps[0]), "h1", wrap=True, chars=40)
-        now = lbl("", "mono-dim")
+        now = lbl("", "lede")
         now.set_ellipsize(Pango.EllipsizeMode.END)
-        now.set_margin_top(4)
+        now.set_margin_top(6)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
@@ -12463,8 +12534,11 @@ class App(Gtk.Application):
         details = Gtk.Expander(child=scroll, margin_top=12, expanded=any(
             READ_STEPS.search(" ".join(map(str, s))) for s in steps))
         details.set_label_widget(lbl(_("Details"), "row-detail"))
-        bar = Gtk.ProgressBar(show_text=True, text=_("startet …"), margin_top=14,
-                              pulse_step=0.06)
+        # Ohne Text im Balken: die Zahlen stehen darunter in einer eigenen
+        # Zeile, das liest sich ruhiger als eine Schrift auf der Fuellung.
+        bar = Gtk.ProgressBar(margin_top=16, pulse_step=0.05)
+        stat = lbl(_("startet …"), "sub")
+        stat.set_margin_top(8)
         stop = Gtk.Button(label=_("Nach diesem Schritt stoppen") if safe_cancel
                           else _("Abbrechen"), halign=Gtk.Align.END)
         close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END, sensitive=False)
@@ -12477,6 +12551,7 @@ class App(Gtk.Application):
         wrap.append(head)
         wrap.append(now)
         wrap.append(bar)
+        wrap.append(stat)
         wrap.append(details)
         wrap.append(row)
         win.set_child(wrap)
@@ -12488,7 +12563,10 @@ class App(Gtk.Application):
 
         seen = set()
         run = {"start": time.monotonic(), "last": time.monotonic(), "done": False,
-               "step": "", "pct": 0.0, "stop_after_step": False, "i": 0}
+               "step": "", "pct": 0.0, "stop_after_step": False, "i": 0,
+               # ziel ist der Stand, auf den der Balken zulaeuft, None heisst
+               # "keine Zahl bekannt, also pulsen". cur ist, wo er gerade steht.
+               "ziel": None, "cur": 0.0, "t": 0.0, "puls": 0.0}
 
         def append(line):
             run["last"] = time.monotonic()
@@ -12501,7 +12579,9 @@ class App(Gtk.Application):
             if line.startswith("$ "):
                 run["pct"] = 0.0     # neuer Schritt, der alte Stand gilt nicht
             elif line.strip() and not run["done"]:
-                now.set_text(line.strip()[:300])
+                satz = phase_text(line)
+                if satz:
+                    now.set_text(satz)
             if sink is not None:
                 sink.append(line)
             buf.insert(buf.get_end_iter(), line + "\n")
@@ -12511,8 +12591,6 @@ class App(Gtk.Application):
             if name:
                 seen.add(name)
                 run["step"] = name
-                if count:
-                    bar.set_fraction(min(len(seen) / count, 1.0))
             return False
 
         def heartbeat():
@@ -12522,28 +12600,53 @@ class App(Gtk.Application):
                 return False
             secs = int(time.monotonic() - run["start"])
             idle = int(time.monotonic() - run["last"])
-            parts = [mmss(secs)]
+            parts = []
             if len(steps) > 1:
                 parts.append(_("Schritt {i} von {n}").format(
                     i=run["i"] + 1, n=len(steps)))
-            if run["pct"] and not seen:
-                # flatpak zaehlt in Prozent statt in Paketen. Ohne das stuende
-                # der Balken den ganzen Lauf ueber auf null.
-                parts.append("{:.0f} %".format(run["pct"]))
-                bar.set_fraction(run["pct"] / 100)
-            elif count:
-                parts.append(_("{done} von {total}").format(
+            anteil = None
+            if count and seen:
+                anteil = len(seen) / count
+                parts.append(_("{done} von {total} Paketen").format(
                     done=len(seen), total=count))
-            elif run["step"]:
-                parts.append(run["step"])
+            elif run["pct"]:
+                # flatpak und timeshift zaehlen in Prozent statt in Paketen.
+                anteil = run["pct"] / 100
+                parts.append("{:.0f} %".format(run["pct"]))
+            elif count:
+                parts.append(_("{done} von {total} Paketen").format(
+                    done=0, total=count))
+            run["ziel"] = (None if anteil is None else
+                           overall_fraction(run["i"], len(steps), anteil))
+            parts.append(_("läuft seit {time}").format(time=mmss(secs)))
             if idle >= 5:
                 parts.append(_("seit {secs} s keine Ausgabe").format(secs=idle))
-            bar.set_text(" · ".join(parts))
-            if not count:
-                bar.pulse()          # ohne Gesamtzahl bleibt nur die Bewegung
+            stat.set_text(" · ".join(parts))
             return True
 
         GLib.timeout_add(250, heartbeat)
+
+        def bewegung(_w, clock):
+            """Der Balken faehrt seinen Stand an, statt dorthin zu springen.
+
+            Auf der Frame-Clock und mit der vergangenen Zeit gerechnet, sonst
+            haengt die Geschwindigkeit an der Bildwiederholrate.
+            """
+            t = clock.get_frame_time() / 1e6
+            dt = min(max(t - run["t"], 0.0), 0.25)
+            run["t"] = t
+            if run["ziel"] is None:
+                if t - run["puls"] >= 0.1:
+                    bar.pulse()      # ohne Zahl bleibt nur die Bewegung
+                    run["puls"] = t
+                return GLib.SOURCE_CONTINUE
+            run["cur"] += (run["ziel"] - run["cur"]) * min(1.0, dt * 4)
+            bar.set_fraction(min(max(run["cur"], 0.0), 1.0))
+            if run["done"] and run["cur"] >= 0.999:
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+
+        win.add_tick_callback(bewegung)
 
         def begin(i):
             run["i"] = i
@@ -12567,8 +12670,8 @@ class App(Gtk.Application):
                 append(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
                 now.set_text(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
             secs = int(time.monotonic() - run["start"])
-            bar.set_fraction(1.0)
-            bar.set_text(_("{what} nach {time}").format(
+            run["ziel"] = 1.0
+            stat.set_text(_("{what} nach {time}").format(
                 what=msg.rstrip("."), time=mmss(secs)))
             stop.set_sensitive(False)
             close.set_sensitive(True)
@@ -15908,6 +16011,28 @@ def selftest():
     assert cmd_steps(["a", "b"]) == [["a", "b"]]
     assert cmd_steps([["a"], ["b", "c"]]) == [["a"], ["b", "c"]]
     # Fortschritt kommt aus den Ausgabezeilen, nicht aus geraten Prozenten
+    # Was gerade passiert, in Worten: die Rohzeile steht nur noch in den Details
+    assert phase_text("Setting up libfoo1:amd64 (1.2-3) ...") == \
+        _("{name} wird eingerichtet").format(name="libfoo1:amd64")
+    assert phase_text("Preparing to unpack .../code_1.131.0_amd64.deb ...") == \
+        _("{name} wird ausgepackt").format(name="code")
+    assert phase_text("Get:1 http://de.archive.ubuntu.com resolute InRelease") == \
+        _("Paketlisten werden geladen")
+    assert phase_text("Syncing files with rsync...") == \
+        _("Dateien werden verglichen und kopiert")
+    # Ohne Deutung bleibt die Zeile davor stehen, statt zu leeren
+    assert phase_text("E: Sublime text") == ""
+    # Eine Regel mit Namen, aber ohne Namen in der Zeile, sagt lieber nichts
+    assert phase_text("Updating...") == ""
+    # Der Balken laeuft einmal durch, statt bei jedem Schritt zurueckzufallen
+    assert overall_fraction(0, 2, 0.5) == 0.25
+    assert overall_fraction(1, 2, 0.0) == 0.5
+    assert overall_fraction(1, 2, 1.0) == 1.0
+    assert overall_fraction(0, 1, 2.0) == 1.0
+    # apt meldet ein purge als 'Purg'. Stand hier nur 'Remv', war die Liste vor
+    # dem Aufraeumen leer und die Rueckfrage sagte, es werde nichts entfernt.
+    assert parse_apt_removals("Purg libfoo [1.2]\nRemv libbar [2.0]\n") == \
+        ["libbar", "libfoo"]
     assert progress_name("Setting up libfoo1:amd64 (1.2-3) ...") == "libfoo1:amd64"
     assert progress_name("Unpacking code (1.131.0) over (1.130.0) ...") == "code"
     assert progress_name("Preparing to unpack .../code_1.131.0_amd64.deb ...") == "code"
