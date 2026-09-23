@@ -6917,10 +6917,14 @@ def ubuntu_source(uri):
     return any(h in uri for h in UBUNTU_HOSTS)
 
 
-def parse_apt_source(text):
-    """[(uri, suite)] aus einer sources.list-Zeile oder einer deb822-Datei."""
+def parse_apt_source(text, enabled=True):
+    """[(uri, suite)] aus einer sources.list-Zeile oder einer deb822-Datei.
+
+    enabled=False dreht die Auswahl um und liefert die Absaetze, die auf
+    'Enabled: no' stehen. Genau die schaltet der Release-Wechsel ab.
+    """
     out = []
-    for line in text.splitlines():
+    for line in text.splitlines() if enabled else []:
         line = line.strip()
         if line.startswith("deb ") or line.startswith("deb-src "):
             toks = re.sub(r"\[[^\]]*\]", " ", line).split()
@@ -6934,7 +6938,11 @@ def parse_apt_source(text):
     for block in re.split(r"\n\s*\n", text):
         f = {k.lower(): v for k, v in
              re.findall(r"^([\w-]+):\s*(.*)$", block, re.M)}
-        if f.get("enabled", "yes").strip().lower() in ("no", "false", "0"):
+        # ponytail: nur der deb822-Schalter zaehlt als abgeschaltet. Eine
+        # auskommentierte deb-src-Zeile liefern viele .list-Dateien von Haus
+        # aus mit, die als abgeschaltete Quelle zu melden waere ein Fehlalarm.
+        aus = f.get("enabled", "yes").strip().lower() in ("no", "false", "0")
+        if aus == enabled:
             continue
         for u in f.get("uris", "").split():
             for s in f.get("suites", "").split():
@@ -6942,10 +6950,12 @@ def parse_apt_source(text):
     return out
 
 
-def third_party_sources(all_sources=False):
+def third_party_sources(all_sources=False, enabled=True):
     """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen,
     ausser all_sources: dann zaehlt der Zustand jeder Quelle, auch der von
-    Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen."""
+    Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen.
+
+    enabled=False liefert die abgeschalteten Quellen."""
     out = []
     files = (glob.glob("/etc/apt/sources.list.d/*.list")
              + glob.glob("/etc/apt/sources.list.d/*.sources")
@@ -6955,7 +6965,7 @@ def third_party_sources(all_sources=False):
         if not text:
             continue
         name = os.path.basename(path).rsplit(".", 1)[0]
-        for uri, suite in parse_apt_source(text):
+        for uri, suite in parse_apt_source(text, enabled):
             if ubuntu_source(uri) and not all_sources:
                 continue
             if (name, uri, suite) not in out:
@@ -7183,7 +7193,8 @@ def source_newer_than_lists(uri, secs=None, pfade=None):
     return False
 
 
-def package_sources(scan=None, current="", series=None, sources=None):
+def package_sources(scan=None, current="", series=None, sources=None,
+                    disabled=None):
     """[(Art, Name, Adresse, Zustand, in Ordnung)] jeder Quelle, aus der auf
     diesem Rechner Updates kommen.
 
@@ -7197,6 +7208,8 @@ def package_sources(scan=None, current="", series=None, sources=None):
     cur = current or os_release("VERSION_CODENAME")
     known = ubuntu_series() if series is None else series
     seit = apt_lists_age()
+    if disabled is None:
+        disabled = third_party_sources(True, False) if sources is None else []
     rows = []
     for name, uri, suite in (third_party_sources(True) if sources is None
                              else sources):
@@ -7217,6 +7230,17 @@ def package_sources(scan=None, current="", series=None, sources=None):
             state, ok = _("Antwortet nicht, von hier kommen keine Updates"), False
         rows.append(("apt", source_title(name, uri, suite),
                      source_origin(uri), state, ok))
+    # Eine abgeschaltete Quelle faellt aus apt heraus, ohne ein Wort zu sagen.
+    # Der Release-Wechsel schaltet genau die ab, die das neue Ubuntu nicht
+    # kennt, und danach steht das Programm dahinter still.
+    for name, uri, suite in disabled:
+        base = suite.split("-")[0]
+        rows.append(("apt", source_title(name, uri, suite), source_origin(uri),
+                     _("Abgeschaltet. Die Quelle gilt für Ubuntu {suite}, "
+                       "dieser Rechner läuft {cur}. Von hier kommt nichts "
+                       "mehr.").format(suite=base, cur=cur)
+                     if base in known and base != cur else
+                     _("Abgeschaltet, von hier kommen keine Updates"), False))
     # Was noch aussteht und beim letzten Versuch gescheitert ist. Erledigte
     # Fehlschlaege fallen raus, sonst stuende der Vermerk fuer immer da: der
     # Verlauf vergisst nicht von allein, die Liste der offenen Updates schon.
@@ -7254,6 +7278,34 @@ def local_packages():
     for line in sh(["apt", "list", "--installed"], timeout=60).splitlines():
         if ",local]" in line or "[installed,local]" in line:
             out.append(line.split("/")[0])
+    return sorted(out)
+
+
+# Maintainer-Adressen von Ubuntu und Debian. Ein Paket mit dieser Adresse kam
+# aus dem Archiv, kein selbst gebautes .deb.
+DISTRO_MAINTAINER = re.compile(r"@[\w.-]*(?:ubuntu\.com|debian\.org)>?\s*$")
+
+
+def stale_system_packages():
+    """Systempakete ohne Paketquelle als [(Name, Version)].
+
+    Beim Release-Wechsel bleiben Pakete liegen, die das neue Ubuntu nicht mehr
+    fuehrt. Sie laufen weiter, aber ihre Luecken werden nicht mehr geschlossen.
+    Selbst installierte Programme haengen genauso quellenlos im System und sind
+    trotzdem in Ordnung, die trennt der Maintainer ab.
+    """
+    pkgs = local_packages()
+    if not pkgs:
+        return []
+    out = []
+    for line in sh(["dpkg-query", "-W",
+                    "-f=${Package}\t${Version}\t${Maintainer}\n", *pkgs],
+                   timeout=30).splitlines():
+        f = line.split("\t")
+        # ponytail: '~local' sind hier nachgebaute Pakete wie die von libdvd-pkg.
+        # Die haben nie eine Quelle und werden trotzdem gepflegt.
+        if len(f) == 3 and DISTRO_MAINTAINER.search(f[2]) and "~local" not in f[1]:
+            out.append((f[0], f[1]))
     return sorted(out)
 
 
@@ -8160,6 +8212,36 @@ def check_updates(ctx):
                    actions=[(_("Updates öffnen"), "_goto_page", "Updates")])
 
 
+def check_stale_packages(ctx):
+    """Pakete aus einem frueheren Ubuntu, die in keiner Quelle mehr stehen.
+
+    Bewusst nicht am Release-Upgrade aufgehaengt: der Bericht dort erscheint
+    erst, wenn das naechste Ubuntu ansteht, und bis dahin bleiben diese Pakete
+    jahrelang unbemerkt liegen.
+    """
+    stale = stale_system_packages()
+    if not stale:
+        return None
+    return Finding(
+        "warn", _("{n} Systempakete bekommen keine Updates mehr").format(
+            n=len(stale)),
+        _("Diese Pakete stehen in keiner Paketquelle mehr. Meist sind es Reste "
+          "eines früheren Ubuntu, die der Release-Wechsel stehen gelassen hat. "
+          "Sie laufen weiter, aber Sicherheitslücken darin werden nicht mehr "
+          "geschlossen."),
+        _("{n} Pakete").format(n=len(stale)), False,
+        # Trockenlauf und ohne argv: was hier wegfaellt, kann an einer Stelle
+        # haengen, die niemand von aussen sieht. Das entscheidet der Nutzer.
+        "sudo apt purge --dry-run " + " ".join(n for n, _v in stale),
+        key="stale_packages",
+        lines=[("package-x-generic-symbolic", "dim", f"{name}  {ver}")
+               for name, ver in stale[:10]],
+        solution=_("Der Befehl nimmt nichts weg, er zeigt nur, was mit jedem "
+                   "Paket zusammen verschwinden würde. Was noch gebraucht "
+                   "wird, bleibt besser stehen, der Rest fällt ohne "
+                   "'--dry-run' weg, am besten einer nach dem anderen."))
+
+
 def check_self_update(ctx):
     """Neue dynotiq-Version aus der eigenen Paketquelle.
 
@@ -8210,7 +8292,7 @@ CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_d
           check_old_snaps, check_autostart, check_dead_launchers,
           check_duplicate_apps, check_swap,
           check_failed_units,
-          check_proton, check_updates,
+          check_proton, check_updates, check_stale_packages,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
           check_bench_drop, check_shader_cache, check_compat_tools,
           check_orphan_prefixes, check_steam_cef_gpu, check_self_update]
@@ -12050,14 +12132,14 @@ class App(Gtk.Application):
         bad = [r for r in rows if not r[4]]
         c = box()
         c.add_css_class("card")
-        right = lbl(_("{n} von {total} antworten nicht").format(
+        right = lbl(_("{n} von {total} liefern nichts").format(
             n=len(bad), total=len(rows)) if bad
             else _("alle {n} in Ordnung").format(n=len(rows)), "sub")
         right.set_valign(Gtk.Align.CENTER)
         c.append(card_head(_("Woher die Updates kommen"), right))
         intro = lbl(_("Jedes Programm auf diesem Rechner holt seine "
                       "Aktualisierungen von einer festen Stelle im Netz. "
-                      "Antwortet eine davon nicht mehr, bleiben die Updates "
+                      "Liefert eine davon nichts mehr, bleiben die Updates "
                       "genau dieses Programms aus, ohne dass es auffällt.")
                     if bad else
                     _("Jedes Programm holt seine Aktualisierungen von einer "
@@ -15178,6 +15260,22 @@ def selftest():
         # Beide Schreibweisen, die apt je nach Sprache liefert
         assert local_packages() == ["eigenes"], local_packages()
 
+        # Ein Rest aus dem alten Ubuntu und ein selbst installiertes Programm
+        # sehen fuer apt gleich aus. Nur der erste bekommt keine Updates mehr.
+        def kein_archiv(cmd, *a, **k):
+            if cmd[0] == "apt":
+                return ("Listing...\n"
+                        "libicu74/now 74.2-1ubuntu3.1 amd64 [installed,local]\n"
+                        "discord/now 1.0.151 amd64 [installed,local]\n"
+                        "libdvdcss2/now 1.5.0-1~local amd64 [installed,local]\n")
+            return ("libicu74\t74.2-1ubuntu3.1\tUbuntu Developers "
+                    "<ubuntu-devel-discuss@lists.ubuntu.com>\n"
+                    "discord\t1.0.151\tDiscord Maintainer Team <noreply@discord.com>\n"
+                    "libdvdcss2\t1.5.0-1~local\tDmitry Smirnov <onlyjob@debian.org>\n")
+        globals()["sh"] = kein_archiv
+        assert stale_system_packages() == [("libicu74", "74.2-1ubuntu3.1")], \
+            stale_system_packages()
+
         globals()["sh"] = lambda *a, **k: (
             "nvidia/550.144.03, 6.11.0-25-generic, x86_64: installed\n"
             "virtualbox/7.0.16, 6.11.0-25-generic, x86_64: installed\n"
@@ -15678,6 +15776,19 @@ def selftest():
                                     "https://ppa.launchpadcontent.net/a/b/ubuntu",
                                     "jammy")])[0]
     assert alt[1] == "lutris" and not alt[4] and "jammy" in alt[3]
+    # Neuere Upgrader lassen die Quelle nicht stehen, sie schalten sie ab. Dann
+    # faellt sie aus apt heraus, und ohne eigene Zeile auch aus dieser Liste.
+    assert parse_apt_source("Types: deb\nURIs: u\nSuites: s\nEnabled: no\n") == []
+    assert parse_apt_source("Types: deb\nURIs: u\nSuites: s\nEnabled: no\n",
+                            False) == [("u", "s")]
+    assert parse_apt_source("deb http://x y\n", False) == []
+    aus = [r for r in package_sources(
+        current="resolute", series={"noble", "resolute"}, sources=[],
+        disabled=[("lutris-team-ubuntu-lutris-noble",
+                   "https://ppa.launchpadcontent.net/a/b/ubuntu", "noble")])
+        if r[0] == "apt"]
+    assert len(aus) == 1 and aus[0][1] == "lutris" and not aus[0][4], aus
+    assert "noble" in aus[0][3] and "resolute" in aus[0][3], aus[0][3]
     # Ubuntus eigene Quellen heissen im Klartext nach dem, was sie liefern
     assert source_title("ubuntu", "http://security.ubuntu.com/ubuntu/",
                         "noble-security") == "Ubuntu · " + _("Sicherheitsupdates")
