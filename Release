@@ -1,0 +1,16 @@
+Architectures: all
+Date: Wed, 23 Sep 2026 14:17:40 +0000
+Label: dynotiq
+Origin: dynotiq
+MD5Sum:
+ e023d1a623a592a2b63c06a44a4ee064             1075 Packages
+ 8a2e6d215cfa17e38a582be290583894              714 Packages.gz
+SHA1:
+ 70b7450ecddf93544f14fd28384c62d7566128f2             1075 Packages
+ 3ee8cedd50adbbb2c25ce7366a2a29227bc09789              714 Packages.gz
+SHA256:
+ ad5efc2b8a6503250690c65fc494c3c4b30ed09f9e8c13b744ba52f28a1f8760             1075 Packages
+ d71734cb1ef1954ac427a57a2262d66a2b4815e111d198f0172d98782dc7c429              714 Packages.gz
+SHA512:
+ 4a1f5c1ec2b032be458e806e227af9fe7e9bd1ec9dd2cdef74d28c2c7799f31fc253ef8b85269c771950bdab468315764e86d683c68a5d004300663de7c149c9             1075 Packages
+ 858f4e8fea15319fc5e21ef0638333e3ad3395a2887a2ff55ae02b7cf0afafeedbbec27654c46cced8d076a9faebcd935ffa5288847d35b0582dbdcab0e8f9bd              714 Packages.gz
