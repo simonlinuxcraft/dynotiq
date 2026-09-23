@@ -1,3 +1,33 @@
+dynotiq (0.6~beta) noble; urgency=medium
+
+  * New icon and wordmark, and the dock shows them under Wayland as well:
+    GTK reports the application ID where the launcher named the file.
+  * A finding names cause, solution and the button that carries it out. The
+    journal rate finding names the unit that writes, and offers a restart
+    only where that does not end the session.
+  * New finding when CPU boost is off. No warning about powersave where
+    GameMode sets the governor per game, and without the gamemode group the
+    finding offers usermod rather than cpupower.
+  * A source that a release upgrade switched off gets its own line, naming
+    the Ubuntu it was built for. dynotiq asks the provider once a day
+    whether the running release exists there, and offers to switch the
+    source back on as soon as it does.
+  * New finding for installed packages that no source carries any more,
+    with a button that removes them once the dry run has been confirmed.
+  * App check groups its results and can uninstall an app, with or without
+    its data. apt runs a dry run first and refuses to take system packages
+    along, home folders and AppImages go to the trash.
+  * The progress window says what is happening in words, the bar covers all
+    steps at once and approaches its value instead of jumping.
+  * The autostart entry started nothing, a restart was offered for units
+    bound to the session, and several checks only held on one machine.
+  * The list under the cleanup button was empty, because apt reports a purge
+    as Purg and only Remv was read.
+  * pkexec and libnotify-bin are required, every fix button and every
+    desktop notification depends on them.
+
+ -- simonlinuxcraft <simonlinuxcraft@pm.me>  Wed, 23 Sep 2026 14:00:00 +0200
+
 dynotiq (0.5~beta) noble; urgency=medium
 
   * Proton: your games stand in a table with their Steam icon, their build

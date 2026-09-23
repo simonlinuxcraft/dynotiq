@@ -48,7 +48,7 @@ gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # noqa: E402
 
-VERSION = "0.5~beta"
+VERSION = "0.6~beta"
 APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -5205,6 +5205,36 @@ RELEASE_NOTES = {
           "Hintergrundüberwachung nicht mehr lahm"),
         _("Die drei Werte unter der Punktzahl sprechen jetzt die Sprache, die "
           "eingestellt ist"),
+    ]),
+    "0.6~beta": (_("Logo, Befunde und Quellen"), [
+        _("Neues Zeichen und neuer Schriftzug, und im Dock stehen sie auch "
+          "unter Wayland richtig da. Vorher zeigte GNOME dort ein fremdes "
+          "Zahnrad"),
+        _("Ein Befund sagt jetzt, was erkannt wurde, was es bewirkt und was "
+          "der Knopf daneben dagegen tut"),
+        _("Eine Paketquelle, die der Wechsel auf ein neues Ubuntu "
+          "abgeschaltet hat, fällt nicht mehr stillschweigend aus. Sie steht "
+          "in der Liste, mit dem Ubuntu, für das sie gebaut war"),
+        _("dynotiq fragt täglich beim Anbieter nach, ob es die Quelle für "
+          "dein Ubuntu inzwischen gibt, und bietet dann an, sie mit einem "
+          "Knopf wieder einzuschalten"),
+        _("Neuer Befund für Pakete, die in keiner Quelle mehr stehen. Das "
+          "sind meist Reste eines früheren Ubuntu, und ihre Sicherheitslücken "
+          "werden nicht mehr geschlossen"),
+        _("Der App-Check sortiert nach Problemen, Hinweisen und dem, was in "
+          "Ordnung ist, und kann eine App entfernen, mit oder ohne ihre "
+          "Daten. Systempakete nimmt er dabei nicht mit"),
+        _("Neuer Befund, wenn der CPU-Boost aus ist. Wo GameMode den Governor "
+          "je Spiel setzt, gibt es dazu keine Warnung mehr"),
+        _("Das Fortschrittsfenster sagt in Worten, was gerade passiert, statt "
+          "die rohe Ausgabe zu zeigen. Der Balken läuft einmal über alle "
+          "Schritte durch, statt bei jedem wieder von vorn zu beginnen"),
+        _("Der eigene Autostart-Eintrag startete nichts, und für den "
+          "Anmeldedienst wurde ein Neustart angeboten, der die Sitzung "
+          "beendet hätte"),
+        _("Prüfungen, die nur auf einem Rechner stimmten, stimmen jetzt auch "
+          "auf anderen: Steam als Snap, ZFS, zwei Grafikkarten, "
+          "Temperaturgrenzen aus den Sensoren"),
     ]),
 }
 
