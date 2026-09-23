@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.6~beta - Logo, findings, and sources
+
+### Look
+
+- New icon and wordmark: a dark tile with the gauge in the accent yellow, and
+  letters in white for dark surfaces with a darker set derived for light ones.
+  Both are rendered from two masters, so the SVG tiles and the oversized
+  wordmark files are gone.
+- Under Wayland the dock showed a generic icon, because GTK reports the
+  application ID where the launcher named the file. Both carry the application
+  ID now, on Wayland and on X11.
+- The light theme is a cool working grey, and dialogs carry their own title
+  bar: since GTK 4.22 their close button grew into an oval as well.
+
+### Problems
+
+- A finding names cause, solution and the button that carries it out, instead
+  of leaving the reader to work out which part of the text was the advice.
+- The journal rate finding names the unit that writes, and offers a restart
+  only where that does not end your session.
+- New finding when CPU boost is off, whether the UEFI or a power saving tool
+  switched it off. It stays quiet in the power-saver profile and on battery.
+- GameMode sets the governor per game, so powersave outside a game is correct
+  and no longer warned about. Without the gamemode group the finding offers
+  usermod rather than cpupower, whose setting GameMode would undo after every
+  game.
+- A recorded run keeps the governor per sample. Read once the game has ended,
+  it says what GameMode restored, not what the game ran under.
+
+### Package sources
+
+- A source that a release upgrade switched off dropped out of apt without a
+  word, and the program behind it stood still unnoticed. It has its own line
+  now, naming the Ubuntu it was built for.
+- dynotiq asks the provider once a day whether the running release exists
+  there by now. When it does, one button points the source at it, switches it
+  back on and fetches the package lists.
+- New finding for installed packages that no source carries any more, mostly
+  leftovers of an earlier Ubuntu that nothing patches any longer. Self built
+  .debs are told apart by their maintainer address. The button removes them,
+  once the dry run and its list have been confirmed.
+
+### App check
+
+- Results are grouped into problems, notes and what is fine.
+- An app can be uninstalled from here, with or without its data. apt runs a
+  dry run first and refuses to take system packages along, home folders and
+  AppImages go to the trash, and a web app is no longer mistaken for its
+  browser.
+
+### Updates
+
+- The progress window says what is happening in words instead of showing the
+  raw output line: unpacking, setting up, reading the lists, copying files.
+  The output itself stays in the details.
+- The bar carries no text on its fill, the numbers stand below it, and it
+  covers all steps at once rather than dropping back to zero on each one. It
+  approaches its value rather than jumping there, and pulses only where no
+  number exists at all.
+- The list under the cleanup button was empty all along, because apt reports a
+  purge as Purg and only Remv was read.
+
+### Fixes
+
+- The autostart entry started nothing: Exec pointed at dynotiq.py, which is
+  not executable.
+- A restart was offered for the display manager and for units bound to the
+  session, which would have ended that session.
+- Checks that only held on one machine now hold on others: Steam as a snap,
+  ptyxis and alacritty as terminals, ZFS pools, NTSYNC disabled in the kernel
+  config, AMD systems with two amdgpu devices, the tuning tool matching the
+  GPU vendor, NVMe and Intel temperature limits read from the sensors, and
+  autostart names in the system language.
+- The Proton check counted games instead of versions, launch options were
+  only checked for games with their own compat mapping, the release cache
+  survived an upgrade, a full /boot counted as user data, and a single CPU
+  temperature sample of 85 C was critical, read from Tctl before Tdie.
+- The arc that spins during a scan ran through the gap at the bottom of the
+  ring, where there is nothing to show.
+- pkexec and libnotify-bin are required now: every fix button and every
+  desktop notification depends on them.
+
 ## 0.5~beta - Games, updates, and 26.04
 
 ### Proton

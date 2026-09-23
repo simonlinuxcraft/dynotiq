@@ -48,7 +48,7 @@ gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # noqa: E402
 
-VERSION = "0.5~beta"
+VERSION = "0.6~beta"
 APP_ID = "de.dynotiq.dynotiq"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -1066,13 +1066,13 @@ def parse_apt_updates(text, uris=""):
 
 
 def parse_apt_removals(text):
-    """Pakete, die ein dist-upgrade wegnehmen wuerde: 'Remv name [ver]'.
+    """Pakete, die apt wegnehmen wuerde: 'Remv name' oder, mit --purge, 'Purg name'.
 
     Die Seite spielt so etwas nicht ein, `apt-get install --only-upgrade`
     kann es gar nicht. Verschwiegen werden darf es trotzdem nicht: dann bliebe
     das Update haengen und niemand wuesste warum.
     """
-    return sorted({m for m in re.findall(r"^Remv (\S+)", text, re.M)})
+    return sorted({m for m in re.findall(r"^(?:Remv|Purg) (\S+)", text, re.M)})
 
 
 # apt nennt die zurueckgehaltenen Pakete in der Simulation selbst, also kostet
@@ -1321,6 +1321,53 @@ def progress_name(line):
         if m:
             return m.group(1)
     return None
+
+
+# Was gerade passiert, in Worten statt in der Sprache des Paketmanagers.
+# {name} wird aus derselben Zeile geholt wie der Zaehlstand, damit beide
+# dasselbe Paket meinen. Die erste passende Zeile gewinnt.
+PROGRESS_PHASES = (
+    (r"^Setting up\b", N_("{name} wird eingerichtet")),
+    (r"^(?:Preparing to unpack|Unpacking)\b", N_("{name} wird ausgepackt")),
+    (r"^(?:Refreshing|Refresh)\b", N_("{name} wird aufgefrischt")),
+    (r"^(?:Installing|Updating)\b", N_("{name} wird eingespielt")),
+    (r"^(?:Get|Hit|Ign|Holen|OK|Ign):", N_("Paketlisten werden geladen")),
+    (r"^(?:Reading|Building dependency|Paketlisten werden gelesen)",
+     N_("Paketlisten werden gelesen")),
+    (r"^(?:Removing|Entferne)\b", N_("Pakete werden entfernt")),
+    (r"^(?:Processing triggers|Trigger)", N_("Nacharbeiten laufen")),
+    (r"^(?:Fetched|Es wurden)\b", N_("Alles geladen, jetzt wird eingespielt")),
+    (r"rsync|[Ss]yncing", N_("Dateien werden verglichen und kopiert")),
+    (r"[Ss]napshot|[Ss]icherungspunkt", N_("Sicherungspunkt wird geschrieben")),
+    (r"^(?:Scanning|Checking|Prüfe)", N_("Wird geprüft")),
+)
+
+
+def phase_text(line):
+    """Ein Satz zu dieser Ausgabezeile, leer wenn sie nichts hergibt.
+
+    Leer heisst: die Zeile davor bleibt stehen. Eine rohe Ausgabezeile vorn im
+    Fenster sagt einem Laien nichts, und eine leere Zeile sagt noch weniger.
+    """
+    line = line.strip()
+    for pat, text in PROGRESS_PHASES:
+        if re.search(pat, line):
+            t = _(text)
+            if "{name}" not in t:
+                return t
+            name = progress_name(line)
+            return t.format(name=name) if name else ""
+    return ""
+
+
+def overall_fraction(i, total, anteil):
+    """Fortschritt ueber alle Schritte zusammen, 0 bis 1.
+
+    Je Schritt bei null anzufangen hiesse, den Balken mitten im Lauf
+    zurueckzuwerfen. Er laeuft einmal durch, und ein Schritt ist ein Abschnitt
+    darin.
+    """
+    return min(1.0, (i + min(max(anteil, 0.0), 1.0)) / max(total, 1))
 
 
 def cmd_steps(cmd):
@@ -5159,6 +5206,36 @@ RELEASE_NOTES = {
         _("Die drei Werte unter der Punktzahl sprechen jetzt die Sprache, die "
           "eingestellt ist"),
     ]),
+    "0.6~beta": (_("Logo, Befunde und Quellen"), [
+        _("Neues Zeichen und neuer Schriftzug, und im Dock stehen sie auch "
+          "unter Wayland richtig da. Vorher zeigte GNOME dort ein fremdes "
+          "Zahnrad"),
+        _("Ein Befund sagt jetzt, was erkannt wurde, was es bewirkt und was "
+          "der Knopf daneben dagegen tut"),
+        _("Eine Paketquelle, die der Wechsel auf ein neues Ubuntu "
+          "abgeschaltet hat, fällt nicht mehr stillschweigend aus. Sie steht "
+          "in der Liste, mit dem Ubuntu, für das sie gebaut war"),
+        _("dynotiq fragt täglich beim Anbieter nach, ob es die Quelle für "
+          "dein Ubuntu inzwischen gibt, und bietet dann an, sie mit einem "
+          "Knopf wieder einzuschalten"),
+        _("Neuer Befund für Pakete, die in keiner Quelle mehr stehen. Das "
+          "sind meist Reste eines früheren Ubuntu, und ihre Sicherheitslücken "
+          "werden nicht mehr geschlossen"),
+        _("Der App-Check sortiert nach Problemen, Hinweisen und dem, was in "
+          "Ordnung ist, und kann eine App entfernen, mit oder ohne ihre "
+          "Daten. Systempakete nimmt er dabei nicht mit"),
+        _("Neuer Befund, wenn der CPU-Boost aus ist. Wo GameMode den Governor "
+          "je Spiel setzt, gibt es dazu keine Warnung mehr"),
+        _("Das Fortschrittsfenster sagt in Worten, was gerade passiert, statt "
+          "die rohe Ausgabe zu zeigen. Der Balken läuft einmal über alle "
+          "Schritte durch, statt bei jedem wieder von vorn zu beginnen"),
+        _("Der eigene Autostart-Eintrag startete nichts, und für den "
+          "Anmeldedienst wurde ein Neustart angeboten, der die Sitzung "
+          "beendet hätte"),
+        _("Prüfungen, die nur auf einem Rechner stimmten, stimmen jetzt auch "
+          "auf anderen: Steam als Snap, ZFS, zwei Grafikkarten, "
+          "Temperaturgrenzen aus den Sensoren"),
+    ]),
 }
 
 
@@ -6715,6 +6792,19 @@ AUTOREMOVE_CMD = ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
                   "apt-get", "autoremove", "--purge", "-y"]
 
 
+def purge_argv(pkgs):
+    """Die genannten Pakete entfernen, samt ihrer Einstellungen."""
+    return ["pkexec", "/usr/bin/env", "DEBIAN_FRONTEND=noninteractive",
+            "apt-get", "purge", "-y", "--", *pkgs]
+
+
+def purge_list(pkgs):
+    """Was ein purge dieser Pakete wirklich wegnehmen wuerde."""
+    return parse_apt_removals(sh(
+        ["apt-get", "-s", "-o", "Debug::NoLocking=1", "purge", "--", *pkgs],
+        timeout=60))
+
+
 def autoremove_list():
     """Was `apt autoremove --purge` jetzt wirklich wegnehmen wuerde."""
     return parse_apt_removals(sh(
@@ -6917,10 +7007,14 @@ def ubuntu_source(uri):
     return any(h in uri for h in UBUNTU_HOSTS)
 
 
-def parse_apt_source(text):
-    """[(uri, suite)] aus einer sources.list-Zeile oder einer deb822-Datei."""
+def parse_apt_source(text, enabled=True):
+    """[(uri, suite)] aus einer sources.list-Zeile oder einer deb822-Datei.
+
+    enabled=False dreht die Auswahl um und liefert die Absaetze, die auf
+    'Enabled: no' stehen. Genau die schaltet der Release-Wechsel ab.
+    """
     out = []
-    for line in text.splitlines():
+    for line in text.splitlines() if enabled else []:
         line = line.strip()
         if line.startswith("deb ") or line.startswith("deb-src "):
             toks = re.sub(r"\[[^\]]*\]", " ", line).split()
@@ -6934,7 +7028,11 @@ def parse_apt_source(text):
     for block in re.split(r"\n\s*\n", text):
         f = {k.lower(): v for k, v in
              re.findall(r"^([\w-]+):\s*(.*)$", block, re.M)}
-        if f.get("enabled", "yes").strip().lower() in ("no", "false", "0"):
+        # ponytail: nur der deb822-Schalter zaehlt als abgeschaltet. Eine
+        # auskommentierte deb-src-Zeile liefern viele .list-Dateien von Haus
+        # aus mit, die als abgeschaltete Quelle zu melden waere ein Fehlalarm.
+        aus = f.get("enabled", "yes").strip().lower() in ("no", "false", "0")
+        if aus == enabled:
             continue
         for u in f.get("uris", "").split():
             for s in f.get("suites", "").split():
@@ -6942,15 +7040,19 @@ def parse_apt_source(text):
     return out
 
 
+def source_files():
+    """Alle Dateien, aus denen apt seine Quellen liest."""
+    return sorted(glob.glob("/etc/apt/sources.list.d/*.list")
+                  + glob.glob("/etc/apt/sources.list.d/*.sources")
+                  + ["/etc/apt/sources.list"])
+
+
 def third_party_sources(all_sources=False):
     """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen,
     ausser all_sources: dann zaehlt der Zustand jeder Quelle, auch der von
     Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen."""
     out = []
-    files = (glob.glob("/etc/apt/sources.list.d/*.list")
-             + glob.glob("/etc/apt/sources.list.d/*.sources")
-             + ["/etc/apt/sources.list"])
-    for path in sorted(files):
+    for path in source_files():
         text = read(path)
         if not text:
             continue
@@ -6961,6 +7063,36 @@ def third_party_sources(all_sources=False):
             if (name, uri, suite) not in out:
                 out.append((name, uri, suite))
     return out
+
+
+def disabled_sources():
+    """Abgeschaltete Quellen als [(Pfad, Name, uri, Suite)].
+
+    Der Pfad gehoert dazu, weil nur er den Weg zurueck kennt: wieder
+    einschalten heisst, genau diese Datei zu aendern.
+    """
+    out = []
+    for path in source_files():
+        name = os.path.basename(path).rsplit(".", 1)[0]
+        for uri, suite in parse_apt_source(read(path) or "", False):
+            out.append((path, name, uri, suite))
+    return out
+
+
+def enable_sources_argv(paths, codename):
+    """Ein pkexec, das die genannten Quellendateien auf dieses Release stellt
+    und danach die Paketlisten holt.
+
+    Codename und Pfade gehen als Argumente in die Shell, nie in den
+    Skripttext. Ein Lauf statt zwei, sonst fragt polkit zweimal nach dem
+    Passwort und wer beim zweiten Mal abbricht, hat Quellen ohne Listen.
+    """
+    return ["pkexec", "sh", "-c",
+            'neu="$1"; shift; for f in "$@"; do '
+            'sed -i -e "s|^Suites: .*|Suites: $neu|" '
+            '-e "s|^Enabled: no$|Enabled: yes|" "$f" || exit 1; done; '
+            "apt-get update",
+            "sh", codename, *paths]
 
 
 SOURCE_STATUS = {"ok": N_("unterstützt"), "missing": N_("fehlt"),
@@ -7019,9 +7151,9 @@ def sources_check(codename, sources=None, current=None, timeout=SOURCES_TIMEOUT,
     return [(n, u, s or "unknown") for n, u, s in rows]
 
 
-def sources_cached(codename):
-    """Letztes Ergebnis, solange es zum Release passt und keine Woche alt ist."""
-    c = state_read().get("sources_check")
+def sources_cached(codename, key="sources_check", days=SOURCES_CACHE_DAYS):
+    """Letztes Ergebnis, solange es zum Release passt und jung genug ist."""
+    c = state_read().get(key)
     if not isinstance(c, dict) or c.get("codename") != codename:
         return None
     if not isinstance(c.get("rows"), list):
@@ -7030,20 +7162,20 @@ def sources_cached(codename):
         # Beidseitig wie in scan_window: bei zurueckgestellter Uhr ist die
         # Differenz negativ, und ein Stempel aus der Zukunft gaebe den Cache
         # dann unabhaengig von seinem Alter heraus.
-        if not 0 <= time.time() - float(c.get("t", 0)) <= SOURCES_CACHE_DAYS * 86400:
+        if not 0 <= time.time() - float(c.get("t", 0)) <= days * 86400:
             return None
     except (TypeError, ValueError):
         return None
     return [tuple(r) for r in c["rows"] if isinstance(r, list) and len(r) == 3]
 
 
-def sources_cache_write(codename, rows):
+def sources_cache_write(codename, rows, key="sources_check"):
     # Ohne Netz steht ueberall 'unknown'. Das eine Woche lang festzuhalten
     # hiesse, einen Fehlversuch als Ergebnis auszugeben: der Befund meldet dann
     # "0 von 11 haben keine Pakete", und das liest sich wie eine Freigabe.
     if any(r[2] == "unknown" for r in rows):
         return
-    state_write({**state_read(), "sources_check": {
+    state_write({**state_read(), key: {
         "codename": codename, "t": time.time(), "rows": [list(r) for r in rows]}})
 
 
@@ -7183,7 +7315,8 @@ def source_newer_than_lists(uri, secs=None, pfade=None):
     return False
 
 
-def package_sources(scan=None, current="", series=None, sources=None):
+def package_sources(scan=None, current="", series=None, sources=None,
+                    disabled=None):
     """[(Art, Name, Adresse, Zustand, in Ordnung)] jeder Quelle, aus der auf
     diesem Rechner Updates kommen.
 
@@ -7197,6 +7330,9 @@ def package_sources(scan=None, current="", series=None, sources=None):
     cur = current or os_release("VERSION_CODENAME")
     known = ubuntu_series() if series is None else series
     seit = apt_lists_age()
+    if disabled is None:
+        disabled = ([(n, u, s) for _p, n, u, s in disabled_sources()]
+                    if sources is None else [])
     rows = []
     for name, uri, suite in (third_party_sources(True) if sources is None
                              else sources):
@@ -7217,6 +7353,17 @@ def package_sources(scan=None, current="", series=None, sources=None):
             state, ok = _("Antwortet nicht, von hier kommen keine Updates"), False
         rows.append(("apt", source_title(name, uri, suite),
                      source_origin(uri), state, ok))
+    # Eine abgeschaltete Quelle faellt aus apt heraus, ohne ein Wort zu sagen.
+    # Der Release-Wechsel schaltet genau die ab, die das neue Ubuntu nicht
+    # kennt, und danach steht das Programm dahinter still.
+    for name, uri, suite in disabled:
+        base = suite.split("-")[0]
+        rows.append(("apt", source_title(name, uri, suite), source_origin(uri),
+                     _("Abgeschaltet. Die Quelle gilt für Ubuntu {suite}, "
+                       "dieser Rechner läuft {cur}. Von hier kommt nichts "
+                       "mehr.").format(suite=base, cur=cur)
+                     if base in known and base != cur else
+                     _("Abgeschaltet, von hier kommen keine Updates"), False))
     # Was noch aussteht und beim letzten Versuch gescheitert ist. Erledigte
     # Fehlschlaege fallen raus, sonst stuende der Vermerk fuer immer da: der
     # Verlauf vergisst nicht von allein, die Liste der offenen Updates schon.
@@ -7254,6 +7401,34 @@ def local_packages():
     for line in sh(["apt", "list", "--installed"], timeout=60).splitlines():
         if ",local]" in line or "[installed,local]" in line:
             out.append(line.split("/")[0])
+    return sorted(out)
+
+
+# Maintainer-Adressen von Ubuntu und Debian. Ein Paket mit dieser Adresse kam
+# aus dem Archiv, kein selbst gebautes .deb.
+DISTRO_MAINTAINER = re.compile(r"@[\w.-]*(?:ubuntu\.com|debian\.org)>?\s*$")
+
+
+def stale_system_packages():
+    """Systempakete ohne Paketquelle als [(Name, Version)].
+
+    Beim Release-Wechsel bleiben Pakete liegen, die das neue Ubuntu nicht mehr
+    fuehrt. Sie laufen weiter, aber ihre Luecken werden nicht mehr geschlossen.
+    Selbst installierte Programme haengen genauso quellenlos im System und sind
+    trotzdem in Ordnung, die trennt der Maintainer ab.
+    """
+    pkgs = local_packages()
+    if not pkgs:
+        return []
+    out = []
+    for line in sh(["dpkg-query", "-W",
+                    "-f=${Package}\t${Version}\t${Maintainer}\n", *pkgs],
+                   timeout=30).splitlines():
+        f = line.split("\t")
+        # ponytail: '~local' sind hier nachgebaute Pakete wie die von libdvd-pkg.
+        # Die haben nie eine Quelle und werden trotzdem gepflegt.
+        if len(f) == 3 and DISTRO_MAINTAINER.search(f[2]) and "~local" not in f[1]:
+            out.append((f[0], f[1]))
     return sorted(out)
 
 
@@ -8160,6 +8335,111 @@ def check_updates(ctx):
                    actions=[(_("Updates öffnen"), "_goto_page", "Updates")])
 
 
+def check_disabled_sources(ctx):
+    """Quellen, die der Release-Wechsel abgeschaltet hat.
+
+    Sie fallen aus apt heraus, ohne ein Wort zu sagen, und das Programm
+    dahinter steht still. Einmal am Tag wird nachgesehen, ob der Anbieter das
+    laufende Release inzwischen kennt. Kennt er es, reicht ein Knopf.
+    """
+    cur = os_release("VERSION_CODENAME")
+    if not cur:
+        return None
+    known = ubuntu_series()
+    alt = [(pfad, name, uri, suite)
+           for pfad, name, uri, suite in disabled_sources()
+           if suite in known and suite != cur]
+    if not alt:
+        return None
+    rows = sources_cached(cur, "disabled_check", 1)
+    if rows is None:
+        # Die Suite steht hier auf dem laufenden Release, obwohl in der Datei
+        # das alte steht: sonst haelt sources_check die Quelle fuer eine, die
+        # nicht am Release haengt, und fragt gar nicht erst.
+        rows = sources_check(cur, [(n, u, cur) for _p, n, u, _s in alt])
+        sources_cache_write(cur, rows, "disabled_check")
+    status = {uri: st for _n, uri, st in rows}
+    lines = []
+    for _pfad, name, uri, suite in alt:
+        da = status.get(uri) == "ok"
+        lines.append(("package-x-generic-symbolic", "ok" if da else "dim",
+                      (_("{name}: für {cur} gebaut, kann wieder an")
+                       if da else _("{name}: für {cur} gibt es dort noch nichts")
+                       ).format(name=source_title(name, uri, suite), cur=cur)))
+    # Nur Dateien ohne aktiven Absatz. In einer gemischten Datei wuerde der
+    # Befehl die laufende Quelle mit umschreiben, und die waere danach tot.
+    paths = sorted({pfad for pfad, _n, uri, _s in alt
+                    if status.get(uri) == "ok"
+                    and not parse_apt_source(read(pfad) or "")})
+    detail = _("Beim Wechsel auf {cur} hat Ubuntu jede Paketquelle "
+               "abgeschaltet, die es für {cur} noch nicht gab. Die Programme "
+               "daraus bekommen seitdem keine Updates, und in apt taucht die "
+               "Quelle nicht mehr auf.").format(cur=cur)
+    if not paths:
+        return Finding(
+            "info", _("Eine Paketquelle steht seit dem Ubuntu-Wechsel still")
+            if len(alt) == 1 else
+            _("{n} Paketquellen stehen seit dem Ubuntu-Wechsel still").format(
+                n=len(alt)), detail,
+            _("{n} Quellen").format(n=len(alt)), False, key="disabled_sources",
+            lines=lines,
+            solution=_("Dort gibt es für {cur} noch nichts. dynotiq fragt "
+                       "täglich nach und bietet das Einschalten an, sobald der "
+                       "Anbieter nachzieht.").format(cur=cur))
+    return Finding(
+        "warn", _("Eine Paketquelle lässt sich wieder einschalten")
+        if len(paths) == 1 else
+        _("{n} Paketquellen lassen sich wieder einschalten").format(
+            n=len(paths)), detail,
+        _("{n} von {total}").format(n=len(paths), total=len(alt)), False,
+        "\n".join(f"sudo sed -i -e 's|^Suites: .*|Suites: {cur}|' "
+                  f"-e 's|^Enabled: no$|Enabled: yes|' {shlex.quote(pfad)}"
+                  for pfad in paths) + "\nsudo apt update",
+        argv=enable_sources_argv(paths, cur),
+        warn=_("Ändert die Quellendateien unter /etc/apt/sources.list.d."),
+        key="disabled_sources", lines=lines,
+        solution=_("Der Anbieter hat für {cur} gebaut. Der Knopf stellt die "
+                   "Quelle darauf um, schaltet sie wieder ein und holt die "
+                   "Paketlisten.").format(cur=cur),
+        fix_label=_("Quellen einschalten"))
+
+
+def check_stale_packages(ctx):
+    """Pakete aus einem frueheren Ubuntu, die in keiner Quelle mehr stehen.
+
+    Bewusst nicht am Release-Upgrade aufgehaengt: der Bericht dort erscheint
+    erst, wenn das naechste Ubuntu ansteht, und bis dahin bleiben diese Pakete
+    jahrelang unbemerkt liegen.
+    """
+    stale = stale_system_packages()
+    if not stale:
+        return None
+    return Finding(
+        "warn", _("Ein Systempaket bekommt keine Updates mehr")
+        if len(stale) == 1 else
+        _("{n} Systempakete bekommen keine Updates mehr").format(n=len(stale)),
+        _("Diese Pakete stehen in keiner Paketquelle mehr. Meist sind es Reste "
+          "eines früheren Ubuntu, die der Release-Wechsel stehen gelassen hat. "
+          "Sie laufen weiter, aber Sicherheitslücken darin werden nicht mehr "
+          "geschlossen."),
+        _("{n} Pakete").format(n=len(stale)), False,
+        "sudo apt purge " + " ".join(n for n, _v in stale),
+        argv=purge_argv([n for n, _v in stale]),
+        # Was an so einem Paket noch haengt, sieht niemand von aussen. Deshalb
+        # der Trockenlauf vorweg: die Liste steht da, bevor etwas laeuft.
+        preview=(lambda: purge_list([n for n, _v in stale]),
+                 _("Pakete"), _("Paket")),
+        warn=_("Entfernt die Pakete samt ihrer Einstellungen."),
+        key="stale_packages",
+        lines=[("package-x-generic-symbolic", "dim", f"{name}  {ver}")
+               for name, ver in stale[:10]],
+        solution=_("Der Knopf entfernt sie. Vorher steht die vollständige "
+                   "Liste dessen da, was dabei mitgeht, und erst wenn die "
+                   "bestätigt ist, läuft etwas. Was noch gebraucht wird, "
+                   "bleibt besser stehen."),
+        fix_label=_("Pakete entfernen"))
+
+
 def check_self_update(ctx):
     """Neue dynotiq-Version aus der eigenen Paketquelle.
 
@@ -8210,7 +8490,8 @@ CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_d
           check_old_snaps, check_autostart, check_dead_launchers,
           check_duplicate_apps, check_swap,
           check_failed_units,
-          check_proton, check_updates,
+          check_proton, check_updates, check_stale_packages,
+          check_disabled_sources,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
           check_bench_drop, check_shader_cache, check_compat_tools,
           check_orphan_prefixes, check_steam_cef_gpu, check_self_update]
@@ -9823,7 +10104,10 @@ class Ring(Gtk.DrawingArea):
         if not self.busy:
             self.tick = None
             return GLib.SOURCE_REMOVE
-        self.angle = (clock.get_frame_time() / 1e6 * self.SPIN) % 6.2832
+        # Auf der Bahn bleiben. Unten ist die Luecke, dort gehoert kein
+        # Bogen hin: er laeuft links an, rechts aus und faengt links neu an.
+        p = (clock.get_frame_time() / 1e6 * self.SPIN / 6.2832) % 1.0
+        self.angle = self.START + self.SWEEP * p
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
@@ -9851,7 +10135,8 @@ class Ring(Gtk.DrawingArea):
             cr.set_line_cap(1)
             cr.set_line_width(12)
             cr.set_source_rgba(*rgb(COLORS["acc"]), .45)
-            cr.arc(cx, cy, r, self.angle, self.angle + 1.1)
+            cr.arc(cx, cy, r, self.angle,
+                   min(self.angle + 1.1, self.START + self.SWEEP))
             cr.stroke()
         elif self.value > 0:
             # Der Ring traegt die Ampel, nicht den Akzent. Er ist das Erste,
@@ -12050,14 +12335,14 @@ class App(Gtk.Application):
         bad = [r for r in rows if not r[4]]
         c = box()
         c.add_css_class("card")
-        right = lbl(_("{n} von {total} antworten nicht").format(
+        right = lbl(_("{n} von {total} liefern nichts").format(
             n=len(bad), total=len(rows)) if bad
             else _("alle {n} in Ordnung").format(n=len(rows)), "sub")
         right.set_valign(Gtk.Align.CENTER)
         c.append(card_head(_("Woher die Updates kommen"), right))
         intro = lbl(_("Jedes Programm auf diesem Rechner holt seine "
                       "Aktualisierungen von einer festen Stelle im Netz. "
-                      "Antwortet eine davon nicht mehr, bleiben die Updates "
+                      "Liefert eine davon nichts mehr, bleiben die Updates "
                       "genau dieses Programms aus, ohne dass es auffällt.")
                     if bad else
                     _("Jedes Programm holt seine Aktualisierungen von einer "
@@ -12263,12 +12548,14 @@ class App(Gtk.Application):
                          default_width=640)
         titlebar(win)
         win.add_css_class("page")
-        # Vorne steht in Worten, was gerade passiert. Die Ausgabe der Befehle
-        # ist fuer die meisten nur Rauschen und liegt zugeklappt darunter.
+        # Vorne steht in Worten, was gerade passiert: der Schritt als
+        # Ueberschrift, darunter der Satz zur laufenden Zeile. Die Ausgabe der
+        # Befehle ist fuer die meisten nur Rauschen und liegt zugeklappt
+        # darunter.
         head = lbl(step_title(steps[0]), "h1", wrap=True, chars=40)
-        now = lbl("", "mono-dim")
+        now = lbl("", "lede")
         now.set_ellipsize(Pango.EllipsizeMode.END)
-        now.set_margin_top(4)
+        now.set_margin_top(6)
         view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         buf = view.get_buffer()
@@ -12277,8 +12564,11 @@ class App(Gtk.Application):
         details = Gtk.Expander(child=scroll, margin_top=12, expanded=any(
             READ_STEPS.search(" ".join(map(str, s))) for s in steps))
         details.set_label_widget(lbl(_("Details"), "row-detail"))
-        bar = Gtk.ProgressBar(show_text=True, text=_("startet …"), margin_top=14,
-                              pulse_step=0.06)
+        # Ohne Text im Balken: die Zahlen stehen darunter in einer eigenen
+        # Zeile, das liest sich ruhiger als eine Schrift auf der Fuellung.
+        bar = Gtk.ProgressBar(margin_top=16, pulse_step=0.05)
+        stat = lbl(_("startet …"), "sub")
+        stat.set_margin_top(8)
         stop = Gtk.Button(label=_("Nach diesem Schritt stoppen") if safe_cancel
                           else _("Abbrechen"), halign=Gtk.Align.END)
         close = Gtk.Button(label=_("Schließen"), halign=Gtk.Align.END, sensitive=False)
@@ -12291,6 +12581,7 @@ class App(Gtk.Application):
         wrap.append(head)
         wrap.append(now)
         wrap.append(bar)
+        wrap.append(stat)
         wrap.append(details)
         wrap.append(row)
         win.set_child(wrap)
@@ -12302,7 +12593,10 @@ class App(Gtk.Application):
 
         seen = set()
         run = {"start": time.monotonic(), "last": time.monotonic(), "done": False,
-               "step": "", "pct": 0.0, "stop_after_step": False, "i": 0}
+               "step": "", "pct": 0.0, "stop_after_step": False, "i": 0,
+               # ziel ist der Stand, auf den der Balken zulaeuft, None heisst
+               # "keine Zahl bekannt, also pulsen". cur ist, wo er gerade steht.
+               "ziel": None, "cur": 0.0, "t": 0.0, "puls": 0.0}
 
         def append(line):
             run["last"] = time.monotonic()
@@ -12315,7 +12609,9 @@ class App(Gtk.Application):
             if line.startswith("$ "):
                 run["pct"] = 0.0     # neuer Schritt, der alte Stand gilt nicht
             elif line.strip() and not run["done"]:
-                now.set_text(line.strip()[:300])
+                satz = phase_text(line)
+                if satz:
+                    now.set_text(satz)
             if sink is not None:
                 sink.append(line)
             buf.insert(buf.get_end_iter(), line + "\n")
@@ -12325,8 +12621,6 @@ class App(Gtk.Application):
             if name:
                 seen.add(name)
                 run["step"] = name
-                if count:
-                    bar.set_fraction(min(len(seen) / count, 1.0))
             return False
 
         def heartbeat():
@@ -12336,28 +12630,53 @@ class App(Gtk.Application):
                 return False
             secs = int(time.monotonic() - run["start"])
             idle = int(time.monotonic() - run["last"])
-            parts = [mmss(secs)]
+            parts = []
             if len(steps) > 1:
                 parts.append(_("Schritt {i} von {n}").format(
                     i=run["i"] + 1, n=len(steps)))
-            if run["pct"] and not seen:
-                # flatpak zaehlt in Prozent statt in Paketen. Ohne das stuende
-                # der Balken den ganzen Lauf ueber auf null.
-                parts.append("{:.0f} %".format(run["pct"]))
-                bar.set_fraction(run["pct"] / 100)
-            elif count:
-                parts.append(_("{done} von {total}").format(
+            anteil = None
+            if count and seen:
+                anteil = len(seen) / count
+                parts.append(_("{done} von {total} Paketen").format(
                     done=len(seen), total=count))
-            elif run["step"]:
-                parts.append(run["step"])
+            elif run["pct"]:
+                # flatpak und timeshift zaehlen in Prozent statt in Paketen.
+                anteil = run["pct"] / 100
+                parts.append("{:.0f} %".format(run["pct"]))
+            elif count:
+                parts.append(_("{done} von {total} Paketen").format(
+                    done=0, total=count))
+            run["ziel"] = (None if anteil is None else
+                           overall_fraction(run["i"], len(steps), anteil))
+            parts.append(_("läuft seit {time}").format(time=mmss(secs)))
             if idle >= 5:
                 parts.append(_("seit {secs} s keine Ausgabe").format(secs=idle))
-            bar.set_text(" · ".join(parts))
-            if not count:
-                bar.pulse()          # ohne Gesamtzahl bleibt nur die Bewegung
+            stat.set_text(" · ".join(parts))
             return True
 
         GLib.timeout_add(250, heartbeat)
+
+        def bewegung(_w, clock):
+            """Der Balken faehrt seinen Stand an, statt dorthin zu springen.
+
+            Auf der Frame-Clock und mit der vergangenen Zeit gerechnet, sonst
+            haengt die Geschwindigkeit an der Bildwiederholrate.
+            """
+            t = clock.get_frame_time() / 1e6
+            dt = min(max(t - run["t"], 0.0), 0.25)
+            run["t"] = t
+            if run["ziel"] is None:
+                if t - run["puls"] >= 0.1:
+                    bar.pulse()      # ohne Zahl bleibt nur die Bewegung
+                    run["puls"] = t
+                return GLib.SOURCE_CONTINUE
+            run["cur"] += (run["ziel"] - run["cur"]) * min(1.0, dt * 4)
+            bar.set_fraction(min(max(run["cur"], 0.0), 1.0))
+            if run["done"] and run["cur"] >= 0.999:
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+
+        win.add_tick_callback(bewegung)
 
         def begin(i):
             run["i"] = i
@@ -12381,8 +12700,8 @@ class App(Gtk.Application):
                 append(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
                 now.set_text(_("Ein Neustart ist nötig, damit die Updates wirksam werden."))
             secs = int(time.monotonic() - run["start"])
-            bar.set_fraction(1.0)
-            bar.set_text(_("{what} nach {time}").format(
+            run["ziel"] = 1.0
+            stat.set_text(_("{what} nach {time}").format(
                 what=msg.rstrip("."), time=mmss(secs)))
             stop.set_sensitive(False)
             close.set_sensitive(True)
@@ -15178,6 +15497,22 @@ def selftest():
         # Beide Schreibweisen, die apt je nach Sprache liefert
         assert local_packages() == ["eigenes"], local_packages()
 
+        # Ein Rest aus dem alten Ubuntu und ein selbst installiertes Programm
+        # sehen fuer apt gleich aus. Nur der erste bekommt keine Updates mehr.
+        def kein_archiv(cmd, *a, **k):
+            if cmd[0] == "apt":
+                return ("Listing...\n"
+                        "libicu74/now 74.2-1ubuntu3.1 amd64 [installed,local]\n"
+                        "discord/now 1.0.151 amd64 [installed,local]\n"
+                        "libdvdcss2/now 1.5.0-1~local amd64 [installed,local]\n")
+            return ("libicu74\t74.2-1ubuntu3.1\tUbuntu Developers "
+                    "<ubuntu-devel-discuss@lists.ubuntu.com>\n"
+                    "discord\t1.0.151\tDiscord Maintainer Team <noreply@discord.com>\n"
+                    "libdvdcss2\t1.5.0-1~local\tDmitry Smirnov <onlyjob@debian.org>\n")
+        globals()["sh"] = kein_archiv
+        assert stale_system_packages() == [("libicu74", "74.2-1ubuntu3.1")], \
+            stale_system_packages()
+
         globals()["sh"] = lambda *a, **k: (
             "nvidia/550.144.03, 6.11.0-25-generic, x86_64: installed\n"
             "virtualbox/7.0.16, 6.11.0-25-generic, x86_64: installed\n"
@@ -15678,6 +16013,19 @@ def selftest():
                                     "https://ppa.launchpadcontent.net/a/b/ubuntu",
                                     "jammy")])[0]
     assert alt[1] == "lutris" and not alt[4] and "jammy" in alt[3]
+    # Neuere Upgrader lassen die Quelle nicht stehen, sie schalten sie ab. Dann
+    # faellt sie aus apt heraus, und ohne eigene Zeile auch aus dieser Liste.
+    assert parse_apt_source("Types: deb\nURIs: u\nSuites: s\nEnabled: no\n") == []
+    assert parse_apt_source("Types: deb\nURIs: u\nSuites: s\nEnabled: no\n",
+                            False) == [("u", "s")]
+    assert parse_apt_source("deb http://x y\n", False) == []
+    aus = [r for r in package_sources(
+        current="resolute", series={"noble", "resolute"}, sources=[],
+        disabled=[("lutris-team-ubuntu-lutris-noble",
+                   "https://ppa.launchpadcontent.net/a/b/ubuntu", "noble")])
+        if r[0] == "apt"]
+    assert len(aus) == 1 and aus[0][1] == "lutris" and not aus[0][4], aus
+    assert "noble" in aus[0][3] and "resolute" in aus[0][3], aus[0][3]
     # Ubuntus eigene Quellen heissen im Klartext nach dem, was sie liefern
     assert source_title("ubuntu", "http://security.ubuntu.com/ubuntu/",
                         "noble-security") == "Ubuntu · " + _("Sicherheitsupdates")
@@ -15693,6 +16041,28 @@ def selftest():
     assert cmd_steps(["a", "b"]) == [["a", "b"]]
     assert cmd_steps([["a"], ["b", "c"]]) == [["a"], ["b", "c"]]
     # Fortschritt kommt aus den Ausgabezeilen, nicht aus geraten Prozenten
+    # Was gerade passiert, in Worten: die Rohzeile steht nur noch in den Details
+    assert phase_text("Setting up libfoo1:amd64 (1.2-3) ...") == \
+        _("{name} wird eingerichtet").format(name="libfoo1:amd64")
+    assert phase_text("Preparing to unpack .../code_1.131.0_amd64.deb ...") == \
+        _("{name} wird ausgepackt").format(name="code")
+    assert phase_text("Get:1 http://de.archive.ubuntu.com resolute InRelease") == \
+        _("Paketlisten werden geladen")
+    assert phase_text("Syncing files with rsync...") == \
+        _("Dateien werden verglichen und kopiert")
+    # Ohne Deutung bleibt die Zeile davor stehen, statt zu leeren
+    assert phase_text("E: Sublime text") == ""
+    # Eine Regel mit Namen, aber ohne Namen in der Zeile, sagt lieber nichts
+    assert phase_text("Updating...") == ""
+    # Der Balken laeuft einmal durch, statt bei jedem Schritt zurueckzufallen
+    assert overall_fraction(0, 2, 0.5) == 0.25
+    assert overall_fraction(1, 2, 0.0) == 0.5
+    assert overall_fraction(1, 2, 1.0) == 1.0
+    assert overall_fraction(0, 1, 2.0) == 1.0
+    # apt meldet ein purge als 'Purg'. Stand hier nur 'Remv', war die Liste vor
+    # dem Aufraeumen leer und die Rueckfrage sagte, es werde nichts entfernt.
+    assert parse_apt_removals("Purg libfoo [1.2]\nRemv libbar [2.0]\n") == \
+        ["libbar", "libfoo"]
     assert progress_name("Setting up libfoo1:amd64 (1.2-3) ...") == "libfoo1:amd64"
     assert progress_name("Unpacking code (1.131.0) over (1.130.0) ...") == "code"
     assert progress_name("Preparing to unpack .../code_1.131.0_amd64.deb ...") == "code"
@@ -17573,9 +17943,9 @@ def selftest():
                 or not isinstance(k, (ast.JoinedStr, ast.Call, ast.Name,
                                       ast.Attribute, ast.Subscript)), \
                 f"Zeile {knoten.lineno}: der Skripttext ist nicht wörtlich"
-    # SECURITY.md nennt diese Zahl. Kommt eine fünfte Shell dazu, gehört sie
+    # SECURITY.md nennt diese Zahl. Kommt eine sechste Shell dazu, gehört sie
     # dort beschrieben, statt still mitzulaufen.
-    assert len(shells) == 4, shells
+    assert len(shells) == 5, shells
     # Units über einer Minute oder Stunde sind genau die, die man sehen will
     assert parse_blame("11h 26min 16.414s snapd.service\n"
                        "1min 5.432s snapd.seeded.service\n"
@@ -17735,6 +18105,56 @@ def selftest():
         assert sources_cached("resolute") is None
         sources_cache_write("resolute", [("a", "u", "ok"), ("b", "u", "missing")])
         assert len(sources_cached("resolute") or []) == 2
+
+        # Eine Quelle, die der Release-Wechsel abgeschaltet hat. Solange der
+        # Anbieter nichts fuer das neue Ubuntu hat, bleibt es bei der
+        # Mitteilung. Sobald er baut, muss ein Knopf dastehen, der die Datei
+        # umstellt, und der Befehl dahinter muss das wirklich tun.
+        quelle = os.path.join(tmp_dir, "lutris-team-ubuntu-lutris-noble.sources")
+        with open(quelle, "w") as fh:
+            fh.write("Types: deb\nURIs: https://x.example/ubuntu\n"
+                     "Suites: noble\nComponents: main\nEnabled: no\n")
+        alt_dis, alt_ser = disabled_sources, ubuntu_series
+        alt_os, alt_check = os_release, sources_check
+        try:
+            globals()["disabled_sources"] = lambda: [
+                (quelle, "lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "noble")]
+            globals()["ubuntu_series"] = lambda: {"noble", "resolute"}
+            globals()["os_release"] = lambda k: (
+                "resolute" if k == "VERSION_CODENAME" else "")
+            globals()["sources_check"] = lambda *a, **k: [
+                ("lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "missing")]
+            state_write({})
+            f = check_disabled_sources({})
+            assert f.sev == "info" and not f.argv, f.sev
+            globals()["sources_check"] = lambda *a, **k: [
+                ("lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "ok")]
+            state_write({})
+            f = check_disabled_sources({})
+            assert f.sev == "warn" and f.argv and quelle in f.argv, f.argv
+            attrappe = os.path.join(tmp_dir, "bin")
+            os.makedirs(attrappe, exist_ok=True)
+            with open(os.path.join(attrappe, "apt-get"), "w") as fh:
+                fh.write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(attrappe, "apt-get"), 0o755)
+            assert subprocess.run(
+                ["sh", "-c", f.argv[3], "sh", "resolute", quelle],
+                env={**os.environ, "PATH": attrappe + ":" + os.environ["PATH"]}
+            ).returncode == 0
+            umgestellt = open(quelle).read()
+            assert "Suites: resolute" in umgestellt, umgestellt
+            assert "Enabled: yes" in umgestellt, umgestellt
+            # Und jetzt ist sie eine ganz normale aktive Quelle
+            assert parse_apt_source(umgestellt) == [
+                ("https://x.example/ubuntu", "resolute")]
+        finally:
+            globals()["disabled_sources"] = alt_dis
+            globals()["ubuntu_series"] = alt_ser
+            globals()["os_release"] = alt_os
+            globals()["sources_check"] = alt_check
     finally:
         globals()["STATE_FILE"] = real_state2
         shutil.rmtree(tmp_dir, ignore_errors=True)
