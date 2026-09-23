@@ -40,11 +40,12 @@ Nothing runs as root without a click, and every command is shown in full
 beforehand. Where a fix cannot be expressed as a command, it is offered to
 copy into a terminal instead of being run.
 
-Most privileged commands are plain argument lists handed to `pkexec`. Four of
+Most privileged commands are plain argument lists handed to `pkexec`. Five of
 them run a short shell script under `pkexec` instead: installing packages,
-adding the Flatpak PPA, persisting the ntsync module and removing old snap
-revisions. The reason is polkit, which offers `auth_admin` but not
-`auth_admin_keep` for `org.freedesktop.policykit.exec`. Split into separate
+adding the Flatpak PPA, persisting the ntsync module, removing old snap
+revisions and switching a package source back on after a release upgrade. The
+reason is polkit, which offers `auth_admin` but not `auth_admin_keep` for
+`org.freedesktop.policykit.exec`. Split into separate
 calls, each of those asks for the password again, and whoever cancels the
 second prompt is left half done.
 

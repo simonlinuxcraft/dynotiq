@@ -6950,27 +6950,59 @@ def parse_apt_source(text, enabled=True):
     return out
 
 
-def third_party_sources(all_sources=False, enabled=True):
+def source_files():
+    """Alle Dateien, aus denen apt seine Quellen liest."""
+    return sorted(glob.glob("/etc/apt/sources.list.d/*.list")
+                  + glob.glob("/etc/apt/sources.list.d/*.sources")
+                  + ["/etc/apt/sources.list"])
+
+
+def third_party_sources(all_sources=False):
     """Fremdquellen als [(Name, uri, suite)]. Ubuntus eigene bleiben draußen,
     ausser all_sources: dann zaehlt der Zustand jeder Quelle, auch der von
-    Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen.
-
-    enabled=False liefert die abgeschalteten Quellen."""
+    Ubuntu, denn ein toter Hauptmirror ist der teuerste Fall von allen."""
     out = []
-    files = (glob.glob("/etc/apt/sources.list.d/*.list")
-             + glob.glob("/etc/apt/sources.list.d/*.sources")
-             + ["/etc/apt/sources.list"])
-    for path in sorted(files):
+    for path in source_files():
         text = read(path)
         if not text:
             continue
         name = os.path.basename(path).rsplit(".", 1)[0]
-        for uri, suite in parse_apt_source(text, enabled):
+        for uri, suite in parse_apt_source(text):
             if ubuntu_source(uri) and not all_sources:
                 continue
             if (name, uri, suite) not in out:
                 out.append((name, uri, suite))
     return out
+
+
+def disabled_sources():
+    """Abgeschaltete Quellen als [(Pfad, Name, uri, Suite)].
+
+    Der Pfad gehoert dazu, weil nur er den Weg zurueck kennt: wieder
+    einschalten heisst, genau diese Datei zu aendern.
+    """
+    out = []
+    for path in source_files():
+        name = os.path.basename(path).rsplit(".", 1)[0]
+        for uri, suite in parse_apt_source(read(path) or "", False):
+            out.append((path, name, uri, suite))
+    return out
+
+
+def enable_sources_argv(paths, codename):
+    """Ein pkexec, das die genannten Quellendateien auf dieses Release stellt
+    und danach die Paketlisten holt.
+
+    Codename und Pfade gehen als Argumente in die Shell, nie in den
+    Skripttext. Ein Lauf statt zwei, sonst fragt polkit zweimal nach dem
+    Passwort und wer beim zweiten Mal abbricht, hat Quellen ohne Listen.
+    """
+    return ["pkexec", "sh", "-c",
+            'neu="$1"; shift; for f in "$@"; do '
+            'sed -i -e "s|^Suites: .*|Suites: $neu|" '
+            '-e "s|^Enabled: no$|Enabled: yes|" "$f" || exit 1; done; '
+            "apt-get update",
+            "sh", codename, *paths]
 
 
 SOURCE_STATUS = {"ok": N_("unterstützt"), "missing": N_("fehlt"),
@@ -7029,9 +7061,9 @@ def sources_check(codename, sources=None, current=None, timeout=SOURCES_TIMEOUT,
     return [(n, u, s or "unknown") for n, u, s in rows]
 
 
-def sources_cached(codename):
-    """Letztes Ergebnis, solange es zum Release passt und keine Woche alt ist."""
-    c = state_read().get("sources_check")
+def sources_cached(codename, key="sources_check", days=SOURCES_CACHE_DAYS):
+    """Letztes Ergebnis, solange es zum Release passt und jung genug ist."""
+    c = state_read().get(key)
     if not isinstance(c, dict) or c.get("codename") != codename:
         return None
     if not isinstance(c.get("rows"), list):
@@ -7040,20 +7072,20 @@ def sources_cached(codename):
         # Beidseitig wie in scan_window: bei zurueckgestellter Uhr ist die
         # Differenz negativ, und ein Stempel aus der Zukunft gaebe den Cache
         # dann unabhaengig von seinem Alter heraus.
-        if not 0 <= time.time() - float(c.get("t", 0)) <= SOURCES_CACHE_DAYS * 86400:
+        if not 0 <= time.time() - float(c.get("t", 0)) <= days * 86400:
             return None
     except (TypeError, ValueError):
         return None
     return [tuple(r) for r in c["rows"] if isinstance(r, list) and len(r) == 3]
 
 
-def sources_cache_write(codename, rows):
+def sources_cache_write(codename, rows, key="sources_check"):
     # Ohne Netz steht ueberall 'unknown'. Das eine Woche lang festzuhalten
     # hiesse, einen Fehlversuch als Ergebnis auszugeben: der Befund meldet dann
     # "0 von 11 haben keine Pakete", und das liest sich wie eine Freigabe.
     if any(r[2] == "unknown" for r in rows):
         return
-    state_write({**state_read(), "sources_check": {
+    state_write({**state_read(), key: {
         "codename": codename, "t": time.time(), "rows": [list(r) for r in rows]}})
 
 
@@ -7209,7 +7241,8 @@ def package_sources(scan=None, current="", series=None, sources=None,
     known = ubuntu_series() if series is None else series
     seit = apt_lists_age()
     if disabled is None:
-        disabled = third_party_sources(True, False) if sources is None else []
+        disabled = ([(n, u, s) for _p, n, u, s in disabled_sources()]
+                    if sources is None else [])
     rows = []
     for name, uri, suite in (third_party_sources(True) if sources is None
                              else sources):
@@ -8212,6 +8245,75 @@ def check_updates(ctx):
                    actions=[(_("Updates öffnen"), "_goto_page", "Updates")])
 
 
+def check_disabled_sources(ctx):
+    """Quellen, die der Release-Wechsel abgeschaltet hat.
+
+    Sie fallen aus apt heraus, ohne ein Wort zu sagen, und das Programm
+    dahinter steht still. Einmal am Tag wird nachgesehen, ob der Anbieter das
+    laufende Release inzwischen kennt. Kennt er es, reicht ein Knopf.
+    """
+    cur = os_release("VERSION_CODENAME")
+    if not cur:
+        return None
+    known = ubuntu_series()
+    alt = [(pfad, name, uri, suite)
+           for pfad, name, uri, suite in disabled_sources()
+           if suite in known and suite != cur]
+    if not alt:
+        return None
+    rows = sources_cached(cur, "disabled_check", 1)
+    if rows is None:
+        # Die Suite steht hier auf dem laufenden Release, obwohl in der Datei
+        # das alte steht: sonst haelt sources_check die Quelle fuer eine, die
+        # nicht am Release haengt, und fragt gar nicht erst.
+        rows = sources_check(cur, [(n, u, cur) for _p, n, u, _s in alt])
+        sources_cache_write(cur, rows, "disabled_check")
+    status = {uri: st for _n, uri, st in rows}
+    lines = []
+    for _pfad, name, uri, suite in alt:
+        da = status.get(uri) == "ok"
+        lines.append(("package-x-generic-symbolic", "ok" if da else "dim",
+                      (_("{name}: für {cur} gebaut, kann wieder an")
+                       if da else _("{name}: für {cur} gibt es dort noch nichts")
+                       ).format(name=source_title(name, uri, suite), cur=cur)))
+    # Nur Dateien ohne aktiven Absatz. In einer gemischten Datei wuerde der
+    # Befehl die laufende Quelle mit umschreiben, und die waere danach tot.
+    paths = sorted({pfad for pfad, _n, uri, _s in alt
+                    if status.get(uri) == "ok"
+                    and not parse_apt_source(read(pfad) or "")})
+    detail = _("Beim Wechsel auf {cur} hat Ubuntu jede Paketquelle "
+               "abgeschaltet, die es für {cur} noch nicht gab. Die Programme "
+               "daraus bekommen seitdem keine Updates, und in apt taucht die "
+               "Quelle nicht mehr auf.").format(cur=cur)
+    if not paths:
+        return Finding(
+            "info", _("Eine Paketquelle steht seit dem Ubuntu-Wechsel still")
+            if len(alt) == 1 else
+            _("{n} Paketquellen stehen seit dem Ubuntu-Wechsel still").format(
+                n=len(alt)), detail,
+            _("{n} Quellen").format(n=len(alt)), False, key="disabled_sources",
+            lines=lines,
+            solution=_("Dort gibt es für {cur} noch nichts. dynotiq fragt "
+                       "täglich nach und bietet das Einschalten an, sobald der "
+                       "Anbieter nachzieht.").format(cur=cur))
+    return Finding(
+        "warn", _("Eine Paketquelle lässt sich wieder einschalten")
+        if len(paths) == 1 else
+        _("{n} Paketquellen lassen sich wieder einschalten").format(
+            n=len(paths)), detail,
+        _("{n} von {total}").format(n=len(paths), total=len(alt)), False,
+        "\n".join(f"sudo sed -i -e 's|^Suites: .*|Suites: {cur}|' "
+                  f"-e 's|^Enabled: no$|Enabled: yes|' {shlex.quote(pfad)}"
+                  for pfad in paths) + "\nsudo apt update",
+        argv=enable_sources_argv(paths, cur),
+        warn=_("Ändert die Quellendateien unter /etc/apt/sources.list.d."),
+        key="disabled_sources", lines=lines,
+        solution=_("Der Anbieter hat für {cur} gebaut. Der Knopf stellt die "
+                   "Quelle darauf um, schaltet sie wieder ein und holt die "
+                   "Paketlisten.").format(cur=cur),
+        fix_label=_("Quellen einschalten"))
+
+
 def check_stale_packages(ctx):
     """Pakete aus einem frueheren Ubuntu, die in keiner Quelle mehr stehen.
 
@@ -8223,8 +8325,9 @@ def check_stale_packages(ctx):
     if not stale:
         return None
     return Finding(
-        "warn", _("{n} Systempakete bekommen keine Updates mehr").format(
-            n=len(stale)),
+        "warn", _("Ein Systempaket bekommt keine Updates mehr")
+        if len(stale) == 1 else
+        _("{n} Systempakete bekommen keine Updates mehr").format(n=len(stale)),
         _("Diese Pakete stehen in keiner Paketquelle mehr. Meist sind es Reste "
           "eines früheren Ubuntu, die der Release-Wechsel stehen gelassen hat. "
           "Sie laufen weiter, aber Sicherheitslücken darin werden nicht mehr "
@@ -8293,6 +8396,7 @@ CHECKS = [check_gpu_driver, check_incidents, check_journal_rate, check_missing_d
           check_duplicate_apps, check_swap,
           check_failed_units,
           check_proton, check_updates, check_stale_packages,
+          check_disabled_sources,
           check_hwe_kernel, check_release_upgrade, check_driver_mismatch,
           check_bench_drop, check_shader_cache, check_compat_tools,
           check_orphan_prefixes, check_steam_cef_gpu, check_self_update]
@@ -17684,9 +17788,9 @@ def selftest():
                 or not isinstance(k, (ast.JoinedStr, ast.Call, ast.Name,
                                       ast.Attribute, ast.Subscript)), \
                 f"Zeile {knoten.lineno}: der Skripttext ist nicht wörtlich"
-    # SECURITY.md nennt diese Zahl. Kommt eine fünfte Shell dazu, gehört sie
+    # SECURITY.md nennt diese Zahl. Kommt eine sechste Shell dazu, gehört sie
     # dort beschrieben, statt still mitzulaufen.
-    assert len(shells) == 4, shells
+    assert len(shells) == 5, shells
     # Units über einer Minute oder Stunde sind genau die, die man sehen will
     assert parse_blame("11h 26min 16.414s snapd.service\n"
                        "1min 5.432s snapd.seeded.service\n"
@@ -17846,6 +17950,56 @@ def selftest():
         assert sources_cached("resolute") is None
         sources_cache_write("resolute", [("a", "u", "ok"), ("b", "u", "missing")])
         assert len(sources_cached("resolute") or []) == 2
+
+        # Eine Quelle, die der Release-Wechsel abgeschaltet hat. Solange der
+        # Anbieter nichts fuer das neue Ubuntu hat, bleibt es bei der
+        # Mitteilung. Sobald er baut, muss ein Knopf dastehen, der die Datei
+        # umstellt, und der Befehl dahinter muss das wirklich tun.
+        quelle = os.path.join(tmp_dir, "lutris-team-ubuntu-lutris-noble.sources")
+        with open(quelle, "w") as fh:
+            fh.write("Types: deb\nURIs: https://x.example/ubuntu\n"
+                     "Suites: noble\nComponents: main\nEnabled: no\n")
+        alt_dis, alt_ser = disabled_sources, ubuntu_series
+        alt_os, alt_check = os_release, sources_check
+        try:
+            globals()["disabled_sources"] = lambda: [
+                (quelle, "lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "noble")]
+            globals()["ubuntu_series"] = lambda: {"noble", "resolute"}
+            globals()["os_release"] = lambda k: (
+                "resolute" if k == "VERSION_CODENAME" else "")
+            globals()["sources_check"] = lambda *a, **k: [
+                ("lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "missing")]
+            state_write({})
+            f = check_disabled_sources({})
+            assert f.sev == "info" and not f.argv, f.sev
+            globals()["sources_check"] = lambda *a, **k: [
+                ("lutris-team-ubuntu-lutris-noble",
+                 "https://x.example/ubuntu", "ok")]
+            state_write({})
+            f = check_disabled_sources({})
+            assert f.sev == "warn" and f.argv and quelle in f.argv, f.argv
+            attrappe = os.path.join(tmp_dir, "bin")
+            os.makedirs(attrappe, exist_ok=True)
+            with open(os.path.join(attrappe, "apt-get"), "w") as fh:
+                fh.write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(attrappe, "apt-get"), 0o755)
+            assert subprocess.run(
+                ["sh", "-c", f.argv[3], "sh", "resolute", quelle],
+                env={**os.environ, "PATH": attrappe + ":" + os.environ["PATH"]}
+            ).returncode == 0
+            umgestellt = open(quelle).read()
+            assert "Suites: resolute" in umgestellt, umgestellt
+            assert "Enabled: yes" in umgestellt, umgestellt
+            # Und jetzt ist sie eine ganz normale aktive Quelle
+            assert parse_apt_source(umgestellt) == [
+                ("https://x.example/ubuntu", "resolute")]
+        finally:
+            globals()["disabled_sources"] = alt_dis
+            globals()["ubuntu_series"] = alt_ser
+            globals()["os_release"] = alt_os
+            globals()["sources_check"] = alt_check
     finally:
         globals()["STATE_FILE"] = real_state2
         shutil.rmtree(tmp_dir, ignore_errors=True)
