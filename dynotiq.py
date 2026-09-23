@@ -17943,6 +17943,22 @@ def selftest():
                 or not isinstance(k, (ast.JoinedStr, ast.Call, ast.Name,
                                       ast.Attribute, ast.Subscript)), \
                 f"Zeile {knoten.lineno}: der Skripttext ist nicht wörtlich"
+    # build-deb.sh schreibt seine eigene control-Datei, debian/control ist die
+    # gepflegte Fassung daneben. Laufen sie auseinander, verspricht das Repo
+    # etwas anderes als das Paket: pkexec stand dort schon unter Depends und
+    # im gebauten Paket noch unter Recommends, libnotify-bin fehlte ganz.
+    skript = read(os.path.join(APP_DIR, "build-deb.sh"))
+    quelle = read(os.path.join(APP_DIR, "debian/control"))
+    if skript and quelle:
+        def pakete(text, feld):
+            eine_zeile = re.sub(r"\n ", " ", text)
+            m = re.search(rf"^{feld}:\s*(.+)$", eine_zeile, re.M)
+            return sorted(t.strip() for t in (m.group(1) if m else "").split(",")
+                          if t.strip() and not t.strip().startswith("${"))
+        for feld in ("Depends", "Recommends"):
+            assert pakete(skript, feld) == pakete(quelle, feld), \
+                (feld, pakete(skript, feld), pakete(quelle, feld))
+
     # SECURITY.md nennt diese Zahl. Kommt eine sechste Shell dazu, gehört sie
     # dort beschrieben, statt still mitzulaufen.
     assert len(shells) == 5, shells
