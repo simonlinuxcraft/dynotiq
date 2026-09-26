@@ -9161,12 +9161,12 @@ def updates_notify(include_firmware=True, now=None):
         return 0
     data = updates_scan(include_firmware)
     n = sum(len(v["items"]) for v in data.values())
-    # Auch ohne Fund den Stempel setzen, sonst laeuft der Scan auf einem
-    # gepflegten Rechner in jeder Runde neu.
-    # Neu lesen: updates_scan hat apt, snap und flatpak befragt, das dauert.
-    state_write({**state_read(), "updates_notified": now})
+    # Ohne Fund kein Stempel, sonst wartet ein Update vom Tag nach einer leeren
+    # Pruefung eine Woche. Gefragt wird ohnehin nur alle sechs Stunden.
     if not n:
         return 0
+    # Neu lesen: updates_scan hat apt, snap und flatpak befragt, das dauert.
+    state_write({**state_read(), "updates_notified": now})
     notify(_("1 Update wartet") if n == 1 else _("{n} Updates warten").format(n=n),
            _("Auf der Updates-Seite von dynotiq stehen sie mit Größe und Version."))
     return n
@@ -11970,6 +11970,7 @@ class App(Gtk.Application):
 
         total = sum(len(v["items"]) for v in data.values())
         self.upd_box.append(self._updates_status(data, broken))
+        self.upd_box.append(self._updates_remind_card())
         for src, res in data.items():
             if res["error"]:
                 c = box()
@@ -12132,6 +12133,45 @@ class App(Gtk.Application):
         self._updates_filter()
         self._sources_card(sources)
         return False
+
+    def _updates_remind_card(self):
+        """Erinnern kann nur der Hintergrunddienst, und der ist nach der
+        Installation aus. Wer den Schalter in den Einstellungen nicht sucht,
+        erführe sonst nie davon."""
+        on = Gtk.Button(label=_("Überwachung einschalten"))
+        on.add_css_class("btn-ghost")
+        on.connect("clicked", self._enable_watch_here)
+        off = Gtk.Button(label=_("Nicht erinnern"))
+        off.add_css_class("btn-quiet")
+        off.connect("clicked", self._updates_remind_off)
+        buttons = box(True, 8)
+        buttons.append(off)
+        buttons.append(on)
+        row = srow(_("Keine Erinnerung an Updates"),
+                   _("Dafür braucht es die Hintergrundüberwachung. Sie erinnert "
+                     "höchstens einmal pro Woche, wenn Updates warten, und "
+                     "meldet auch neue Vorfälle. Beides lässt sich in den "
+                     "Einstellungen abstellen"), buttons)
+        row.set_margin_top(14)
+        row.set_margin_bottom(14)
+        self.upd_remind = box()
+        self.upd_remind.add_css_class("card")
+        self.upd_remind.append(row)
+        self._updates_remind_sync()
+        return self.upd_remind
+
+    def _updates_remind_off(self, _b):
+        self.cfg["notify_updates"] = False
+        save_config(self.cfg)
+        self._build_reload("Einstellungen")
+        self._updates_remind_sync()
+
+    def _updates_remind_sync(self):
+        card = getattr(self, "upd_remind", None)
+        if card is not None:
+            card.set_visible(self.cfg["notify_updates"]
+                             and bool(shutil.which("systemctl"))
+                             and not watch_enabled())
 
     def _updates_status(self, data, broken):
         self.upd_broken = bool(broken)
@@ -13163,7 +13203,11 @@ class App(Gtk.Application):
                         _("systemctl --user hat den Zustand nicht "
                           "übernommen. Unit liegt unter {path}.").format(
                               path=WATCH_UNIT))
-        self._fill_overlay_row()
+        # Auch von der Updates-Seite gerufen, der Prüfstand steht dann vielleicht
+        # noch nicht
+        if "Prüfstand" in self.built:
+            self._fill_overlay_row()
+        self._updates_remind_sync()
 
     def _overlay_toggle(self, _b):
         _layer, conf, env = mangohud_ready()
@@ -14947,6 +14991,7 @@ class App(Gtk.Application):
             return False
         for w in getattr(self, "watch_extra", []):
             w.set_sensitive(state)
+        self._updates_remind_sync()
         return False
 
     def _set_watch_interval(self, dd, _p):
@@ -15834,10 +15879,22 @@ def selftest():
     # Die Update-Erinnerung darf hoechstens woechentlich kommen. Geprueft wird
     # der Weg, der ohne Scan zurueckkehrt, sonst laeuft hier apt an.
     keep_state = state_read()
+    keep_scan, keep_notify = updates_scan, notify
     try:
         state_write({**keep_state, "updates_notified": 1000.0})
         assert updates_notify(now=1000.0 + UPDATE_REMIND_SECS - 60) == 0
+        # Eine leere Pruefung setzt die Woche nicht neu in Gang
+        later = 1000.0 + UPDATE_REMIND_SECS + 60
+        globals()["notify"] = lambda *a: None
+        globals()["updates_scan"] = lambda *a: {"apt": {"items": [], "error": None}}
+        assert updates_notify(now=later) == 0
+        assert state_read()["updates_notified"] == 1000.0
+        globals()["updates_scan"] = lambda *a: {
+            "apt": {"items": [("a", "a", "1", "2", 0)], "error": None}}
+        assert updates_notify(now=later) == 1
+        assert state_read()["updates_notified"] == later
     finally:
+        globals()["updates_scan"], globals()["notify"] = keep_scan, keep_notify
         state_write(keep_state)
     assert parse_size("50.2MB") == 50200000 and parse_size("149.4 MB") == 149400000
     assert parse_size("1.2GB") == 1200000000 and parse_size("-") == 0
